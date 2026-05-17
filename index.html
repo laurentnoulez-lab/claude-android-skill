@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vérification résistance canalisation béton – EN 1610 / NBN EN 1916 / NBN B21-106</title>
+<style>
+  :root {
+    --primary: #1e6fb8;
+    --primary-dark: #144e84;
+    --accent: #7cc15a;
+    --bg: #f4f7fb;
+    --panel: #ffffff;
+    --text: #1a2a3a;
+    --muted: #5a6b7c;
+    --border: #d3dde7;
+    --ok: #2e7d32;
+    --ok-bg: #e8f5e9;
+    --warn: #ef6c00;
+    --warn-bg: #fff3e0;
+    --err: #c62828;
+    --err-bg: #ffebee;
+    --na: #cfdcea;
+    --c135: #4a90c8;
+    --csup: #7cc15a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    color: #fff;
+    padding: 24px 28px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+  header p { margin: 0; opacity: 0.9; font-size: 14px; }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 20px 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    border: 1px solid var(--border);
+  }
+  .panel h2 {
+    margin: 0 0 16px;
+    font-size: 16px;
+    color: var(--primary-dark);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 6px;
+  }
+  .panel h3 {
+    margin: 18px 0 10px;
+    font-size: 14px;
+    color: var(--primary-dark);
+  }
+
+  label.field {
+    display: block;
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  label.field span.help {
+    display: block;
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    font-style: italic;
+  }
+  select, input[type="number"] {
+    margin-top: 6px;
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+  }
+  select:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(30,111,184,0.12);
+  }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .result {
+    margin-top: 4px;
+    padding: 16px 18px;
+    border-radius: 8px;
+    border-left: 5px solid;
+    font-size: 14px;
+  }
+  .result.ok { background: var(--ok-bg); border-color: var(--ok); }
+  .result.warn { background: var(--warn-bg); border-color: var(--warn); }
+  .result.err { background: var(--err-bg); border-color: var(--err); }
+  .result strong { display: block; font-size: 15px; margin-bottom: 6px; }
+
+  table.tbl {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+    margin-top: 8px;
+  }
+  table.tbl th, table.tbl td {
+    border: 1px solid #fff;
+    padding: 4px 2px;
+    text-align: center;
+    min-width: 28px;
+    height: 24px;
+  }
+  table.tbl thead th {
+    background: #e8eef5;
+    color: var(--primary-dark);
+    font-weight: 700;
+    border-color: var(--border);
+  }
+  table.tbl tbody th {
+    background: #f0f5fa;
+    color: var(--primary-dark);
+    border-color: var(--border);
+    font-weight: 600;
+    padding: 2px 8px;
+    text-align: right;
+  }
+  td.na { background: var(--na); }
+  td.c135 { background: var(--c135); color: white; }
+  td.csup { background: var(--csup); color: white; }
+  td.ok { background: var(--c135); color: white; }
+  td.highlight {
+    outline: 3px solid #ff9800;
+    outline-offset: -3px;
+    font-weight: 700;
+    z-index: 2;
+    position: relative;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend i {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .legend i.na { background: var(--na); }
+  .legend i.c135 { background: var(--c135); }
+  .legend i.csup { background: var(--csup); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 7px 13px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: #eef3f9;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .tab.active {
+    background: #fff;
+    color: var(--primary-dark);
+    border-bottom: 2px solid #fff;
+    margin-bottom: -1px;
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .info-box {
+    background: #f0f7ff;
+    border: 1px solid #c8def0;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    color: #1a3a5a;
+    margin-top: 10px;
+    line-height: 1.55;
+  }
+  .info-box ul { margin: 6px 0 0 18px; padding: 0; }
+  .info-box li { margin-bottom: 3px; }
+
+  .summary {
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .summary-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .summary-row .lbl { color: var(--muted); }
+  .summary-row .val { font-weight: 600; color: var(--text); }
+
+  details {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    background: #fafcfe;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary-dark);
+    font-size: 13px;
+  }
+  details[open] summary { margin-bottom: 8px; }
+
+  footer {
+    text-align: center;
+    padding: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #e8eef5;
+    color: var(--primary-dark);
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vérification de la résistance d'une canalisation d'égouttage en béton</h1>
+  <p>Conformément aux normes <strong>NF EN 1610</strong> (pose et essai), <strong>NBN EN 1916</strong> (tuyaux béton) et au complément national belge <strong>NBN B 21-106</strong>. Méthode de calcul ATV-DVWK-A 127.</p>
+</header>
+
+<div class="container">
+
+  <!-- ====== PANEL ENTRÉE ====== -->
+  <section class="panel">
+    <h2>1. Données d'entrée</h2>
+
+    <label class="field">
+      Type de canalisation
+      <select id="typeTuyau">
+        <option value="A">Béton non armé (Ø 300–1000 mm)</option>
+        <option value="B">Béton fibré acier (Ø 300–1000 mm)</option>
+        <option value="C" selected>Béton armé (Ø 300–1600 mm)</option>
+      </select>
+      <span class="help">Selon NBN EN 1916 — tuyaux en béton (non armé / fibré acier / armé)</span>
+    </label>
+
+    <div class="grid2">
+      <label class="field">
+        Diamètre nominal DN (mm)
+        <select id="diametre"></select>
+      </label>
+      <label class="field">
+        Profondeur de couverture h (m)
+        <input type="number" id="profondeur" min="0" max="15" step="0.05" value="2.50" />
+        <span class="help">Hauteur de remblai au-dessus du tuyau</span>
+      </label>
+    </div>
+
+    <h3>Conditions de pose (remblai &amp; sol)</h3>
+
+    <label class="field">
+      Type de remblai (compactage)
+      <select id="remblai">
+        <option value="A1">A1 — remblai compacté contre le sol non perturbé (δ' = 2/3 φ')</option>
+        <option value="A2" selected>A2 — remblai non compacté ou compacté avant retrait du blindage (δ' = 1/3 φ')</option>
+      </select>
+      <span class="help">Type A1 : conditions favorables. Type A2 : conditions défavorables (par sécurité, à privilégier si incertitude)</span>
+    </label>
+
+    <label class="field">
+      Angle de friction interne du sol φ'
+      <select id="friction">
+        <option value="35">35° — sol de bonne qualité (G1 : sable, gravier)</option>
+        <option value="30" selected>30° — sol moyen / cohérent (G2 et autres)</option>
+      </select>
+      <span class="help">Valeur prudente : 30° si nature du sol incertaine</span>
+    </label>
+
+    <h3>Hypothèses de calcul (selon FEBELCO / EN 1610)</h3>
+    <div class="info-box">
+      <ul>
+        <li><strong>Charge trafic :</strong> 75 kN (essieu lourd, coeff. dynamique φ = 1,4)</li>
+        <li><strong>Largeur tranchée :</strong> diamètre extérieur + 1,15 m</li>
+        <li><strong>Angle d'appui :</strong> 90° (assise type 1 selon ATV 127)</li>
+        <li><strong>Masse volumique sol :</strong> γB = 20 kN/m³ ; densité Proctor Dpr = 90 %</li>
+        <li><strong>Nappe phréatique :</strong> sous le tuyau</li>
+        <li><strong>Fondation/enrobage :</strong> sol type G1 (sable / gravier)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ====== PANEL RÉSULTAT ====== -->
+  <section class="panel">
+    <h2>2. Résultat de la vérification</h2>
+
+    <div id="resultBox" class="result ok">
+      <strong id="resultTitle">—</strong>
+      <div id="resultMsg">Sélectionnez vos paramètres pour lancer la vérification.</div>
+    </div>
+
+    <div class="summary" id="summary">
+      <div class="summary-row"><span class="lbl">Tableau de référence</span><span class="val" id="sumTableau">—</span></div>
+      <div class="summary-row"><span class="lbl">Cellule (Ø, h)</span><span class="val" id="sumCell">—</span></div>
+      <div class="summary-row"><span class="lbl">Classe de résistance requise</span><span class="val" id="sumClasse">—</span></div>
+      <div class="summary-row"><span class="lbl">Charge d'écrasement minimale (NBN B21-106)</span><span class="val" id="sumFn">—</span></div>
+    </div>
+
+    <h3>Recommandations</h3>
+    <div id="recos" class="info-box">—</div>
+
+    <details>
+      <summary>Comprendre les classes de résistance (NBN B21-106)</summary>
+      <div style="font-size:12.5px; line-height:1.55; margin-top:8px;">
+        <p><strong>Béton non armé / fibré acier</strong> : classes <em>60B, 90B, 135B</em> — la valeur correspond à la charge minimale d'écrasement (en kN/m²) que le tuyau doit reprendre lors de l'essai d'écrasement à l'anneau.</p>
+        <p><strong>Béton armé</strong> : classes <em>60A, 90A, 135A, 165A, 200A…</em> — idem, la classe indique la charge minimale d'écrasement F<sub>n</sub> par mètre linéaire.</p>
+        <p>Formule d'essai : <code>F<sub>n</sub> = Classe × DN / 1000</code> (kN/m), où DN est le diamètre nominal en mm. Exemple : classe 135 Ø 600 → F<sub>n</sub> = 135 × 0,6 = 81 kN/m.</p>
+        <p>Le calcul ATV-A 127 confronte la charge totale appliquée (poids des terres + trafic) à la résistance de la classe choisie, en tenant compte du module d'élasticité du sol latéral (E2) et de l'angle d'appui.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ====== PANEL TABLEAU ====== -->
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>3. Tableau d'aide à la sélection</h2>
+    <p style="font-size:13px; color:var(--muted); margin:0 0 10px;">La cellule encadrée en orange correspond à votre saisie. Les abaques sont reproduites du guide technique FEBELCO « Où poser quel tuyau en béton ? ».</p>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="tablesArea"></div>
+
+    <div class="legend">
+      <span><i class="na"></i> Ne s'applique pas — diamètre/profondeur hors domaine d'emploi</span>
+      <span id="lgC135"><i class="c135"></i> S'applique (classe 135)</span>
+      <span id="lgCsup"><i class="csup"></i> Classe supérieure requise (165 ou plus)</span>
+    </div>
+  </section>
+
+  <!-- ====== PANEL DOCUMENTATION ====== -->
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>4. Cadre normatif &amp; rappels EN 1610</h2>
+
+    <h3>Domaine d'application (EN 1610)</h3>
+    <div class="info-box">
+      La norme <strong>NF EN 1610</strong> définit les exigences pour la mise en œuvre et l'essai des branchements et canalisations d'assainissement (gravitaires) posés en tranchée, sous remblai indéfini ou hors sol. Elle est complétée par la <strong>NBN EN 1916</strong> (produits) et le <strong>complément national NBN B 21-106</strong> en Belgique.
+    </div>
+
+    <h3>Principe de vérification</h3>
+    <div class="info-box">
+      La résistance d'une canalisation enterrée est vérifiée en comparant les <strong>charges appliquées</strong> (poids des terres + surcharges trafic) à la <strong>résistance d'écrasement</strong> du tuyau (classe). Les paramètres déterminants sont :
+      <ul>
+        <li>Profondeur de couverture <em>h</em></li>
+        <li>Diamètre nominal <em>DN</em> et épaisseur de paroi</li>
+        <li>Type et compactage du remblai (A1 / A2)</li>
+        <li>Angle de friction interne du sol φ' (typiquement 30° ou 35°)</li>
+        <li>Angle d'appui (assise) et type de fondation</li>
+        <li>Largeur de tranchée</li>
+        <li>Charge de trafic (essieu lourd 75 kN + impact)</li>
+      </ul>
+    </div>
+
+    <h3>Limitations des abaques</h3>
+    <div class="info-box">
+      Les tableaux ne sont valables que dans le cadre des hypothèses énoncées (largeur de tranchée = Ø<sub>ext</sub> + 1,15 m, angle d'appui 90°, charge 75 kN…). Ils ne couvrent <strong>pas</strong> :
+      <ul>
+        <li>Les tuyaux placés par forage latéral (type J)</li>
+        <li>Les tuyaux posés sur pieux</li>
+        <li>Les passages sous voies ferrées</li>
+        <li>Les tranchées larges, remblais &gt; valeurs tabulées, charges &gt; classe F900</li>
+      </ul>
+      Dans ces cas, un calcul spécifique selon ATV-DVWK-A 127 est requis (classe 165 ou plus généralement nécessaire).
+    </div>
+
+    <h3>Sources</h3>
+    <div class="info-box">
+      <ul>
+        <li>NF EN 1610 — Mise en œuvre et essai des branchements et canalisations d'assainissement</li>
+        <li>NBN EN 1916 — Tuyaux et accessoires en béton non armé, béton fibré acier et béton armé</li>
+        <li>NBN B 21-106 — Complément national à la NBN EN 1916</li>
+        <li>FEBELCO / FEBE — Guide « Où poser quel tuyau en béton ? Résistance du béton à toutes les profondeurs » (2010)</li>
+        <li>Arbeitsblatt ATV-DVWK-A 127 — Statische Berechnung von Entwässerungskanälen und -leitungen (3e éd. 2000)</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  Outil d'aide à la conception — à utiliser à titre indicatif. Tout dimensionnement définitif doit être validé par un calcul ATV-A 127 complet et par le concepteur du projet.
+</footer>
+
+<script>
+/* =========================================================
+   DONNÉES DES TABLEAUX (extraites du guide FEBELCO 2010)
+   Code des cellules :
+     'na'  = ne s'applique pas (hors domaine)
+     '135' = s'applique en classe 135
+     'sup' = classe supérieure requise (165 ou plus)
+   Pour les tuyaux non armés (A) et fibré acier (B),
+   le code '135' signifie simplement "s'applique" (classe
+   135B disponible et suffisante). Les cellules sont
+   indexées par [profondeur] puis [diamètre].
+========================================================= */
+
+const DIAM_AB = [300, 400, 500, 600, 700, 800, 900, 1000];
+const DIAM_C  = [300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1500, 1600];
+
+/* Profondeurs : la dernière entrée représente la limite supérieure (>x) */
+const PROF_A1 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 999];   // non armé φ=35
+const PROF_A2 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 999];          // non armé φ=30
+const PROF_A3 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 999];                // A2 35°
+const PROF_A4 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 999];                      // A2 30°
+
+const PROF_B1 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 8.00, 9.00, 10.00, 11.00, 999];
+const PROF_B2 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 8.00, 9.00, 999];
+const PROF_B3 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 999];
+const PROF_B4 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 999];
+
+const PROF_C1 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 8.00, 9.00, 10.00, 11.00, 999];
+const PROF_C2 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 8.00, 9.00, 999];
+const PROF_C3 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 999];
+const PROF_C4 = [0.00, 0.50, 0.75, 1.00, 2.00, 3.00, 4.00, 5.00, 6.00, 7.00, 999];
+
+/* ---------- TABLEAU A : BÉTON NON ARMÉ ---------- */
+/* A.1 : remblai A1, φ' = 35°, diamètres 300-1000 */
+const T_A1 = [
+  /*           300  400  500  600  700  800  900 1000  */
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','na','na'],
+  /* 5.00 */  ['135','135','na','na','na','na','na','na'],
+  /* 6.00 */  ['135','na','na','na','na','na','na','na'],
+  /*>6.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* A.2 : remblai A1, φ' = 30°, diamètres 300-1000 */
+const T_A2 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','na','na','na','na','na'],
+  /* 5.00 */  ['135','na','na','na','na','na','na','na'],
+  /*>5.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* A.3 : remblai A2, φ' = 35°, diamètres 300-1000 */
+const T_A3 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','na','na','na','na','na','na','na'],
+  /*>4.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* A.4 : remblai A2, φ' = 30°, diamètres 300-1000 */
+const T_A4 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /*>3.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* ---------- TABLEAU B : BÉTON FIBRÉ ACIER ---------- */
+/* B.1 : remblai A1, φ' = 35°, diamètres 300-1000 */
+const T_B1 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 8.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 9.00 */  ['135','135','135','135','135','135','135','135'],
+  /*10.00*/   ['135','135','135','135','135','135','135','135'],
+  /*11.00*/   ['135','135','135','135','135','135','135','135'],
+  /*>11.0*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* B.2 : remblai A1, φ' = 30°, diamètres 300-1000 */
+const T_B2 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 8.00 */  ['135','135','135','135','135','135','135','na'],
+  /* 9.00 */  ['135','135','135','135','na','na','na','na'],
+  /*>9.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* B.3 : remblai A2, φ' = 35°, diamètres 300-1000 */
+const T_B3 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['135','135','135','na','na','na','na','na'],
+  /*>7.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* B.4 : remblai A2, φ' = 30°, diamètres 300-1000 */
+const T_B4 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','na','na','na','na','na','na'],
+  /*>6.00*/   ['na','na','na','na','na','na','na','na'],
+];
+
+/* ---------- TABLEAU C : BÉTON ARMÉ ---------- */
+/* C.1 : remblai A1, φ' = 35°, diamètres 300-1600 */
+const T_C1 = [
+  /*           300  400  500  600  700  800  900 1000 1200 1400 1500 1600  */
+  /* 0.00 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 8.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 9.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /*10.00*/   ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /*11.00*/   ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /*>11.0*/   ['sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup'],
+];
+
+/* C.2 : remblai A1, φ' = 30°, diamètres 300-1600 */
+const T_C2 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 8.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 9.00 */  ['sup','sup','sup','sup','135','135','135','135','135','135','135','135'],
+  /*>9.00*/   ['sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup'],
+];
+
+/* C.3 : remblai A2, φ' = 35°, diamètres 300-1600 */
+const T_C3 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['sup','sup','135','135','135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['sup','sup','sup','sup','sup','135','135','135','135','135','135','135'],
+  /*>7.00*/   ['sup','sup','sup','sup','sup','sup','sup','sup','135','135','135','135'],
+];
+
+/* C.4 : remblai A2, φ' = 30°, diamètres 300-1600 */
+const T_C4 = [
+  /* 0.00 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.50 */  ['na','na','na','na','na','na','na','na','na','na','na','na'],
+  /* 0.75 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 1.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 2.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 3.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 4.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 5.00 */  ['135','135','135','135','135','135','135','135','135','135','135','135'],
+  /* 6.00 */  ['sup','sup','sup','135','135','135','135','135','135','135','135','135'],
+  /* 7.00 */  ['sup','sup','sup','sup','sup','sup','sup','135','135','135','135','135'],
+  /*>7.00*/   ['sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup','sup'],
+];
+
+/* ---------- Indexation des tableaux ---------- */
+const TABLES = {
+  'A_A1_35': { data: T_A1, profs: PROF_A1, diams: DIAM_AB, label: 'A.1 — Non armé / Remblai A1 / φ\'=35°' },
+  'A_A1_30': { data: T_A2, profs: PROF_A2, diams: DIAM_AB, label: 'A.2 — Non armé / Remblai A1 / φ\'=30°' },
+  'A_A2_35': { data: T_A3, profs: PROF_A3, diams: DIAM_AB, label: 'A.3 — Non armé / Remblai A2 / φ\'=35°' },
+  'A_A2_30': { data: T_A4, profs: PROF_A4, diams: DIAM_AB, label: 'A.4 — Non armé / Remblai A2 / φ\'=30°' },
+  'B_A1_35': { data: T_B1, profs: PROF_B1, diams: DIAM_AB, label: 'B.1 — Fibré acier / Remblai A1 / φ\'=35°' },
+  'B_A1_30': { data: T_B2, profs: PROF_B2, diams: DIAM_AB, label: 'B.2 — Fibré acier / Remblai A1 / φ\'=30°' },
+  'B_A2_35': { data: T_B3, profs: PROF_B3, diams: DIAM_AB, label: 'B.3 — Fibré acier / Remblai A2 / φ\'=35°' },
+  'B_A2_30': { data: T_B4, profs: PROF_B4, diams: DIAM_AB, label: 'B.4 — Fibré acier / Remblai A2 / φ\'=30°' },
+  'C_A1_35': { data: T_C1, profs: PROF_C1, diams: DIAM_C,  label: 'C.1 — Armé / Remblai A1 / φ\'=35°' },
+  'C_A1_30': { data: T_C2, profs: PROF_C2, diams: DIAM_C,  label: 'C.2 — Armé / Remblai A1 / φ\'=30°' },
+  'C_A2_35': { data: T_C3, profs: PROF_C3, diams: DIAM_C,  label: 'C.3 — Armé / Remblai A2 / φ\'=35°' },
+  'C_A2_30': { data: T_C4, profs: PROF_C4, diams: DIAM_C,  label: 'C.4 — Armé / Remblai A2 / φ\'=30°' },
+};
+
+/* =========================================================
+   ÉLÉMENTS DOM
+========================================================= */
+const $typeTuyau  = document.getElementById('typeTuyau');
+const $diametre   = document.getElementById('diametre');
+const $profondeur = document.getElementById('profondeur');
+const $remblai    = document.getElementById('remblai');
+const $friction   = document.getElementById('friction');
+const $resultBox  = document.getElementById('resultBox');
+const $resultTitle= document.getElementById('resultTitle');
+const $resultMsg  = document.getElementById('resultMsg');
+const $sumTableau = document.getElementById('sumTableau');
+const $sumCell    = document.getElementById('sumCell');
+const $sumClasse  = document.getElementById('sumClasse');
+const $sumFn      = document.getElementById('sumFn');
+const $recos      = document.getElementById('recos');
+const $tabs       = document.getElementById('tabs');
+const $tablesArea = document.getElementById('tablesArea');
+const $lgC135     = document.getElementById('lgC135');
+const $lgCsup     = document.getElementById('lgCsup');
+
+/* =========================================================
+   PEUPLER LE SELECT DIAMÈTRE SELON LE TYPE
+========================================================= */
+function populerDiametres() {
+  const diams = $typeTuyau.value === 'C' ? DIAM_C : DIAM_AB;
+  const old = parseInt($diametre.value, 10);
+  $diametre.innerHTML = '';
+  diams.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = `DN ${d} mm`;
+    $diametre.appendChild(opt);
+  });
+  if (diams.includes(old)) $diametre.value = old;
+  else $diametre.value = diams[Math.floor(diams.length/2)];
+}
+
+/* =========================================================
+   TROUVER LA LIGNE PROFONDEUR DANS UN TABLEAU
+   - profs: liste croissante des bornes supérieures
+   - retourne l'index de la ligne (la dernière représente >max)
+========================================================= */
+function indexProfondeur(profs, h) {
+  for (let i = 1; i < profs.length; i++) {
+    if (h <= profs[i]) return i;
+  }
+  return profs.length - 1;
+}
+
+/* =========================================================
+   ÉVALUATION
+========================================================= */
+function evaluer() {
+  const type = $typeTuyau.value;
+  const dn   = parseInt($diametre.value, 10);
+  const h    = parseFloat($profondeur.value);
+  const rb   = $remblai.value;
+  const fr   = $friction.value;
+
+  const key = `${type}_${rb}_${fr}`;
+  const t = TABLES[key];
+  if (!t) return;
+
+  /* Mise à jour de la légende selon le type */
+  if (type === 'C') {
+    $lgC135.style.display = 'inline-flex';
+    $lgCsup.style.display = 'inline-flex';
+    $lgC135.querySelector('span') && ($lgC135.innerHTML = '<i class="c135"></i> Classe 135 (135A) — suffisante');
+  } else {
+    $lgC135.innerHTML = '<i class="c135"></i> S\'applique — classe 135 disponible';
+    $lgCsup.style.display = 'none';
+  }
+  if (type === 'C') {
+    $lgC135.innerHTML = '<i class="c135"></i> Classe 135 (135A) — suffisante';
+    $lgCsup.style.display = 'inline-flex';
+  }
+
+  const iDiam = t.diams.indexOf(dn);
+  const iProf = indexProfondeur(t.profs, h);
+  const profLabel = t.profs[iProf] >= 999 ?
+        `> ${t.profs[iProf-1].toFixed(2)} m` :
+        `≤ ${t.profs[iProf].toFixed(2)} m`;
+
+  let cellule = 'na';
+  let outOfTable = false;
+  if (iDiam < 0) {
+    outOfTable = true;
+  } else {
+    cellule = t.data[iProf][iDiam];
+  }
+
+  $sumTableau.textContent = t.label;
+  $sumCell.textContent = `Ø ${dn} mm × h ${h.toFixed(2)} m  (ligne ${profLabel})`;
+
+  /* Affichage résultat */
+  if (outOfTable) {
+    $resultBox.className = 'result err';
+    $resultTitle.textContent = '✗ Diamètre hors abaque';
+    $resultMsg.textContent = `Le diamètre DN ${dn} mm n'est pas couvert par les tableaux pour ce type de canalisation. Le béton non armé et fibré acier sont tabulés jusqu'à Ø 1000 mm ; le béton armé jusqu'à Ø 1600 mm.`;
+    $sumClasse.textContent = '—';
+    $sumFn.textContent = '—';
+    $recos.innerHTML = `<ul><li>Sélectionnez un diamètre dans la plage admise.</li><li>Pour des diamètres supérieurs, consultez un calcul ATV-A 127 spécifique.</li></ul>`;
+    renderTableau(key, iDiam, iProf);
+    return;
+  }
+
+  if (cellule === 'na') {
+    $resultBox.className = 'result err';
+    $resultTitle.textContent = '✗ Configuration non admise';
+    $resultMsg.textContent = `Selon les abaques FEBELCO / EN 1610, la combinaison DN ${dn} mm avec h = ${h.toFixed(2)} m dans ces conditions de pose ne s'applique pas — la résistance du tuyau standard est insuffisante ou la couverture est trop faible.`;
+    $sumClasse.textContent = 'Aucune classe standard ne convient';
+    $sumFn.textContent = '—';
+    $recos.innerHTML = generateRecos('na', type, dn, h, rb, fr);
+  } else if (cellule === '135') {
+    $resultBox.className = 'result ok';
+    $resultTitle.textContent = '✓ Configuration admise';
+    const suffixe = type === 'A' ? '135B (non armé)' : (type === 'B' ? '135B (fibré acier)' : '135A (armé)');
+    $resultMsg.textContent = `La canalisation Ø ${dn} mm sous h = ${h.toFixed(2)} m est admise. Classe de résistance minimale requise : ${suffixe}.`;
+    $sumClasse.textContent = suffixe;
+    const Fn = (135 * dn / 1000).toFixed(1);
+    $sumFn.textContent = `F${'n'.sub()} ≥ ${Fn} kN/m  (135 × ${dn}/1000)`;
+    $sumFn.innerHTML = `F<sub>n</sub> ≥ ${Fn} kN/m &nbsp;<small>(135 × ${dn}/1000)</small>`;
+    $recos.innerHTML = generateRecos('135', type, dn, h, rb, fr);
+  } else if (cellule === 'sup') {
+    $resultBox.className = 'result warn';
+    $resultTitle.textContent = '⚠ Classe supérieure requise';
+    $resultMsg.textContent = `La classe 135 est insuffisante pour cette configuration. Une classe de résistance supérieure (165A ou plus) est nécessaire. Calcul spécifique ATV-A 127 recommandé.`;
+    $sumClasse.textContent = '≥ 165A (classe supérieure)';
+    const Fn165 = (165 * dn / 1000).toFixed(1);
+    $sumFn.innerHTML = `F<sub>n</sub> ≥ ${Fn165} kN/m &nbsp;<small>(min. 165 × ${dn}/1000)</small>`;
+    $recos.innerHTML = generateRecos('sup', type, dn, h, rb, fr);
+  }
+
+  renderTableau(key, iDiam, iProf);
+}
+
+/* =========================================================
+   RECOMMANDATIONS
+========================================================= */
+function generateRecos(etat, type, dn, h, rb, fr) {
+  const lines = [];
+
+  if (etat === 'na') {
+    if (h < 0.75) {
+      lines.push(`<strong>Couverture insuffisante</strong> : pour une charge trafic 75 kN, la profondeur minimale est d'environ 0,75 m. Augmentez la couverture ou réalisez une protection (dalle de répartition, manchon béton).`);
+    } else {
+      lines.push(`<strong>Surcharge dépassant la résistance</strong> : à cette profondeur, le tuyau en ${typeLabel(type)} DN ${dn} mm en classe standard 135 ne reprend pas la charge.`);
+      if (type === 'A') {
+        lines.push(`Envisagez un <strong>béton fibré acier</strong> ou un <strong>béton armé</strong> (passez aux abaques B ou C).`);
+      } else if (type === 'B') {
+        lines.push(`Envisagez un <strong>béton armé</strong> (abaque C) — plage admise plus large jusqu'à 11 m.`);
+      } else {
+        lines.push(`Vérifiez si une <strong>classe 165A ou supérieure</strong> permet de couvrir cette configuration.`);
+      }
+    }
+    if (rb === 'A2') {
+      lines.push(`Améliorer le compactage du remblai (passer de A2 à A1 — δ' = 2/3 φ') élargit fortement le domaine d'emploi.`);
+    }
+    if (fr === '30') {
+      lines.push(`Un sol présentant un meilleur angle de friction (φ' = 35° : G1 sable/gravier) augmente la portance latérale et donc la profondeur admissible.`);
+    }
+  } else if (etat === '135') {
+    lines.push(`Classe standard <strong>${type==='C'?'135A':'135B'}</strong> selon NBN B 21-106 : Fₙ = ${(135*dn/1000).toFixed(1)} kN/m à l'essai d'écrasement.`);
+    lines.push(`Veillez à respecter les exigences de pose EN 1610 : fond de fouille soigné, lit de pose en sable/gravier (≥ 10 cm), enrobage compacté jusqu'à 0,30 m au-dessus du tuyau, angle d'appui ≥ 90°.`);
+    lines.push(`Largeur minimale de tranchée : DN + 1,15 m (≥ DN + 0,40 m côté tuyau cf. EN 1610 §6).`);
+    if (h < 1.0) {
+      lines.push(`Couverture ${h.toFixed(2)} m faible : si trafic intense, prévoyez une dalle de répartition ou un fourreau de protection.`);
+    }
+  } else if (etat === 'sup') {
+    lines.push(`Cette configuration sort du domaine de la classe standard 135A. Spécifiez <strong>classe 165A (Fₙ = ${(165*dn/1000).toFixed(1)} kN/m)</strong> ou supérieure.`);
+    lines.push(`Un calcul individuel ATV-DVWK-A 127 est recommandé pour valider la résistance.`);
+    lines.push(`Vérifier également les contraintes spécifiques : tassements différentiels, présence d'eau, charges concentrées.`);
+  }
+  return '<ul>' + lines.map(l => '<li>' + l + '</li>').join('') + '</ul>';
+}
+
+function typeLabel(t) {
+  return t==='A' ? 'béton non armé' : (t==='B' ? 'béton fibré acier' : 'béton armé');
+}
+
+/* =========================================================
+   RENDU DES TABLEAUX (onglets)
+========================================================= */
+function renderTabs() {
+  const type = $typeTuyau.value;
+  const variantes = [
+    { key: `${type}_A1_35`, label: 'A1 / φ\'=35°' },
+    { key: `${type}_A1_30`, label: 'A1 / φ\'=30°' },
+    { key: `${type}_A2_35`, label: 'A2 / φ\'=35°' },
+    { key: `${type}_A2_30`, label: 'A2 / φ\'=30°' },
+  ];
+  $tabs.innerHTML = '';
+  variantes.forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'tab';
+    b.textContent = v.label;
+    b.dataset.key = v.key;
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#tabs .tab').forEach(t => t.classList.remove('active'));
+      b.classList.add('active');
+      const iDiam = parseInt($diametre.value, 10);
+      const h = parseFloat($profondeur.value);
+      const td = TABLES[v.key];
+      renderTableau(v.key, td.diams.indexOf(iDiam), indexProfondeur(td.profs, h));
+    });
+    $tabs.appendChild(b);
+  });
+  const currentKey = `${type}_${$remblai.value}_${$friction.value}`;
+  const active = $tabs.querySelector(`[data-key="${currentKey}"]`) || $tabs.firstChild;
+  if (active) active.classList.add('active');
+}
+
+function renderTableau(key, hiDiam, hiProf) {
+  const t = TABLES[key];
+  if (!t) return;
+
+  let html = '<table class="tbl"><thead><tr><th>h (m) ↓ &nbsp; / &nbsp; Ø (mm) →</th>';
+  t.diams.forEach(d => html += `<th>${d}</th>`);
+  html += '</tr></thead><tbody>';
+
+  // Affichage de haut en bas du plus profond au plus superficiel
+  for (let i = t.profs.length - 1; i >= 0; i--) {
+    const ph = t.profs[i];
+    const label = (i === t.profs.length - 1) ?
+        `&gt; ${t.profs[i-1].toFixed(2)}` :
+        `≤ ${ph.toFixed(2)}`;
+    html += `<tr><th>${label}</th>`;
+    t.data[i].forEach((c, j) => {
+      const cls = c;
+      const hl = (i === hiProf && j === hiDiam) ? ' highlight' : '';
+      let txt = '';
+      if (c === 'na') txt = '—';
+      else if (c === '135') txt = '✓';
+      else if (c === 'sup') txt = '+';
+      html += `<td class="${cls}${hl}">${txt}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  $tablesArea.innerHTML = html;
+}
+
+/* =========================================================
+   ÉVÉNEMENTS
+========================================================= */
+$typeTuyau.addEventListener('change', () => {
+  populerDiametres();
+  renderTabs();
+  evaluer();
+});
+[$diametre, $profondeur, $remblai, $friction].forEach(el => {
+  el.addEventListener('input', evaluer);
+  el.addEventListener('change', () => { renderTabs(); evaluer(); });
+});
+
+/* ----- INIT ----- */
+populerDiametres();
+renderTabs();
+evaluer();
+</script>
+
+</body>
+</html>
