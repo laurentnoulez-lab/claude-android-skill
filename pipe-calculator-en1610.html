@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vérification de classe de résistance — Canalisation d'égouttage (EN 1610 / EN 1295)</title>
+<style>
+  :root {
+    --primary: #1d4e89;
+    --primary-dark: #143759;
+    --accent: #d97706;
+    --ok: #15803d;
+    --ko: #b91c1c;
+    --warn: #b45309;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #d4d8de;
+    --muted: #5b6470;
+    --text: #1a1f29;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    padding: 24px 20px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  header p { margin: 0; opacity: 0.92; font-size: 0.92rem; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .disclaimer {
+    background: #fff7ed;
+    border-left: 4px solid var(--accent);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 4px;
+    font-size: 0.88rem;
+  }
+  .disclaimer strong { color: var(--accent); }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 1.05rem;
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 6px;
+  }
+  .card h3 {
+    margin: 14px 0 8px;
+    font-size: 0.95rem;
+    color: var(--primary-dark);
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 8px 0 4px;
+    font-weight: 500;
+  }
+  .field-help {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 2px;
+  }
+  select, input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.92rem;
+    background: white;
+  }
+  select:focus, input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(29,78,137,0.15);
+  }
+  .row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  button.calc {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 8px;
+  }
+  button.calc:hover { background: var(--primary-dark); }
+  .result-banner {
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    font-size: 1.05rem;
+  }
+  .result-ok { background: #dcfce7; color: var(--ok); border: 1px solid #86efac; }
+  .result-ko { background: #fee2e2; color: var(--ko); border: 1px solid #fca5a5; }
+  .result-warn { background: #fef3c7; color: var(--warn); border: 1px solid #fcd34d; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { background: #f1f4f8; font-weight: 600; color: var(--primary-dark); }
+  tr.pass td:first-child::before { content: "✓ "; color: var(--ok); font-weight: bold; }
+  tr.fail td:first-child::before { content: "✗ "; color: var(--ko); font-weight: bold; }
+  tr.pass { background: #f0fdf4; }
+  tr.fail { background: #fef2f2; }
+  .formula {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: "Courier New", monospace;
+    font-size: 0.85rem;
+    margin: 6px 0;
+  }
+  .kv { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.9rem; }
+  .kv span:first-child { color: var(--muted); }
+  .kv span:last-child { font-weight: 600; }
+  details { margin: 10px 0; }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary);
+    padding: 6px 0;
+  }
+  .hidden { display: none; }
+  .footnote { font-size: 0.8rem; color: var(--muted); margin-top: 16px; }
+  .ref-list { font-size: 0.85rem; }
+  .ref-list li { margin-bottom: 6px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .badge-rigid { background: #e0e7ff; color: #3730a3; }
+  .badge-flex { background: #fef3c7; color: #92400e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vérification de classe de résistance d'une canalisation d'égouttage</h1>
+  <p>Conformément à EN 1610 (pose et essais), EN 1295-1 (calcul mécanique) et ATV-DVWK-A 127 (méthodologie de calcul)</p>
+</header>
+
+<div class="container">
+
+  <div class="disclaimer">
+    <strong>Avertissement.</strong> Cet outil fournit une <em>pré-vérification</em> de la classe de résistance d'une canalisation enterrée à écoulement gravitaire selon les approches normatives reconnues. Il ne remplace pas une note de calcul détaillée selon <strong>EN 1295-1</strong>, <strong>ATV-DVWK-A 127</strong> ou le <strong>Fascicule 70</strong> (CCTG France), ni la validation par un ingénieur compétent. Les valeurs admises pour les sols, la circulation et les facteurs de pose sont des valeurs conservatrices issues de la littérature normative — vérifier toujours avec la fiche technique du fabricant et les conditions réelles du chantier.
+  </div>
+
+  <div class="grid">
+    <!-- COLONNE 1: TUYAU + POSE -->
+    <div>
+      <div class="card">
+        <h2>1. Caractéristiques du tuyau</h2>
+
+        <label for="material">Matériau du tuyau</label>
+        <select id="material">
+          <option value="concrete">Béton armé (EN 1916) — rigide</option>
+          <option value="concrete-nr">Béton non armé (EN 1916) — rigide</option>
+          <option value="clay">Grès vitrifié (EN 295) — rigide</option>
+          <option value="di">Fonte ductile (EN 598) — rigide</option>
+          <option value="pvc">PVC-U paroi compacte (EN 1401) — flexible</option>
+          <option value="pvc-struct">PVC structuré (EN 13476) — flexible</option>
+          <option value="pe">PEHD (EN 13476 / EN 12666) — flexible</option>
+          <option value="pp">PP (EN 13476) — flexible</option>
+          <option value="grp">PRV / GRP (EN 14364) — semi-rigide</option>
+        </select>
+
+        <label for="dn">Diamètre nominal DN (mm)</label>
+        <input type="number" id="dn" value="400" min="100" max="3000" step="10">
+        <div class="field-help">Plage usuelle : DN 100 — DN 2000 pour l'égouttage gravitaire.</div>
+
+        <label for="de">Diamètre extérieur De (mm) — optionnel</label>
+        <input type="number" id="de" placeholder="Calculé automatiquement si vide">
+        <div class="field-help">Si vide, estimé à partir de DN et du matériau.</div>
+      </div>
+
+      <div class="card">
+        <h2>2. Conditions de pose (EN 1610)</h2>
+
+        <label for="install">Mode de pose</label>
+        <select id="install">
+          <option value="trench-narrow">Tranchée étroite (B ≤ 2·De)</option>
+          <option value="trench-wide">Tranchée large (B &gt; 2·De)</option>
+          <option value="embankment">Remblai (pose sous remblai)</option>
+        </select>
+
+        <div class="row2">
+          <div>
+            <label for="cover">Hauteur de couverture H (m)</label>
+            <input type="number" id="cover" value="2.5" min="0.6" max="15" step="0.1">
+            <div class="field-help">De la génératrice supérieure au TN.</div>
+          </div>
+          <div>
+            <label for="trench">Largeur de tranchée B (m)</label>
+            <input type="number" id="trench" value="1.2" min="0.4" max="6" step="0.1">
+            <div class="field-help">Au niveau de la génératrice supérieure.</div>
+          </div>
+        </div>
+
+        <label for="bedding">Type de lit de pose (EN 1610, Annexe B)</label>
+        <select id="bedding">
+          <option value="1" data-fc="1.5">Type 1 — Lit granulaire d'angle 60° (Fc ≈ 1,5)</option>
+          <option value="2" data-fc="1.9" selected>Type 2 — Lit granulaire d'angle 90°–120° (Fc ≈ 1,9)</option>
+          <option value="3" data-fc="2.2">Type 3 — Enrobage granulaire 180° (Fc ≈ 2,2)</option>
+          <option value="4" data-fc="2.6">Type 4 — Berceau béton 120° (Fc ≈ 2,6)</option>
+          <option value="5" data-fc="3.4">Type 5 — Enrobage béton 360° (Fc ≈ 3,4)</option>
+        </select>
+        <div class="field-help">Facteur Fc selon ATV-A 127 / EN 1295-1. Type 2 = pose courante en lit granulaire.</div>
+
+        <label for="compact">Compactage de l'enrobage</label>
+        <select id="compact">
+          <option value="W1">W1 — Compactage soigné (DPr ≥ 97%)</option>
+          <option value="W2" selected>W2 — Compactage normal (DPr ≥ 95%)</option>
+          <option value="W3">W3 — Compactage modéré (DPr ≥ 92%)</option>
+          <option value="W4">W4 — Sans compactage / non contrôlé</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- COLONNE 2: SOL + CHARGES -->
+    <div>
+      <div class="card">
+        <h2>3. Sol en place et remblai</h2>
+
+        <label for="soil">Groupe de sol (ATV-A 127 / DIN 18196)</label>
+        <select id="soil">
+          <option value="G1" data-gamma="20" data-k="0.50" data-phi="35">G1 — Sol non cohérent (graviers, sables) γ=20 kN/m³, K·μ′=0,50</option>
+          <option value="G2" data-gamma="20" data-k="0.40" data-phi="30" selected>G2 — Sol faiblement cohérent (sablo-graveleux) γ=20 kN/m³, K·μ′=0,40</option>
+          <option value="G3" data-gamma="20" data-k="0.30" data-phi="25">G3 — Sol cohérent mixte (limons) γ=20 kN/m³, K·μ′=0,30</option>
+          <option value="G4" data-gamma="20" data-k="0.13" data-phi="20">G4 — Sol cohérent (argiles) γ=20 kN/m³, K·μ′=0,13</option>
+        </select>
+
+        <label for="watertable">Nappe phréatique</label>
+        <select id="watertable">
+          <option value="none" selected>Absente / sous le radier</option>
+          <option value="partial">Partielle (entre radier et TN)</option>
+          <option value="surface">Affleurante / au-dessus du TN</option>
+        </select>
+
+        <div class="row2">
+          <div>
+            <label for="hw">Hauteur d'eau au-dessus du radier (m)</label>
+            <input type="number" id="hw" value="0" min="0" max="15" step="0.1">
+          </div>
+          <div>
+            <label for="gammaSoil">γ remblai (kN/m³) — surcharge</label>
+            <input type="number" id="gammaSoil" value="20" min="14" max="24" step="0.5">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4. Charges d'exploitation</h2>
+
+        <label for="traffic">Classe de circulation (EN 1991-2 / DIN 1072)</label>
+        <select id="traffic">
+          <option value="none">Aucune circulation (espace vert, hors zone)</option>
+          <option value="light">Légère (chemins, parkings VL) — SLW 12</option>
+          <option value="medium" selected>Moyenne (voirie communale) — SLW 30</option>
+          <option value="heavy">Lourde (voirie principale) — SLW 60 / LM1</option>
+          <option value="rail">Ferroviaire — UIC 71</option>
+          <option value="airport">Aéroport / charges spéciales</option>
+        </select>
+
+        <label for="surcharge">Surcharge permanente supplémentaire p₀ (kN/m²)</label>
+        <input type="number" id="surcharge" value="0" min="0" max="100" step="1">
+        <div class="field-help">Stockage, équipements, etc. (0 par défaut)</div>
+
+        <label for="safety">Coefficient de sécurité global γF</label>
+        <select id="safety">
+          <option value="1.0">1,0 — ELS (état limite de service)</option>
+          <option value="1.35" selected>1,35 — ELU (charges permanentes)</option>
+          <option value="1.5">1,5 — ELU majoré (charges variables)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <button class="calc" onclick="runCalculation()">Vérifier la classe de résistance</button>
+
+  <!-- RESULTATS -->
+  <div id="results" class="hidden">
+    <div class="card" style="margin-top: 20px;">
+      <h2>Résultats de la vérification</h2>
+      <div id="banner"></div>
+
+      <h3>Charges calculées</h3>
+      <div id="loads"></div>
+
+      <h3>Vérification structurelle</h3>
+      <div id="verif"></div>
+
+      <h3>Classes de résistance compatibles</h3>
+      <div id="classes"></div>
+
+      <details>
+        <summary>Détail du calcul et formules appliquées</summary>
+        <div id="detail"></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- METHODOLOGIE -->
+  <div class="card">
+    <h2>Méthodologie appliquée</h2>
+    <details>
+      <summary>Hypothèses et formules de calcul</summary>
+      <p><strong>Charge de remblai</strong> (formule de Marston, EN 1295-1 §5.3) :</p>
+      <div class="formula">pe = κ · γ · H&nbsp;&nbsp;&nbsp;(tranchée)<br>
+      κ = (1 − e<sup>−2·K·μ′·H/B</sup>) · B / (2·K·μ′·H)&nbsp;&nbsp;&nbsp;(facteur de réduction de Marston)</div>
+      <p>Pour la pose en remblai (positive projecting), κ &gt; 1 et est conservé à 1,0 par défaut (méthode simplifiée).</p>
+
+      <p><strong>Charge de circulation</strong> (diffusion Boussinesq, EN 1991-2 LM1 ou SLW DIN 1072) :</p>
+      <div class="formula">pv = Σ Pi · (3 / (2π)) · H³ / (H² + ri²)<sup>5/2</sup> · φ</div>
+      <p>Avec φ coefficient dynamique (1,4 pour H ≤ 0,6 m, dégressif à 1,0 pour H ≥ 3 m).</p>
+
+      <p><strong>Charge totale linéique :</strong></p>
+      <div class="formula">qtot = (pe + pv + p₀) · De · γF&nbsp;&nbsp;&nbsp;(kN/m)</div>
+
+      <p><strong>Tuyaux rigides — vérification de la résistance à l'écrasement :</strong></p>
+      <div class="formula">Fn,req = qtot / Fc&nbsp;&nbsp;&nbsp;(kN/m)<br>
+      Classe FN,req (EN 1916) = Fn,req · 1000 / DN&nbsp;&nbsp;&nbsp;(kN/m²)</div>
+
+      <p><strong>Tuyaux flexibles — vérification de la déformation à long terme :</strong></p>
+      <div class="formula">Δd/d = (Kx · qtot,m²) / (8·SN + 0,061·E′)&nbsp;&nbsp;&nbsp;limite ≤ 5 %<br>
+      Kx ≈ 0,1 (lit 120°), E′ = module de réaction du sol (kN/m²)</div>
+
+      <p>Les facteurs Fc (bedding factor) proviennent d'ATV-DVWK-A 127 et EN 1295-1 ; les groupes de sol et les coefficients K·μ′ proviennent d'ATV-A 127 §5.2.</p>
+    </details>
+
+    <h3>Standards et sources utilisées</h3>
+    <ul class="ref-list">
+      <li><strong>EN 1610:2015</strong> — Mise en œuvre et essai des branchements et collecteurs d'assainissement (lits de pose Types 1 à 4, compactage W1–W4, essais d'étanchéité).</li>
+      <li><strong>EN 1295-1:2019</strong> — Calcul mécanique des canalisations enterrées sous diverses conditions de charge — Partie 1 : Prescriptions générales.</li>
+      <li><strong>ATV-DVWK-A 127:2000</strong> — Calcul statique des canalisations d'assainissement (méthode allemande de référence, citée par EN 1295-1).</li>
+      <li><strong>Fascicule 70</strong> du CCTG (France, 2003/2012) — Ouvrages d'assainissement, Titre I : Réseaux.</li>
+      <li><strong>EN 1916:2002</strong> — Tuyaux et accessoires en béton non armé, béton fibré acier et béton armé (classes de résistance FN 60 / 90 / 120 / 135 / 165).</li>
+      <li><strong>EN 295</strong> (série) — Tuyaux et accessoires en grès vitrifié (classes 95, 120, 160, 200, 240 kN/m selon DN).</li>
+      <li><strong>EN 1401-1</strong> — PVC-U pour assainissement sans pression (rigidité annulaire SN 2 / SN 4 / SN 8 / SN 16).</li>
+      <li><strong>EN 13476</strong> (parties 1–3) — Systèmes en PVC-U / PP / PE à paroi structurée.</li>
+      <li><strong>EN 14364</strong> — Tuyaux en PRV à base de résine polyester insaturée (UP).</li>
+      <li><strong>EN 598</strong> — Tuyaux en fonte ductile pour assainissement.</li>
+      <li><strong>EN 1991-2</strong> — Eurocode 1, Partie 2 : Charges sur les ponts dues au trafic (modèles LM1, LM2 et fascicule du trafic ferroviaire UIC 71).</li>
+      <li><strong>DIN 1072</strong> — Charges routières SLW 30 / SLW 60 (utilisées par ATV-A 127).</li>
+    </ul>
+  </div>
+
+  <p class="footnote">
+    Outil de pré-vérification — Calculs basés sur EN 1295-1 / ATV-A 127 / EN 1610 — Version 1.0 — Mai 2026.
+    Toujours valider par une note de calcul détaillée et la fiche technique du fabricant.
+  </p>
+</div>
+
+<script>
+/* =====================================================================
+   Données de référence
+   ===================================================================== */
+
+// Diamètres extérieurs typiques par DN et matériau (mm)
+// Sources : EN 1916 (béton), EN 295 (grès), EN 1401 (PVC), EN 13476 (PE/PP structuré)
+const DE_TABLE = {
+  concrete:    dn => dn * 1.20 + 60,    // béton armé : épaisseur ~ 0.10*DN+30
+  'concrete-nr': dn => dn * 1.18 + 50,
+  clay:        dn => dn * 1.15 + 40,
+  di:          dn => dn + 2 * (6 + 0.03 * dn),
+  pvc:         dn => { // EN 1401 : De normalisé
+    const map = {110:110,125:125,160:160,200:200,250:250,315:315,400:400,500:500,630:630};
+    return map[dn] || dn * 1.04;
+  },
+  'pvc-struct': dn => dn * 1.05,
+  pe:          dn => dn * 1.10,
+  pp:          dn => dn * 1.05,
+  grp:         dn => dn * 1.04
+};
+
+// Charges roulantes SLW (DIN 1072) — empreinte 0,40×0,40 m, 3 essieux
+// Reprend les charges de référence d'ATV-A 127 §5.4
+const TRAFFIC = {
+  none:    { P: 0,   label: "Aucune", phi: 1.0 },
+  light:   { P: 40,  label: "SLW 12 / VL", phi: 1.2 },   // ~ 40 kN/roue
+  medium:  { P: 50,  label: "SLW 30",     phi: 1.4 },    // ~ 50 kN/roue
+  heavy:   { P: 100, label: "SLW 60 / LM1", phi: 1.4 },  // 100 kN/roue
+  rail:    { P: 250, label: "UIC 71",     phi: 1.5 },
+  airport: { P: 300, label: "Aéronautique", phi: 1.5 }
+};
+
+// Coefficient dynamique (DAF) en fonction de la couverture
+function dynamicFactor(H, base) {
+  if (H <= 0.5) return base;
+  if (H >= 3.0) return 1.0;
+  return base - (base - 1.0) * (H - 0.5) / 2.5;
+}
+
+// Facteurs de pose Fc (EN 1295-1 / ATV-A 127 / EN 1610)
+const FC = { '1': 1.5, '2': 1.9, '3': 2.2, '4': 2.6, '5': 3.4 };
+
+// Classes EN 1916 (béton armé) — FN en kN/m²
+const CONCRETE_CLASSES = [60, 90, 120, 135, 165];
+
+// EN 295 (grès) — classes en kN/m de longueur, indépendantes de DN
+const CLAY_CLASSES = [95, 120, 160, 200, 240, 280, 340];
+
+// SN (rigidité annulaire kN/m²) — EN ISO 9969
+const SN_CLASSES = [2, 4, 8, 16];
+
+// Module de réaction du sol E2 (MN/m²) selon groupe et compactage — ATV-A 127 §6
+const E2_TABLE = {
+  G1: { W1: 6.0, W2: 4.0, W3: 2.0, W4: 1.0 },
+  G2: { W1: 4.5, W2: 3.0, W3: 1.5, W4: 0.8 },
+  G3: { W1: 3.0, W2: 2.0, W3: 1.0, W4: 0.5 },
+  G4: { W1: 2.0, W2: 1.2, W3: 0.6, W4: 0.3 }
+};
+
+/* =====================================================================
+   Logique de calcul
+   ===================================================================== */
+
+function getDe(material, dn, userDe) {
+  if (userDe && userDe > 0) return userDe;
+  const f = DE_TABLE[material];
+  return f ? Math.round(f(dn)) : dn * 1.10;
+}
+
+function isFlexible(material) {
+  return ['pvc','pvc-struct','pe','pp'].includes(material);
+}
+
+function isRigid(material) {
+  return ['concrete','concrete-nr','clay','di'].includes(material);
+}
+
+function calcMarstonTrench(gamma, H, B, KmuPrime) {
+  // κ = (1 − exp(−2·K·μ'·H/B)) · B / (2·K·μ'·H)
+  if (H <= 0 || B <= 0) return 0;
+  const exponent = -2 * KmuPrime * H / B;
+  const kappa = (1 - Math.exp(exponent)) * B / (2 * KmuPrime * H);
+  return kappa * gamma * H; // kN/m²
+}
+
+function calcTrafficLoad(traffic, H) {
+  // Diffusion Boussinesq d'une charge concentrée P à profondeur H
+  // pv,max (sous la charge) = 3P/(2πH²)
+  if (traffic.P === 0 || H <= 0) return 0;
+  const phi = dynamicFactor(H, traffic.phi);
+  // Pour SLW : 2 charges P côte à côte → contribution doublée si H petit
+  // Approximation : 1.5 × P (effet d'essieu) avec décroissance en H²
+  const pSingle = 3 * traffic.P / (2 * Math.PI * H * H);
+  const pMulti = pSingle * 1.5; // ≈ effet groupe d'essieux
+  return Math.min(pMulti, 1.5 * traffic.P) * phi; // kN/m²
+}
+
+function runCalculation() {
+  // Lecture des entrées
+  const material = document.getElementById('material').value;
+  const dn = parseFloat(document.getElementById('dn').value);
+  const userDe = parseFloat(document.getElementById('de').value) || 0;
+  const install = document.getElementById('install').value;
+  const H = parseFloat(document.getElementById('cover').value);
+  const B = parseFloat(document.getElementById('trench').value);
+  const beddingKey = document.getElementById('bedding').value;
+  const Fc = FC[beddingKey];
+  const compact = document.getElementById('compact').value;
+  const soilOpt = document.getElementById('soil').selectedOptions[0];
+  const soilKey = soilOpt.value;
+  const gammaSoil = parseFloat(document.getElementById('gammaSoil').value);
+  const KmuPrime = parseFloat(soilOpt.dataset.k);
+  const watertable = document.getElementById('watertable').value;
+  const hw = parseFloat(document.getElementById('hw').value);
+  const trafficKey = document.getElementById('traffic').value;
+  const traffic = TRAFFIC[trafficKey];
+  const p0 = parseFloat(document.getElementById('surcharge').value);
+  const gammaF = parseFloat(document.getElementById('safety').value);
+
+  // Validation
+  if (!dn || dn < 100) { alert("DN doit être ≥ 100 mm"); return; }
+  if (!H || H < 0.6) { alert("Hauteur de couverture minimale recommandée par EN 1610 : 0,6 m sous voirie"); }
+  if (install === 'trench-narrow' && B > 2 * (userDe || DE_TABLE[material](dn)) / 1000) {
+    // ok, sera traité comme tranchée large
+  }
+
+  const De = getDe(material, dn, userDe);
+  const DeM = De / 1000;
+
+  /* --- Calcul des charges --- */
+  let pe;
+  if (install === 'trench-narrow') {
+    pe = calcMarstonTrench(gammaSoil, H, B, KmuPrime);
+  } else if (install === 'trench-wide') {
+    // tranchée large : pas de réduction par friction
+    pe = gammaSoil * H;
+  } else {
+    // remblai positif : facteur de projection ~ 1.0 à 1.15
+    pe = 1.10 * gammaSoil * H;
+  }
+
+  const pv = calcTrafficLoad(traffic, H);
+
+  // Eau (poussée d'Archimède non comptée ici, juste poids volumique différent)
+  let waterEffect = 0;
+  if (watertable !== 'none' && hw > 0) {
+    // remplacement de γ par γ' = γ - 10 sur la hauteur d'eau
+    waterEffect = -10 * Math.min(hw, H);  // allègement (déjaugage)
+    // mais ajout du poids d'eau : peut compenser ; on garde une note informative
+  }
+
+  const pTotal = pe + pv + p0;
+  const pTotalFactored = pTotal * gammaF;
+  const qLin = pTotalFactored * DeM;  // kN/m de tuyau
+
+  /* --- Vérification selon type de tuyau --- */
+  let resultHTML = "";
+  let bannerHTML = "";
+  let okGlobal = false;
+
+  if (isRigid(material)) {
+    // Tuyau rigide → vérification par classe d'écrasement
+    const FnReq = qLin / Fc; // kN/m
+    const FN_class_req = Math.ceil((FnReq * 1000 / dn) / 5) * 5; // arrondi à 5 kN/m² supérieur
+
+    bannerHTML = renderRigidResult(material, dn, FnReq, FN_class_req);
+    resultHTML = renderRigidVerification(material, dn, FnReq, FN_class_req);
+    okGlobal = FN_class_req <= 165;
+  } else if (isFlexible(material)) {
+    // Tuyau flexible → vérification déformation
+    const E2 = E2_TABLE[soilKey][compact] * 1000; // kN/m²
+    const Kx = 0.10; // facteur Spangler pour lit 120°
+    const deflectionLimit = 0.05; // 5%
+    // Δd/d = (Kx · q) / (8·SN + 0.061·E2)
+    // q en kN/m² (déjà), SN en kN/m², on cherche SN_min
+    const SN_min = (Kx * pTotalFactored / deflectionLimit - 0.061 * E2) / 8;
+    const SN_required = Math.max(2, SN_min);
+    let SN_class = 2;
+    for (const sn of SN_CLASSES) {
+      if (sn >= SN_required) { SN_class = sn; break; }
+      SN_class = sn;
+    }
+    if (SN_required > 16) SN_class = ">16";
+
+    bannerHTML = renderFlexResult(material, dn, SN_required, SN_class, E2);
+    resultHTML = renderFlexVerification(material, dn, SN_required, SN_class, E2, deflectionLimit);
+    okGlobal = (typeof SN_class === 'number');
+  } else {
+    // GRP, semi-rigide : double vérification
+    bannerHTML = `<div class="result-banner result-warn">PRV / GRP : double vérification (écrasement + déformation) — non détaillé ici. Consulter EN 14364 §6.</div>`;
+    resultHTML = "<p>Pour les tuyaux PRV, la vérification combine résistance à l'écrasement (PN, SN) et tenue à long terme. Se référer à la note de calcul du fabricant et EN 14364.</p>";
+  }
+
+  /* --- Bilan des charges --- */
+  const loadsHTML = `
+    <table>
+      <tr><th>Grandeur</th><th>Valeur</th><th>Unité</th></tr>
+      <tr><td>Diamètre extérieur De</td><td>${De}</td><td>mm</td></tr>
+      <tr><td>Pression de remblai pe (${install})</td><td>${pe.toFixed(1)}</td><td>kN/m²</td></tr>
+      <tr><td>Pression de circulation pv (${traffic.label})</td><td>${pv.toFixed(1)}</td><td>kN/m²</td></tr>
+      <tr><td>Surcharge permanente p₀</td><td>${p0.toFixed(1)}</td><td>kN/m²</td></tr>
+      <tr><td>Pression totale non pondérée</td><td>${pTotal.toFixed(1)}</td><td>kN/m²</td></tr>
+      <tr><td>Pression pondérée (γF = ${gammaF})</td><td>${pTotalFactored.toFixed(1)}</td><td>kN/m²</td></tr>
+      <tr><td>Charge linéique qtot</td><td><strong>${qLin.toFixed(2)}</strong></td><td>kN/m</td></tr>
+      <tr><td>Facteur de pose Fc (Type ${beddingKey})</td><td>${Fc}</td><td>—</td></tr>
+    </table>
+    ${waterEffect !== 0 ? '<div class="field-help">⚠ Présence d\'eau : déjaugage de '+ Math.abs(waterEffect).toFixed(1) +' kN/m² possible — voir EN 1295-1 §5.5.</div>' : ''}
+  `;
+
+  /* --- Détail formules --- */
+  const detailHTML = `
+    <p><strong>Charge de remblai</strong> (Marston, tranchée étroite) :</p>
+    <div class="formula">κ = (1 − e<sup>−2·${KmuPrime}·${H}/${B}</sup>) · ${B} / (2·${KmuPrime}·${H})
+    <br>pe = κ · ${gammaSoil} · ${H} = ${pe.toFixed(2)} kN/m²</div>
+    <p><strong>Charge de circulation</strong> (Boussinesq) :</p>
+    <div class="formula">pv = 1,5 · 3·${traffic.P} / (2π·${H}²) · φ(${H}) = ${pv.toFixed(2)} kN/m²</div>
+    <p><strong>Pression totale pondérée :</strong></p>
+    <div class="formula">ptot = (${pe.toFixed(1)} + ${pv.toFixed(1)} + ${p0}) · ${gammaF} = ${pTotalFactored.toFixed(2)} kN/m²</div>
+    <p><strong>Charge linéique sur le tuyau :</strong></p>
+    <div class="formula">qlin = ptot · De = ${pTotalFactored.toFixed(2)} · ${DeM.toFixed(3)} = ${qLin.toFixed(2)} kN/m</div>
+  `;
+
+  /* --- Affichage --- */
+  document.getElementById('banner').innerHTML = bannerHTML;
+  document.getElementById('loads').innerHTML = loadsHTML;
+  document.getElementById('verif').innerHTML = resultHTML.split('|||')[0] || resultHTML;
+  document.getElementById('classes').innerHTML = resultHTML.split('|||')[1] || '';
+  document.getElementById('detail').innerHTML = detailHTML;
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderRigidResult(material, dn, FnReq, FN_class_req) {
+  const matLabel = {
+    'concrete':'Béton armé EN 1916',
+    'concrete-nr':'Béton non armé EN 1916',
+    'clay':'Grès EN 295',
+    'di':'Fonte EN 598'
+  }[material];
+
+  if (material === 'concrete' || material === 'concrete-nr') {
+    const fit = CONCRETE_CLASSES.find(c => c >= FN_class_req);
+    if (fit) {
+      return `<div class="result-banner result-ok">✓ ${matLabel} — Classe minimale requise : <strong>FN ${fit}</strong> (Fn ≥ ${FnReq.toFixed(1)} kN/m)</div>`;
+    } else {
+      return `<div class="result-banner result-ko">✗ Aucune classe standard EN 1916 ne convient (FN requis = ${FN_class_req} kN/m² &gt; 165). Renforcement ou pose différente requise.</div>`;
+    }
+  }
+  if (material === 'clay') {
+    const fit = CLAY_CLASSES.find(c => c >= FnReq);
+    if (fit) {
+      return `<div class="result-banner result-ok">✓ Grès EN 295 — Classe minimale : <strong>${fit} kN/m</strong> (Fn requise = ${FnReq.toFixed(1)} kN/m)</div>`;
+    } else {
+      return `<div class="result-banner result-ko">✗ Aucune classe standard EN 295 ne convient (Fn = ${FnReq.toFixed(1)} kN/m). Voir EN 295-1 Tableau 3.</div>`;
+    }
+  }
+  // Fonte
+  return `<div class="result-banner result-ok">✓ Fonte ductile EN 598 — Fn requise = ${FnReq.toFixed(1)} kN/m (vérifier classe K9 / K10 fabricant)</div>`;
+}
+
+function renderRigidVerification(material, dn, FnReq, FN_class_req) {
+  let rows = "";
+  let classList = [];
+  if (material === 'concrete' || material === 'concrete-nr') {
+    classList = CONCRETE_CLASSES.map(c => ({ name: `FN ${c}`, capacity: c * dn / 1000, value: c }));
+    rows = classList.map(c => {
+      const ok = c.capacity >= FnReq;
+      return `<tr class="${ok?'pass':'fail'}"><td>Classe ${c.name}</td><td>${c.capacity.toFixed(1)} kN/m</td><td>${ok ? "Convient" : "Insuffisant"}</td></tr>`;
+    }).join('');
+  } else if (material === 'clay') {
+    classList = CLAY_CLASSES.map(c => ({ name: `${c} kN/m`, capacity: c, value: c }));
+    rows = classList.map(c => {
+      const ok = c.capacity >= FnReq;
+      return `<tr class="${ok?'pass':'fail'}"><td>Classe ${c.name}</td><td>${c.capacity.toFixed(0)} kN/m</td><td>${ok ? "Convient" : "Insuffisant"}</td></tr>`;
+    }).join('');
+  } else {
+    rows = `<tr><td>Fonte ductile</td><td>${FnReq.toFixed(1)} kN/m</td><td>Voir catalogue fabricant (classe K9 / K10 / C40 / C50)</td></tr>`;
+  }
+
+  return `
+    <table>
+      <tr><th>Critère</th><th>Valeur</th><th>État</th></tr>
+      <tr><td>Charge linéique appliquée qlin</td><td>${(FnReq * FC[document.getElementById('bedding').value]).toFixed(2)} kN/m</td><td>—</td></tr>
+      <tr><td>Facteur de pose Fc</td><td>${FC[document.getElementById('bedding').value]}</td><td>—</td></tr>
+      <tr><td>Résistance d'écrasement requise Fn</td><td>${FnReq.toFixed(2)} kN/m</td><td>—</td></tr>
+    </table>
+    |||
+    <table>
+      <tr><th>Classe normalisée</th><th>Capacité (DN ${dn})</th><th>Vérification</th></tr>
+      ${rows}
+    </table>
+  `;
+}
+
+function renderFlexResult(material, dn, SN_required, SN_class, E2) {
+  const matLabel = {
+    'pvc':'PVC-U EN 1401',
+    'pvc-struct':'PVC structuré EN 13476',
+    'pe':'PEHD EN 13476',
+    'pp':'PP EN 13476'
+  }[material];
+
+  if (typeof SN_class === 'number') {
+    return `<div class="result-banner result-ok">✓ ${matLabel} — Rigidité annulaire minimale : <strong>SN ${SN_class}</strong> (SN requis = ${SN_required.toFixed(1)} kN/m²)</div>`;
+  }
+  return `<div class="result-banner result-ko">✗ Rigidité requise ${SN_required.toFixed(1)} kN/m² > SN 16. Augmenter Fc, réduire H, améliorer compactage ou opter pour tuyau rigide.</div>`;
+}
+
+function renderFlexVerification(material, dn, SN_required, SN_class, E2, limit) {
+  const rows = SN_CLASSES.map(sn => {
+    const Kx = 0.10;
+    const q = parseFloat(document.getElementById('safety').value) *
+              (parseFloat(document.getElementById('gammaSoil').value) * parseFloat(document.getElementById('cover').value));
+    const deflection = (Kx * q) / (8 * sn + 0.061 * E2);
+    const ok = sn >= SN_required;
+    return `<tr class="${ok?'pass':'fail'}"><td>SN ${sn}</td><td>${(deflection*100).toFixed(2)} %</td><td>${ok ? "Convient" : "Déformation > 5%"}</td></tr>`;
+  }).join('');
+
+  return `
+    <table>
+      <tr><th>Critère</th><th>Valeur</th></tr>
+      <tr><td>Module de réaction E₂ (sol/compactage)</td><td>${(E2/1000).toFixed(1)} MN/m²</td></tr>
+      <tr><td>Coefficient de Spangler Kx</td><td>0,10</td></tr>
+      <tr><td>Limite de déformation Δd/d</td><td>${(limit*100).toFixed(0)} %</td></tr>
+      <tr><td>SN minimal requis</td><td><strong>${SN_required.toFixed(2)} kN/m²</strong></td></tr>
+    </table>
+    |||
+    <table>
+      <tr><th>Classe SN normalisée</th><th>Déformation estimée Δd/d</th><th>Vérification</th></tr>
+      ${rows}
+    </table>
+  `;
+}
+
+// Initialisation : recalculer De quand DN/matériau changent
+document.getElementById('dn').addEventListener('input', () => {
+  const de = document.getElementById('de');
+  if (!de.value) de.placeholder = `≈ ${getDe(document.getElementById('material').value, parseFloat(document.getElementById('dn').value)||0, 0)} mm`;
+});
+document.getElementById('material').addEventListener('change', () => {
+  const de = document.getElementById('de');
+  de.placeholder = `≈ ${getDe(document.getElementById('material').value, parseFloat(document.getElementById('dn').value)||0, 0)} mm`;
+});
+</script>
+</body>
+</html>
