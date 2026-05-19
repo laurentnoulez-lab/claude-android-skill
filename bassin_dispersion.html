@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur Bassin de Dispersion — AIDE</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --blue: #1565C0; --blue-light: #42A5F5; --blue-pale: #E3F2FD;
+  --green: #2E7D32; --green-light: #66BB6A; --green-pale: #E8F5E9;
+  --red: #C62828; --red-light: #EF5350; --red-pale: #FFEBEE;
+  --orange: #E65100; --orange-pale: #FFF3E0;
+  --gray: #546E7A; --gray-light: #CFD8DC; --gray-pale: #ECEFF1;
+  --water: #1E88E5; --water-light: #90CAF9; --water-anim: #64B5F6;
+  --ground: #8D6E63; --gravel: #BCAAA4;
+  --white: #FFFFFF; --bg: #F0F4F8;
+  --text: #1C2B36; --text-muted: #546E7A;
+  --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+
+/* HEADER */
+#hdr { background: linear-gradient(135deg, #0D47A1, #1565C0); color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.3); flex-shrink: 0; }
+#hdr h1 { font-size: 17px; font-weight: 700; }
+#hdr span { font-size: 12px; opacity: .8; margin-left: auto; }
+
+/* LAYOUT */
+#body { display: flex; flex: 1; overflow: hidden; }
+#sidebar { width: 300px; background: var(--white); border-right: 1px solid var(--gray-light); overflow-y: auto; padding: 12px; flex-shrink: 0; }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* SIDEBAR */
+.s-section { margin-bottom: 14px; }
+.s-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--blue); letter-spacing: .6px; border-bottom: 2px solid var(--blue-pale); padding-bottom: 4px; margin-bottom: 8px; }
+.s-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.s-row label { flex: 1; color: var(--text-muted); font-size: 12px; }
+.s-row input, .s-row select { width: 90px; padding: 4px 6px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; background: var(--gray-pale); }
+.s-row .unit { font-size: 11px; color: var(--text-muted); width: 36px; }
+.surf-table { width: 100%; border-collapse: collapse; }
+.surf-table th { font-size: 10px; color: var(--text-muted); text-align: center; padding: 3px 2px; background: var(--gray-pale); }
+.surf-table td { padding: 2px 3px; border-bottom: 1px solid var(--gray-pale); }
+.surf-table td:first-child { font-size: 11px; }
+.surf-table input[type=number] { width: 68px; padding: 2px 4px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 12px; text-align: right; }
+.surf-coeff { font-size: 11px; color: var(--text-muted); text-align: center; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-blue { background: var(--blue-pale); color: var(--blue); }
+.badge-green { background: var(--green-pale); color: var(--green); }
+.badge-red { background: var(--red-pale); color: var(--red); }
+.badge-orange { background: var(--orange-pale); color: var(--orange); }
+#btn-calc { width: 100%; padding: 9px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 6px; transition: background .2s; }
+#btn-calc:hover { background: #0D47A1; }
+.info-box { background: var(--blue-pale); border-left: 3px solid var(--blue); padding: 6px 8px; border-radius: 0 4px 4px 0; font-size: 11px; color: var(--blue); margin-bottom: 8px; }
+
+/* TABS */
+#tabs { display: flex; background: var(--white); border-bottom: 1px solid var(--gray-light); flex-shrink: 0; }
+.tab { padding: 10px 16px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent; transition: all .2s; white-space: nowrap; }
+.tab:hover { color: var(--blue); background: var(--blue-pale); }
+.tab.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--white); }
+
+/* TAB CONTENT */
+#tab-content { flex: 1; overflow: hidden; position: relative; }
+.tab-pane { display: none; height: 100%; overflow-y: auto; padding: 14px 16px; }
+.tab-pane.active { display: block; }
+
+/* RESULTS */
+.results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.result-card { background: var(--white); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.result-card.highlight { background: linear-gradient(135deg, var(--blue-pale), #fff); border: 1px solid var(--blue-light); }
+.result-card.warning { background: linear-gradient(135deg, var(--orange-pale), #fff); border: 1px solid #FFB300; }
+.result-card.danger { background: linear-gradient(135deg, var(--red-pale), #fff); border: 1px solid var(--red-light); }
+.rc-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.rc-value { font-size: 22px; font-weight: 700; color: var(--blue); }
+.rc-unit { font-size: 12px; color: var(--text-muted); }
+.rc-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* TABLES */
+.res-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.res-table th { background: var(--blue); color: #fff; padding: 6px 8px; text-align: center; position: sticky; top: 0; }
+.res-table td { padding: 5px 8px; border-bottom: 1px solid var(--gray-pale); text-align: right; }
+.res-table td:first-child { text-align: left; font-weight: 600; }
+.res-table tr:hover td { background: var(--blue-pale); }
+.res-table tr.critical td { background: #FFF9C4; font-weight: 700; }
+.res-table tr.overflow td { background: var(--red-pale); }
+.res-table tr.safe td { background: var(--green-pale); }
+.col-title { font-size: 13px; font-weight: 700; color: var(--blue); margin: 10px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--blue-pale); }
+.section-card { background: var(--white); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 10px; }
+
+/* INPUTS IN SCENARIOS */
+.param-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.param-row label { width: 230px; font-size: 12px; color: var(--text-muted); }
+.param-row input { width: 100px; padding: 5px 8px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 13px; font-weight: 600; }
+.param-row .unit { font-size: 11px; color: var(--text-muted); }
+.btn-small { padding: 5px 14px; background: var(--green); color: #fff; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-small:hover { background: var(--green-light); }
+
+/* SIMULATION TAB */
+#sim-layout { display: flex; gap: 12px; height: 100%; }
+#sim-controls { width: 260px; flex-shrink: 0; }
+#sim-visual { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+#basin-svg-wrap { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; flex-shrink: 0; }
+#chart-wrap { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; flex: 1; min-height: 180px; }
+#basin-svg { width: 100%; height: 220px; }
+
+.ctrl-card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; margin-bottom: 10px; }
+.ctrl-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--blue); margin-bottom: 8px; letter-spacing: .5px; }
+.ctrl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ctrl-row label { flex: 1; font-size: 12px; color: var(--text-muted); }
+.ctrl-row input, .ctrl-row select { width: 90px; padding: 4px 6px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; }
+.ctrl-row .unit { font-size: 11px; color: var(--text-muted); }
+#sim-play-bar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: var(--radius); padding: 8px 12px; box-shadow: var(--shadow); }
+#btn-play { padding: 6px 16px; background: var(--blue); color: #fff; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 13px; }
+#btn-reset { padding: 6px 12px; background: var(--gray-light); color: var(--text); border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+#sim-time-display { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+#sim-status { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+.status-ok { background: var(--green-pale); color: var(--green); }
+.status-overflow { background: var(--red-pale); color: var(--red); animation: blink .6s infinite; }
+.status-rain { background: var(--blue-pale); color: var(--blue); }
+.status-drain { background: var(--orange-pale); color: var(--orange); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+#speed-sel { width: 80px; }
+
+/* PROTECTION MATRIX */
+.prot-table { border-collapse: collapse; font-size: 11px; }
+.prot-table th { background: var(--blue); color: #fff; padding: 4px 8px; text-align: center; font-size: 10px; }
+.prot-table td { padding: 4px 8px; text-align: center; border: 1px solid #eee; font-size: 11px; font-weight: 600; }
+.prot-ok { background: #A5D6A7; color: #1B5E20; }
+.prot-over { background: #EF9A9A; color: #B71C1C; }
+.prot-dim { background: #FFD54F; color: #E65100; }
+.prot-table td:first-child { text-align: left; font-weight: 400; background: var(--gray-pale); }
+
+/* SCROLLBARS */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--gray-pale); }
+::-webkit-scrollbar-thumb { background: var(--gray-light); border-radius: 3px; }
+
+/* MISC */
+.flex { display: flex; }
+.gap-8 { gap: 8px; }
+.mb-10 { margin-bottom: 10px; }
+.text-right { text-align: right; }
+hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 0; }
+.tag-critical { background: #FFF176; color: #F57F17; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div>
+    <h1>💧 Simulateur de Bassin de Dispersion / Rétention</h1>
+  </div>
+  <span>Référentiel AIDE — Données IRM Flémalle (T=25 ans par défaut)</span>
+</div>
+
+<div id="body">
+<!-- ==================== SIDEBAR ==================== -->
+<aside id="sidebar">
+
+  <div class="s-section">
+    <div class="s-title">Pluies de référence (IRM)</div>
+    <div class="s-row">
+      <label>Période de retour</label>
+      <select id="inp-rp">
+        <option value="2">2 ans</option><option value="5">5 ans</option>
+        <option value="10">10 ans</option><option value="15">15 ans</option>
+        <option value="20">20 ans</option><option value="25" selected>25 ans</option>
+        <option value="30">30 ans</option><option value="40">40 ans</option>
+        <option value="50">50 ans</option><option value="75">75 ans</option>
+        <option value="100">100 ans</option><option value="200">200 ans</option>
+      </select>
+    </div>
+    <div class="info-box">Données: Flémalle (INS 62120) — IRM Belgique</div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-title">Surfaces drainées vers le bassin</div>
+    <table class="surf-table">
+      <tr><th>Type de surface</th><th>Cr</th><th>Surface (m²)</th></tr>
+      <tr><td>Forêt, bois</td><td class="surf-coeff">0.05</td><td><input type="number" id="sf0" value="0" min="0"></td></tr>
+      <tr><td>Prairies, jardins</td><td class="surf-coeff">0.15</td><td><input type="number" id="sf1" value="0" min="0"></td></tr>
+      <tr><td>Champs, landes</td><td class="surf-coeff">0.25</td><td><input type="number" id="sf2" value="0" min="0"></td></tr>
+      <tr><td>Dalles gazon, toit. vert &gt;15cm</td><td class="surf-coeff">0.40</td><td><input type="number" id="sf3" value="0" min="0"></td></tr>
+      <tr><td>Terres battues, toit. vert ≤15cm</td><td class="surf-coeff">0.50</td><td><input type="number" id="sf4" value="0" min="0"></td></tr>
+      <tr><td>Pavés drainants</td><td class="surf-coeff">0.70</td><td><input type="number" id="sf5" value="0" min="0"></td></tr>
+      <tr><td>Parkings, allées pavées</td><td class="surf-coeff">0.90</td><td><input type="number" id="sf6" value="0" min="0"></td></tr>
+      <tr><td>Toitures, routes</td><td class="surf-coeff">1.00</td><td><input type="number" id="sf7" value="0" min="0"></td></tr>
+    </table>
+    <div style="margin-top:6px; padding:6px; background:var(--gray-pale); border-radius:4px; font-size:11px;">
+      Surface totale : <strong id="lbl-stot">0 m²</strong> | Surf. eff. : <strong id="lbl-seff">0 m²</strong> | Cr moy : <strong id="lbl-crm">–</strong>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-title">Essais de perméabilité</div>
+    <div class="s-row">
+      <label>Vitesse infiltration mesurée</label>
+      <input type="number" id="inp-kmes" value="2.145e-6" step="1e-7">
+      <span class="unit">m/s</span>
+    </div>
+    <div class="s-row">
+      <label>Coefficient de sécurité</label>
+      <input type="number" id="inp-ks" value="1.5" step="0.1" min="1">
+    </div>
+    <div class="s-row">
+      <label>Vitesse de calcul</label>
+      <span id="lbl-kcalc" style="font-size:12px;font-weight:700;color:var(--blue);">1.43e-6 m/s</span>
+    </div>
+    <div class="s-row">
+      <label>Temps vidange max</label>
+      <input type="number" id="inp-tmax" value="24" min="1" style="width:60px"> <span class="unit">h</span>
+    </div>
+  </div>
+
+  <button id="btn-calc" onclick="calculateAll()">⟳ Calculer tous les scénarios</button>
+</aside>
+
+<!-- ==================== MAIN ==================== -->
+<main id="main">
+  <div id="tabs">
+    <div class="tab active" onclick="showTab('s1')">Scénario 1 – Dispersion pure</div>
+    <div class="tab" onclick="showTab('s2')">Scénario 2 – Disp. + Ajutage</div>
+    <div class="tab" onclick="showTab('s3')">Scénario 3 – Surprofondeur</div>
+    <div class="tab" onclick="showTab('sim')">🎬 Simulation bassin réel</div>
+    <div class="tab" onclick="showTab('prot')">🛡️ Matrice de protection</div>
+  </div>
+
+  <div id="tab-content">
+
+    <!-- ===== SCENARIO 1 ===== -->
+    <div id="pane-s1" class="tab-pane active">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 1 — Dispersion à 100%</strong> : pas d'ajutage. Toute l'eau est infiltrée dans le sol via le massif de dispersion. Le massif doit être intégralement vidangé en <strong>24h</strong> après la fin de la pluie.
+      </div>
+      <div id="s1-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les surfaces et cliquez sur "Calculer".</div>
+      </div>
+    </div>
+
+    <!-- ===== SCENARIO 2 ===== -->
+    <div id="pane-s2" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 2 — Système mixte dispersion + ajutage</strong> : surface de dispersion connue. On détermine le débit d'ajutage minimal et le volume tampon nécessaire.
+      </div>
+      <div class="section-card mb-10">
+        <div class="col-title">Paramètres spécifiques</div>
+        <div class="param-row">
+          <label>Surface de dispersion disponible</label>
+          <input type="number" id="s2-sdisp" value="0" min="0"> <span class="unit">m²</span>
+        </div>
+        <div class="param-row">
+          <label>Débit d'ajutage à régler</label>
+          <input type="number" id="s2-qaj" value="5" min="0" step="0.5"> <span class="unit">L/(s·ha)</span>
+          <span style="font-size:11px;color:var(--text-muted);"> → calculé automatiquement si 0</span>
+        </div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
+      </div>
+      <div id="s2-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les paramètres et cliquez sur "Calculer".</div>
+      </div>
+    </div>
+
+    <!-- ===== SCENARIO 3 ===== -->
+    <div id="pane-s3" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 3 — Système mixte avec surprofondeur</strong> : une surprofondeur sous le niveau de l'ajutage favorise la dispersion des petites pluies et offre une marge de sécurité.
+      </div>
+      <div class="section-card mb-10">
+        <div class="col-title">Paramètres spécifiques</div>
+        <div class="param-row">
+          <label>Surface de dispersion disponible</label>
+          <input type="number" id="s3-sdisp" value="0" min="0"> <span class="unit">m²</span>
+        </div>
+        <div class="param-row">
+          <label>Volume de surprofondeur (sous ajutage)</label>
+          <input type="number" id="s3-vsurp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+        </div>
+        <div class="param-row">
+          <label>Débit de réglage ajutage</label>
+          <input type="number" id="s3-qaj" value="5" min="0" step="0.5"> <span class="unit">L/(s·ha)</span>
+        </div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
+      </div>
+      <div id="s3-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les paramètres et cliquez sur "Calculer".</div>
+      </div>
+    </div>
+
+    <!-- ===== SIMULATION ===== -->
+    <div id="pane-sim" class="tab-pane" style="padding:10px;">
+      <div id="sim-layout">
+        <div id="sim-controls">
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Événement pluvieux</div>
+            <div class="ctrl-row">
+              <label>Durée pluie</label>
+              <select id="sim-dur">
+                <option value="10">10 min</option><option value="20">20 min</option>
+                <option value="30">30 min</option><option value="60" selected>1 h</option>
+                <option value="120">2 h</option><option value="180">3 h</option>
+                <option value="360">6 h</option><option value="720">12 h</option>
+                <option value="1440">1 jour</option><option value="2880">2 jours</option>
+                <option value="4320">3 jours</option><option value="5760">4 jours</option>
+                <option value="7200">5 jours</option><option value="10080">7 jours</option>
+              </select>
+            </div>
+            <div class="ctrl-row">
+              <label>Période de retour</label>
+              <select id="sim-rp">
+                <option value="2">2 ans</option><option value="5">5 ans</option>
+                <option value="10">10 ans</option><option value="25" selected>25 ans</option>
+                <option value="50">50 ans</option><option value="100">100 ans</option>
+                <option value="200">200 ans</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Géométrie du bassin</div>
+            <div class="ctrl-row">
+              <label>Scénario</label>
+              <select id="sim-scen">
+                <option value="1">1 – Dispersion pure</option>
+                <option value="2">2 – Disp. + Ajutage</option>
+                <option value="3" selected>3 – Surprofondeur</option>
+              </select>
+            </div>
+            <div class="ctrl-row">
+              <label>Surface dispersion</label>
+              <input type="number" id="sim-sdisp" value="0" min="0"> <span class="unit">m²</span>
+            </div>
+            <div class="ctrl-row" id="row-vsurp">
+              <label>Vol. surprofondeur</label>
+              <input type="number" id="sim-vsurp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+            </div>
+            <div class="ctrl-row" id="row-vtamp">
+              <label>Vol. tampon (au-dessus ajutage)</label>
+              <input type="number" id="sim-vtamp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+            </div>
+            <div class="ctrl-row" id="row-qaj2">
+              <label>Débit ajutage</label>
+              <input type="number" id="sim-qaj" value="0" min="0" step="0.1"> <span class="unit">L/s</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+              Ou <a href="#" onclick="prefillFromScenario();return false;" style="color:var(--blue);">importer depuis scénario calculé</a>
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Vitesse de lecture</div>
+            <div class="ctrl-row">
+              <label>Accélération</label>
+              <select id="speed-sel">
+                <option value="60">×60</option>
+                <option value="300">×300</option>
+                <option value="600" selected>×600</option>
+                <option value="1800">×1800</option>
+                <option value="3600">×3600</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="sim-stats" class="ctrl-card" style="display:none;">
+            <div class="ctrl-title">Résultats de la simulation</div>
+            <div id="sim-stats-inner"></div>
+          </div>
+
+        </div>
+
+        <div id="sim-visual">
+          <div id="sim-play-bar">
+            <button id="btn-play" onclick="togglePlay()">▶ Démarrer</button>
+            <button id="btn-reset" onclick="resetSim()">↺ Réinitialiser</button>
+            <div id="sim-status" class="status-ok">Prêt</div>
+            <div id="sim-time-display">t = 0 min</div>
+          </div>
+          <div id="basin-svg-wrap">
+            <svg id="basin-svg" viewBox="0 0 600 220"></svg>
+          </div>
+          <div id="chart-wrap">
+            <canvas id="sim-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PROTECTION MATRIX ===== -->
+    <div id="pane-prot" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Matrice de protection</strong> — Pour la configuration simulée du bassin, indique si le bassin déborde (<span style="color:var(--red);">rouge</span>) ou non (<span style="color:var(--green);">vert</span>) pour chaque combinaison durée / période de retour. <span style="color:var(--orange);">Jaune</span> = scénario de dimensionnement.
+      </div>
+      <div id="prot-controls" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;">
+        <div class="param-row" style="margin:0;">
+          <label style="width:auto;margin-right:6px;">Bassin à analyser :</label>
+          <select id="prot-scen" style="width:180px;padding:4px;">
+            <option value="1">Scénario 1 – Dimensionnement min.</option>
+            <option value="2">Scénario 2 – Dimensionnement min.</option>
+            <option value="3" selected>Scénario 3 – Dimensionnement min.</option>
+            <option value="sim">Paramètres simulation</option>
+          </select>
+          <button class="btn-small" onclick="buildProtectionMatrix()" style="margin-left:8px;">Générer</button>
+        </div>
+      </div>
+      <div id="prot-table-wrap" style="overflow-x:auto;">
+        <div style="color:var(--text-muted);font-size:12px;">Cliquez sur "Générer" pour afficher la matrice.</div>
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
+</main>
+</div><!-- /body -->
+
+<script>
+// ===================== DONNÉES IRM =====================
+const RAINFALL_DATA = [
+  [7.7,11,13.5,15.1,16.2,17.1,17.8,19,20,21.9,23.2,26.7],
+  [11.1,16,19.6,21.9,23.5,24.8,25.9,27.7,29.1,31.7,33.7,38.8],
+  [13.1,19.1,23.5,26.2,28.2,29.8,31.1,33.3,35,38.2,40.6,46.8],
+  [16.3,22.9,27.8,30.8,33,34.7,36.2,38.5,40.4,44,46.6,53.3],
+  [19.6,27,32.6,35.9,38.4,40.3,42,44.6,46.7,50.7,53.6,61.1],
+  [21.7,29.9,35.9,39.6,42.3,44.4,46.2,49,51.3,55.6,58.8,67],
+  [26.2,34.6,40.7,44.4,47.2,49.3,51.1,54,56.3,60.7,63.9,72.1],
+  [32,42,49.4,53.8,57,59.6,61.7,65.2,67.9,73.1,76.9,86.5],
+  [39,50.4,58.7,63.6,67.1,69.9,72.2,75.9,78.9,84.4,88.4,98.4],
+  [49.6,63.3,73,78.7,82.7,85.9,88.5,92.7,96,102,106.4,117.3],
+  [52.8,67.5,77.7,83.6,87.8,91.1,93.8,98,101.4,107.6,112,122.9],
+  [57.5,73.1,83.9,90.1,94.5,97.9,100.7,105.1,108.6,115,119.5,130.7],
+  [65.2,82.2,93.8,100.4,105.1,108.7,111.7,116.4,120.1,126.8,131.6,143.3],
+  [75.2,93.6,106,113,118,121.8,125,129.9,133.8,140.8,145.7,157.8],
+  [89.6,110.4,124.3,132.1,137.6,141.8,145.3,150.7,154.9,162.5,167.8,180.8],
+  [108.5,132.8,148.7,157.7,163.9,168.6,172.5,178.6,183.3,191.7,197.7,211.9],
+  [126.4,154.8,173.2,183.4,190.5,196,200.4,207.3,212.5,222.1,228.8,244.7],
+  [134.9,165.1,184.4,195.2,202.6,208.3,212.9,220.1,225.6,235.4,242.3,258.7],
+  [157.5,189.9,210.5,221.9,229.8,235.8,240.6,248.1,253.9,264.3,271.5,288.5]
+];
+const DURATIONS_MIN = [10,20,30,60,120,180,360,720,1440,2880,4320,5760,7200,10080,14400,21600,28800,36000,43200];
+const DUR_LABELS = ['10 min','20 min','30 min','1 h','2 h','3 h','6 h','12 h','1 j','2 j','3 j','4 j','5 j','7 j','10 j','15 j','20 j','25 j','30 j'];
+const RETURN_PERIODS = [2,5,10,15,20,25,30,40,50,75,100,200];
+const SURF_COEFFS = [0.05,0.15,0.25,0.40,0.50,0.70,0.90,1.00];
+
+// ===================== ÉTAT =====================
+let state = {
+  s1: null, s2: null, s3: null,
+  simData: [], simIdx: 0, simPlaying: false, simRAF: null, simLastT: null,
+  chart: null
+};
+
+// ===================== HELPERS =====================
+function getRp() { return parseInt(document.getElementById('inp-rp').value); }
+function getRpIdx(rp) { return RETURN_PERIODS.indexOf(rp); }
+function getDurIdx(d) { return DURATIONS_MIN.indexOf(d); }
+function getKmes() { return parseFloat(document.getElementById('inp-kmes').value)||2.145e-6; }
+function getKs() { return parseFloat(document.getElementById('inp-ks').value)||1.5; }
+function getKcalc() { return getKmes()/getKs(); }
+function getTmax_s() { return (parseFloat(document.getElementById('inp-tmax').value)||24)*3600; }
+
+function getSurfaces() {
+  let stot=0, seff=0;
+  for(let i=0;i<8;i++){
+    const a=parseFloat(document.getElementById('sf'+i).value)||0;
+    stot+=a; seff+=a*SURF_COEFFS[i];
+  }
+  return {stot, seff};
+}
+function getRainMm(dur_min, rp) {
+  const di=getDurIdx(dur_min), rpi=getRpIdx(rp);
+  if(di<0||rpi<0) return 0;
+  return RAINFALL_DATA[di][rpi];
+}
+function getRainIntensity(dur_min, rp) {
+  // L/(s·m²) = mm / duration_s
+  return getRainMm(dur_min, rp) / (dur_min * 60);
+}
+function fmt(v, dec=2) {
+  if(v===null||v===undefined||isNaN(v)) return '–';
+  return v.toFixed(dec);
+}
+function fmtTime(s) {
+  if(s<3600) return `${(s/60).toFixed(0)} min`;
+  if(s<86400) return `${(s/3600).toFixed(1)} h`;
+  return `${(s/86400).toFixed(1)} j`;
+}
+
+// ===================== UPDATE SIDEBAR SUMMARY =====================
+function updateSidebarSummary() {
+  const {stot,seff}=getSurfaces();
+  document.getElementById('lbl-stot').textContent=`${stot.toFixed(0)} m²`;
+  document.getElementById('lbl-seff').textContent=`${seff.toFixed(0)} m²`;
+  document.getElementById('lbl-crm').textContent=stot>0?`${(seff/stot).toFixed(2)}`:'–';
+  const k=getKcalc();
+  document.getElementById('lbl-kcalc').textContent=`${k.toExponential(3)} m/s`;
+}
+['inp-kmes','inp-ks'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',updateSidebarSummary);
+});
+for(let i=0;i<8;i++){
+  document.getElementById('sf'+i).addEventListener('input',updateSidebarSummary);
+}
+updateSidebarSummary();
+
+// ===================== CALCUL SCÉNARIO 1 =====================
+function calcS1() {
+  const {seff}=getSurfaces();
+  const k=getKcalc();
+  const rp=getRp();
+  const Tmax_s=getTmax_s();
+
+  let Smin=0;
+  const rows=[];
+
+  for(let i=0;i<DURATIONS_MIN.length;i++){
+    const d=DURATIONS_MIN[i];
+    const inten=getRainIntensity(d,rp); // L/(s·m²)
+    const Qpluie_Ls=inten*seff; // L/s
+    const dur_s=d*60;
+    const Vpluie=Qpluie_Ls*dur_s/1000; // m³
+    const t_max=dur_s+Tmax_s;
+    const Smin_d = k>0 ? Vpluie/(k*t_max) : 0;
+    rows.push({d, label:DUR_LABELS[i], Qpluie_Ls, Vpluie, Smin_d});
+    if(Smin_d>Smin) Smin=Smin_d;
+  }
+
+  const Qinfil_Ls=k*Smin*1000;
+  let Vbuf=0, critIdx=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const vb=Math.max(0,(r.Qpluie_Ls-Qinfil_Ls)*r.d*60/1000);
+    r.Vbuf=vb;
+    if(vb>Vbuf){Vbuf=vb; critIdx=i;}
+  }
+  const Vemp=Vbuf>0?Vbuf/(2/3):0; // empierrement (void ratio 2/3)
+  const h_moy=Smin>0?Vemp/Smin:0;
+
+  return {Smin, Qinfil_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, rp, Tmax_s};
+}
+
+// ===================== CALCUL SCÉNARIO 2 =====================
+function calcS2() {
+  const {seff}=getSurfaces();
+  const k=getKcalc();
+  const rp=getRp();
+  const Tmax_s=getTmax_s();
+  const Sdisp=parseFloat(document.getElementById('s2-sdisp').value)||0;
+  const qajRate=parseFloat(document.getElementById('s2-qaj').value)||0; // L/(s·ha)
+
+  const Qinfil_Ls=k*Sdisp*1000;
+  const Sha=seff/10000;
+
+  let Qaj_min=0;
+  const rows=[];
+
+  for(let i=0;i<DURATIONS_MIN.length;i++){
+    const d=DURATIONS_MIN[i];
+    const inten=getRainIntensity(d,rp);
+    const Qpluie_Ls=inten*seff;
+    const dur_s=d*60;
+    const Vpluie=Qpluie_Ls*dur_s/1000;
+    const t_max=dur_s+Tmax_s;
+    const Vinfil_max=k*Sdisp*t_max; // m³
+    const Vaj=Math.max(0,Vpluie-Vinfil_max);
+    const Qaj_d=t_max>0?Vaj/t_max*1000:0; // L/s
+    rows.push({d,label:DUR_LABELS[i],Qpluie_Ls,Vpluie,Vinfil_max,Vaj,Qaj_d});
+    if(Qaj_d>Qaj_min) Qaj_min=Qaj_d;
+  }
+
+  // Use user-set rate if specified, otherwise minimum computed
+  const Qaj_Ls = qajRate>0 ? qajRate*Sha : Qaj_min;
+  const Qvidange=Qinfil_Ls+Qaj_Ls;
+
+  let Vbuf=0, critIdx=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const vb=Math.max(0,(r.Qpluie_Ls-Qvidange)*r.d*60/1000);
+    r.Vbuf=vb;
+    r.Qaj_d_used=Qaj_Ls;
+    if(vb>Vbuf){Vbuf=vb;critIdx=i;}
+  }
+  const Vemp=Vbuf>0?Vbuf/(2/3):0;
+  const h_moy=Sdisp>0?Vemp/Sdisp:0;
+
+  return {Sdisp,Qinfil_Ls,Qaj_min,Qaj_Ls,Qaj_ha:Sha>0?Qaj_Ls/Sha:0,Qvidange,Vbuf,Vemp,h_moy,rows,critIdx,k,seff,rp,Tmax_s};
+}
+
+// ===================== CALCUL SCÉNARIO 3 =====================
+function calcS3() {
+  const {seff}=getSurfaces();
+  const k=getKcalc();
+  const rp=getRp();
+  const Tmax_s=getTmax_s();
+  const Sdisp=parseFloat(document.getElementById('s3-sdisp').value)||0;
+  const Vsurp=parseFloat(document.getElementById('s3-vsurp').value)||0;
+  const qajRate=parseFloat(document.getElementById('s3-qaj').value)||5;
+  const Sha=seff/10000;
+
+  const Qinfil_Ls=k*Sdisp*1000;
+  const Qaj_Ls=qajRate*Sha;
+
+  let Vbuf=0, critIdx=0;
+  const rows=[];
+
+  for(let i=0;i<DURATIONS_MIN.length;i++){
+    const d=DURATIONS_MIN[i];
+    const inten=getRainIntensity(d,rp);
+    const Qpluie_Ls=inten*seff;
+    const dur_s=d*60;
+    const Vpluie=Qpluie_Ls*dur_s/1000;
+
+    // Phase 1 : remplissage surprofondeur
+    const Qnet_surp=Qpluie_Ls-Qinfil_Ls; // net inflow to surp zone [L/s]
+    let t_fill_surp_s=Infinity, Vfill_surp=0, ph1done=false;
+    if(Qnet_surp>0 && Vsurp>0){
+      t_fill_surp_s=Vsurp/(Qnet_surp/1000);
+      ph1done=t_fill_surp_s<=dur_s;
+      Vfill_surp=ph1done?Vsurp:Qnet_surp/1000*dur_s;
+    } else {
+      Vfill_surp=0;
+    }
+
+    // Phase 2 : remplissage tampon (au-dessus ajutage)
+    let Vbuf_d=0;
+    if(ph1done){
+      const t_rem=dur_s-t_fill_surp_s;
+      const Qnet_buf=Qpluie_Ls-Qinfil_Ls-Qaj_Ls;
+      Vbuf_d=Math.max(0,Qnet_buf/1000*t_rem);
+    }
+
+    // Phase 3 : vidange tampon
+    const Qdr_buf=Qinfil_Ls+Qaj_Ls;
+    const t_dr_buf_s=Qdr_buf>0?Vbuf_d/(Qdr_buf/1000):0;
+
+    // Phase 4 : vidange surprofondeur
+    const t_dr_surp_s=Qinfil_Ls>0?Vfill_surp/(Qinfil_Ls/1000):0;
+
+    const t_total_s=t_dr_buf_s+t_dr_surp_s;
+    const compliant=t_total_s<=Tmax_s;
+
+    rows.push({
+      d,label:DUR_LABELS[i],Qpluie_Ls,Vpluie,
+      Qnet_surp,t_fill_surp_min:ph1done?t_fill_surp_s/60:null,
+      ph1done,Vfill_surp,Vbuf_d,
+      t_dr_buf_h:t_dr_buf_s/3600,t_dr_surp_h:t_dr_surp_s/3600,
+      t_total_h:t_total_s/3600,compliant
+    });
+    if(Vbuf_d>Vbuf){Vbuf=Vbuf_d;critIdx=i;}
+  }
+  const Vemp=Vbuf>0?Vbuf/(2/3):0;
+  const h_moy=Sdisp>0?Vemp/Sdisp:0;
+
+  return {Sdisp,Vsurp,Qinfil_Ls,Qaj_Ls,qajRate,Vbuf,Vemp,h_moy,rows,critIdx,k,seff,rp,Tmax_s};
+}
+
+// ===================== MAIN CALCULATE =====================
+function calculateAll() {
+  updateSidebarSummary();
+  const {seff,stot}=getSurfaces();
+
+  state.s1=calcS1();
+  state.s2=calcS2();
+  state.s3=calcS3();
+
+  renderS1(state.s1);
+  renderS2(state.s2);
+  renderS3(state.s3);
+}
+
+// ===================== RENDER S1 =====================
+function renderS1(r) {
+  if(!r){return;}
+  const warn=r.Vbuf>0;
+  document.getElementById('s1-results').innerHTML=`
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Surface de dispersion minimale</div>
+      <div class="rc-value">${fmt(r.Smin,1)} <span class="rc-unit">m²</span></div>
+      <div class="rc-sub">Critère : vidange totale en ${r.Tmax_s/3600}h max après la pluie</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon minimal</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Débit infiltration: ${fmt(r.Qinfil_Ls,3)} L/s</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Volume d'empierrement nécessaire <span style="font-size:10px;">(taux vide 2/3)</span></div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Épaisseur moy. sur surface disp.: ${fmt(r.h_moy,2)} m</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Paramètres de calcul</div>
+      <div class="rc-sub">Surface eff.: ${fmt(r.seff,0)} m² | k: ${r.k.toExponential(3)} m/s</div>
+      <div class="rc-sub">Période de retour: ${r.rp} ans</div>
+    </div>
+  </div>
+  <div class="col-title">Détail par durée de pluie <span class="tag-critical">Cr = pluie critique dimensionnante</span></div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr>
+      <th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th>
+      <th>t max infiltration (h)</th><th>S min dispersion (m²)</th><th>V tampon min (m³)</th>
+    </tr>
+    ${r.rows.map((row,i)=>`
+    <tr class="${i===r.critIdx?'critical':''}">
+      <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+      <td>${fmt(row.Qpluie_Ls,3)}</td>
+      <td>${fmt(row.Vpluie,3)}</td>
+      <td>${fmt((row.d*60+r.Tmax_s)/3600,1)}</td>
+      <td>${fmt(row.Smin_d,1)}</td>
+      <td>${fmt(row.Vbuf,3)}</td>
+    </tr>`).join('')}
+  </table>
+  </div>`;
+}
+
+// ===================== RENDER S2 =====================
+function renderS2(r) {
+  if(!r){return;}
+  document.getElementById('s2-results').innerHTML=`
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Débit d'ajutage minimal calculé</div>
+      <div class="rc-value">${fmt(r.Qaj_min,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">= ${fmt(r.Qaj_ha,2)} L/(s·ha) surf. eff.</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon minimal</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Q vidange total: ${fmt(r.Qvidange,3)} L/s (infil. + ajutage)</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Surface de dispersion</div>
+      <div class="rc-value">${fmt(r.Sdisp,0)} <span class="rc-unit">m²</span></div>
+      <div class="rc-sub">Débit infiltration: ${fmt(r.Qinfil_Ls,3)} L/s</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Volume d'empierrement <span style="font-size:10px;">(taux vide 2/3)</span></div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Ép. moy.: ${fmt(r.h_moy,2)} m</div>
+    </div>
+  </div>
+  <div class="col-title">Détail par durée de pluie</div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr>
+      <th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th>
+      <th>V infiltré max (m³)</th><th>V à évacuer (m³)</th>
+      <th>Q ajutage min (L/s)</th><th>V tampon (m³)</th>
+    </tr>
+    ${r.rows.map((row,i)=>`
+    <tr class="${i===r.critIdx?'critical':''}">
+      <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+      <td>${fmt(row.Qpluie_Ls,3)}</td>
+      <td>${fmt(row.Vpluie,3)}</td>
+      <td>${fmt(row.Vinfil_max,3)}</td>
+      <td>${fmt(row.Vaj,3)}</td>
+      <td>${fmt(row.Qaj_d,3)}</td>
+      <td>${fmt(row.Vbuf,3)}</td>
+    </tr>`).join('')}
+  </table>
+  </div>`;
+}
+
+// ===================== RENDER S3 =====================
+function renderS3(r) {
+  if(!r){return;}
+  document.getElementById('s3-results').innerHTML=`
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon minimal (au-dessus ajutage)</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Surprofondeur (sous ajutage): ${fmt(r.Vsurp,2)} m³</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume d'empierrement total <span style="font-size:10px;">(taux vide 2/3)</span></div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Ép. moy.: ${fmt(r.h_moy,2)} m sur ${fmt(r.Sdisp,0)} m²</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Débit d'ajutage appliqué</div>
+      <div class="rc-value">${fmt(r.Qaj_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">= ${fmt(r.qajRate,1)} L/(s·ha) × ${fmt(r.seff/10000,4)} ha</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Débit infiltration</div>
+      <div class="rc-value">${fmt(r.Qinfil_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">k=${r.k.toExponential(3)} m/s × ${fmt(r.Sdisp,0)} m²</div>
+    </div>
+  </div>
+  <div class="col-title">Vérification par durée de pluie</div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr>
+      <th>Durée</th><th>Q pluie (L/s)</th><th>Surp. remplie?</th>
+      <th>t fill surp. (min)</th><th>V tampon (m³)</th>
+      <th>t vidange buf. (h)</th><th>t vidange surp. (h)</th>
+      <th>t total (h)</th><th>Conformité</th>
+    </tr>
+    ${r.rows.map((row,i)=>`
+    <tr class="${i===r.critIdx?'critical':''}${!row.compliant?' overflow':''}">
+      <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+      <td>${fmt(row.Qpluie_Ls,3)}</td>
+      <td>${row.ph1done?'Oui':'Non'}</td>
+      <td>${row.ph1done?fmt(row.t_fill_surp_min,1):'–'}</td>
+      <td>${fmt(row.Vbuf_d,3)}</td>
+      <td>${fmt(row.t_dr_buf_h,2)}</td>
+      <td>${fmt(row.t_dr_surp_h,2)}</td>
+      <td style="font-weight:700;">${fmt(row.t_total_h,2)}</td>
+      <td>${row.compliant?'<span class="badge badge-green">✓ OK</span>':'<span class="badge badge-red">✗ NON</span>'}</td>
+    </tr>`).join('')}
+  </table>
+  </div>`;
+}
+
+// ===================== TABS =====================
+function showTab(id) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const ids=['s1','s2','s3','sim','prot'];
+    t.classList.toggle('active',ids[i]===id);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('pane-'+id).classList.add('active');
+  if(id==='sim') initSimIfNeeded();
+}
+
+// ===================== SIMULATION =====================
+function getSimParams() {
+  const scen=parseInt(document.getElementById('sim-scen').value);
+  const dur=parseInt(document.getElementById('sim-dur').value);
+  const rp=parseInt(document.getElementById('sim-rp').value);
+  const Sdisp=parseFloat(document.getElementById('sim-sdisp').value)||0;
+  const Vsurp=parseFloat(document.getElementById('sim-vsurp').value)||0;
+  const Vtamp=parseFloat(document.getElementById('sim-vtamp').value)||0;
+  const Qaj=parseFloat(document.getElementById('sim-qaj').value)||0;
+  const {seff}=getSurfaces();
+  const k=getKcalc();
+  const inten=getRainIntensity(dur,rp);
+  const Qrain=inten*seff; // L/s
+  const Qinfil=k*Sdisp*1000; // L/s
+  return {scen,dur,rp,Sdisp,Vsurp,Vtamp,Qaj,seff,k,Qrain,Qinfil};
+}
+
+function computeSimData(p) {
+  const dur_s=p.dur*60;
+  // Adaptive dt
+  let dt=60;
+  if(p.dur>720) dt=600;
+  if(p.dur>4320) dt=3600;
+
+  const Vtotal=p.Vsurp+p.Vtamp;
+  let V=0, Vover=0;
+  const data=[];
+
+  const maxT=dur_s+Math.max(p.Tmax_s||86400, 86400)+dt;
+  let drained=false;
+
+  for(let t=0;t<=maxT;t+=dt){
+    const raining=t<dur_s;
+    const Qin=raining?p.Qrain:0;
+    let Qinfil=0, Qorifice=0;
+
+    if(V>0){
+      Qinfil=Math.min(p.Qinfil, V*1000/dt);
+      if(p.scen>=2 && V>p.Vsurp){
+        Qorifice=Math.min(p.Qaj, (V-p.Vsurp)*1000/dt);
+      }
+    }
+
+    const Qnet=Qin-Qinfil-Qorifice; // L/s
+    const dV=Qnet*dt/1000; // m³
+    V+=dV;
+    if(V<0) V=0;
+
+    let overflow=false;
+    if(p.scen===1 && Vtotal>0 && V>Vtotal){
+      Vover+=(V-Vtotal); V=Vtotal; overflow=true;
+    } else if(p.scen>=2 && Vtotal>0 && V>Vtotal){
+      Vover+=(V-Vtotal); V=Vtotal; overflow=true;
+    }
+
+    data.push({t,V,Qin,Qinfil,Qorifice,overflow,Vover});
+
+    if(!raining && V<1e-6){
+      if(!drained){ drained=true; }
+      // push a couple more zeros then stop
+      if(t>dur_s+dt*3) break;
+    }
+  }
+  return data;
+}
+
+let simChart=null;
+function initSimIfNeeded() {
+  if(simChart) return;
+  const ctx=document.getElementById('sim-chart').getContext('2d');
+  simChart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:[],
+      datasets:[
+        {label:'Volume bassin (m³)',data:[],borderColor:'#1E88E5',backgroundColor:'rgba(30,136,229,.15)',fill:true,pointRadius:0,tension:.3,yAxisID:'yV'},
+        {label:'Q entrée (L/s)',data:[],borderColor:'#43A047',borderDash:[4,2],fill:false,pointRadius:0,tension:.3,yAxisID:'yQ'},
+        {label:'Q infiltration (L/s)',data:[],borderColor:'#8D6E63',borderDash:[2,3],fill:false,pointRadius:0,tension:.3,yAxisID:'yQ'},
+        {label:'Q ajutage (L/s)',data:[],borderColor:'#E65100',borderDash:[6,2],fill:false,pointRadius:0,tension:.3,yAxisID:'yQ'},
+      ]
+    },
+    options:{
+      animation:{duration:0},
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}}},
+      scales:{
+        x:{ticks:{maxTicksLimit:10,font:{size:10}},title:{display:true,text:'Temps',font:{size:11}}},
+        yV:{position:'left',title:{display:true,text:'Volume (m³)',font:{size:11}},ticks:{font:{size:10}}},
+        yQ:{position:'right',title:{display:true,text:'Débit (L/s)',font:{size:11}},ticks:{font:{size:10}},grid:{drawOnChartArea:false}}
+      }
+    }
+  });
+}
+
+function updateChart(upTo) {
+  if(!simChart||!state.simData.length) return;
+  const slice=state.simData.slice(0,upTo+1);
+  const labels=slice.map(d=>{
+    const t=d.t;
+    if(t<3600) return `${Math.round(t/60)}m`;
+    if(t<86400) return `${(t/3600).toFixed(1)}h`;
+    return `${(t/86400).toFixed(1)}j`;
+  });
+  simChart.data.labels=labels;
+  simChart.data.datasets[0].data=slice.map(d=>+d.V.toFixed(4));
+  simChart.data.datasets[1].data=slice.map(d=>+d.Qin.toFixed(4));
+  simChart.data.datasets[2].data=slice.map(d=>+d.Qinfil.toFixed(4));
+  simChart.data.datasets[3].data=slice.map(d=>+d.Qorifice.toFixed(4));
+  simChart.update('none');
+}
+
+// Basin SVG drawing
+function drawBasin(idx) {
+  const svg=document.getElementById('basin-svg');
+  const p=getSimParams();
+  const Vtotal=p.Vsurp+p.Vtamp;
+  const d=state.simData[idx]||{V:0,Qin:0,Qinfil:0,Qorifice:0,overflow:false};
+  const raining=d.Qin>0;
+
+  const W=600,H=220;
+  const bx=120,by=25,bw=360,bh=155; // basin rect coords
+  const groundY=by+bh;
+  const Vfrac=Vtotal>0?Math.min(1,d.V/Vtotal):0;
+  const waterH=bh*Vfrac;
+  const waterY=by+bh-waterH;
+  const orificeY=Vtotal>0?by+bh-bh*(p.Vsurp/Vtotal):by+bh; // orifice level
+  const overflow=d.overflow||(Vtotal>0&&d.V>=Vtotal);
+
+  let html=`
+  <!-- Ground -->
+  <rect x="${bx-10}" y="${groundY}" width="${bw+20}" height="18" fill="#8D6E63"/>
+  <line x1="${bx-10}" y1="${groundY+18}" x2="${bx+bw+10}" y2="${groundY+18}" stroke="#5D4037" stroke-width="2"/>
+  <!-- Basin walls -->
+  <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#E0E0E0" stroke="#90A4AE" stroke-width="2" rx="2"/>
+  `;
+
+  // Water fill
+  if(waterH>0){
+    html+=`<rect x="${bx+1}" y="${waterY}" width="${bw-2}" height="${waterH}" fill="${overflow?'#EF9A9A':'rgba(30,136,229,0.65)'}"/>`;
+    // Water surface wave
+    html+=`<path d="M${bx+1} ${waterY} Q${bx+bw/4} ${waterY-3} ${bx+bw/2} ${waterY} Q${bx+3*bw/4} ${waterY+3} ${bx+bw-1} ${waterY}" fill="none" stroke="${overflow?'#C62828':'#1565C0'}" stroke-width="1.5"/>`;
+  }
+
+  // Orifice level line (scenario 2 & 3)
+  if(p.scen>=2 && p.Vsurp>0){
+    html+=`<line x1="${bx}" y1="${orificeY}" x2="${bx+bw}" y2="${orificeY}" stroke="#E65100" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="${bx-5}" y="${orificeY+4}" text-anchor="end" fill="#E65100" font-size="10">Ajutage</text>`;
+    // Orifice arrow (if water above orifice)
+    if(d.V>p.Vsurp && d.Qorifice>0){
+      html+=`<line x1="${bx+bw}" y1="${orificeY}" x2="${bx+bw+40}" y2="${orificeY}" stroke="#E65100" stroke-width="3" marker-end="url(#arr)"/>
+      <text x="${bx+bw+44}" y="${orificeY+4}" fill="#E65100" font-size="10">${d.Qorifice.toFixed(2)} L/s</text>`;
+    }
+  }
+
+  // Infiltration arrows at bottom
+  if(d.V>0 && p.Sdisp>0){
+    for(let ax=bx+30;ax<bx+bw;ax+=60){
+      html+=`<line x1="${ax}" y1="${groundY}" x2="${ax}" y2="${groundY+14}" stroke="#8D6E63" stroke-width="2" marker-end="url(#arr-brown)"/>`;
+    }
+    html+=`<text x="${bx+bw/2}" y="${groundY+24}" text-anchor="middle" fill="#5D4037" font-size="10">Infiltration: ${d.Qinfil.toFixed(2)} L/s</text>`;
+  }
+
+  // Rain arrows
+  if(raining){
+    for(let rx=bx+20;rx<bx+bw;rx+=35){
+      html+=`<line x1="${rx}" y1="${by-14}" x2="${rx}" y2="${by-2}" stroke="#42A5F5" stroke-width="2" marker-end="url(#arr-blue)"/>`;
+    }
+    html+=`<text x="${bx+bw/2}" y="${by-16}" text-anchor="middle" fill="#1565C0" font-size="10">Pluie: ${d.Qin.toFixed(2)} L/s</text>`;
+  }
+
+  // Overflow
+  if(overflow){
+    html+=`<polygon points="${bx},${by} ${bx-30},${by-15} ${bx-10},${by}" fill="#EF5350"/>
+    <text x="${bx-32}" y="${by-16}" text-anchor="end" fill="#C62828" font-size="11" font-weight="bold">DÉBORDEMENT!</text>`;
+  }
+
+  // Level labels
+  html+=`<text x="${bx+bw+5}" y="${by+10}" fill="#666" font-size="10">Max: ${Vtotal.toFixed(2)} m³</text>`;
+  html+=`<text x="${bx+bw+5}" y="${groundY+5}" fill="#666" font-size="10">0 m³</text>`;
+  if(Vfrac>0.05){
+    html+=`<text x="${bx+bw/2}" y="${waterY+Math.min(waterH/2,18)+5}" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">${d.V.toFixed(3)} m³ (${(Vfrac*100).toFixed(0)}%)</text>`;
+  }
+
+  // Volume bar on left
+  const barH=bh, barX=bx-70, barY=by;
+  html+=`<rect x="${barX}" y="${barY}" width="20" height="${barH}" fill="#E3F2FD" stroke="#90A4AE" stroke-width="1"/>`;
+  if(Vfrac>0){
+    html+=`<rect x="${barX}" y="${barY+barH-barH*Vfrac}" width="20" height="${barH*Vfrac}" fill="${overflow?'#EF5350':'#1E88E5'}"/>`;
+  }
+  html+=`<text x="${barX+10}" y="${barY-3}" text-anchor="middle" fill="#546E7A" font-size="10">${(Vfrac*100).toFixed(0)}%</text>`;
+
+  // Time label
+  const t=d.t||0;
+  html+=`<text x="10" y="15" fill="#333" font-size="11" font-weight="700">${fmtTime(t)}</text>`;
+
+  // Defs
+  const defs=`<defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#E65100"/></marker>
+    <marker id="arr-brown" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#8D6E63"/></marker>
+    <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#42A5F5"/></marker>
+  </defs>`;
+
+  svg.innerHTML=defs+html;
+}
+
+function resetSim() {
+  if(state.simRAF){cancelAnimationFrame(state.simRAF);state.simRAF=null;}
+  state.simPlaying=false; state.simIdx=0; state.simData=[];
+  document.getElementById('btn-play').textContent='▶ Démarrer';
+  document.getElementById('sim-time-display').textContent='t = 0';
+  document.getElementById('sim-status').textContent='Prêt';
+  document.getElementById('sim-status').className='status-ok';
+  document.getElementById('sim-stats').style.display='none';
+  if(simChart){
+    simChart.data.labels=[];
+    simChart.data.datasets.forEach(ds=>ds.data=[]);
+    simChart.update('none');
+  }
+  drawBasin(0);
+}
+
+function togglePlay() {
+  if(!state.simPlaying){
+    if(!state.simData.length || state.simIdx>=state.simData.length-1){
+      startSim();
+    } else {
+      state.simPlaying=true;
+      document.getElementById('btn-play').textContent='⏸ Pause';
+      animLoop();
+    }
+  } else {
+    state.simPlaying=false;
+    document.getElementById('btn-play').textContent='▶ Reprendre';
+    if(state.simRAF){cancelAnimationFrame(state.simRAF);state.simRAF=null;}
+  }
+}
+
+function startSim() {
+  initSimIfNeeded();
+  const p=getSimParams();
+  p.Tmax_s=getTmax_s();
+  state.simData=computeSimData(p);
+  state.simIdx=0;
+  state.simPlaying=true;
+  state.simLastT=null;
+  document.getElementById('btn-play').textContent='⏸ Pause';
+  animLoop();
+}
+
+function animLoop(ts) {
+  if(!state.simPlaying) return;
+  const data=state.simData;
+  if(!data.length) return;
+
+  const speed=parseInt(document.getElementById('speed-sel').value)||600;
+
+  if(state.simLastT===null) state.simLastT=ts||0;
+  const dt_real=Math.min((ts||0)-state.simLastT, 100); // cap at 100ms to avoid jumps
+  state.simLastT=ts||0;
+  const dt_sim=dt_real*speed/1000; // simulated seconds per real frame
+
+  const curT=state.simIdx<data.length?data[state.simIdx].t:0;
+  const targetT=curT+dt_sim;
+  while(state.simIdx<data.length-1 && data[state.simIdx+1].t<=targetT){
+    state.simIdx++;
+  }
+
+  const d=data[state.simIdx];
+  drawBasin(state.simIdx);
+  updateChart(state.simIdx);
+
+  // Update status
+  const statEl=document.getElementById('sim-status');
+  const timeEl=document.getElementById('sim-time-display');
+  const p=getSimParams();
+  const dur_s=p.dur*60;
+  timeEl.textContent=`t = ${fmtTime(d.t)}`;
+  if(d.overflow){
+    statEl.textContent='⚠ DÉBORDEMENT'; statEl.className='status-overflow';
+  } else if(d.Qin>0){
+    statEl.textContent='🌧 Pluie en cours'; statEl.className='status-rain';
+  } else if(d.V>0.001){
+    statEl.textContent='↓ Vidange en cours'; statEl.className='status-drain';
+  } else {
+    statEl.textContent='✓ Bassin vide'; statEl.className='status-ok';
+  }
+
+  if(state.simIdx>=data.length-1){
+    state.simPlaying=false;
+    document.getElementById('btn-play').textContent='▶ Rejouer';
+    showSimStats();
+    return;
+  }
+  state.simRAF=requestAnimationFrame(animLoop);
+}
+
+function showSimStats() {
+  const data=state.simData;
+  if(!data.length) return;
+  const Vmax=Math.max(...data.map(d=>d.V));
+  const overflowed=data.some(d=>d.overflow);
+  const Vover=data[data.length-1].Vover||0;
+  const drainIdx=data.findIndex((d,i)=>i>0&&!d.Qin&&d.V<1e-4);
+  const p=getSimParams();
+  const drainTime=drainIdx>0?data[drainIdx].t-p.dur*60:null;
+  const Vtotal=p.Vsurp+p.Vtamp;
+
+  document.getElementById('sim-stats').style.display='block';
+  document.getElementById('sim-stats-inner').innerHTML=`
+    <div style="margin-bottom:4px;"><span class="badge ${overflowed?'badge-red':'badge-green'}">${overflowed?'⚠ DÉBORDEMENT':'✓ Pas de débordement'}</span></div>
+    <div style="font-size:11px;margin-top:6px;">
+      <div>Vol. max atteint: <strong>${Vmax.toFixed(3)} m³</strong> / ${Vtotal.toFixed(3)} m³</div>
+      <div>Taux remplissage max: <strong>${Vtotal>0?(Vmax/Vtotal*100).toFixed(1):0}%</strong></div>
+      ${overflowed?`<div style="color:var(--red);">Vol. débordement: <strong>${Vover.toFixed(3)} m³</strong></div>`:''}
+      ${drainTime!==null?`<div>Temps de vidange: <strong>${fmtTime(drainTime)}</strong></div>`:'<div>Vidange incomplète dans le délai simulé</div>'}
+    </div>`;
+}
+
+function prefillFromScenario() {
+  const scen=parseInt(document.getElementById('sim-scen').value);
+  if(scen===1 && state.s1){
+    document.getElementById('sim-sdisp').value=state.s1.Smin.toFixed(0);
+    document.getElementById('sim-vsurp').value=0;
+    document.getElementById('sim-vtamp').value=state.s1.Vbuf.toFixed(3);
+    document.getElementById('sim-qaj').value=0;
+  } else if(scen===2 && state.s2){
+    document.getElementById('sim-sdisp').value=state.s2.Sdisp.toFixed(0);
+    document.getElementById('sim-vsurp').value=0;
+    document.getElementById('sim-vtamp').value=state.s2.Vbuf.toFixed(3);
+    document.getElementById('sim-qaj').value=state.s2.Qaj_Ls.toFixed(3);
+  } else if(scen===3 && state.s3){
+    document.getElementById('sim-sdisp').value=state.s3.Sdisp.toFixed(0);
+    document.getElementById('sim-vsurp').value=state.s3.Vsurp.toFixed(3);
+    document.getElementById('sim-vtamp').value=state.s3.Vbuf.toFixed(3);
+    document.getElementById('sim-qaj').value=state.s3.Qaj_Ls.toFixed(3);
+  }
+  resetSim();
+}
+
+// Hide/show fields based on scenario
+document.getElementById('sim-scen').addEventListener('change',function(){
+  const s=parseInt(this.value);
+  document.getElementById('row-vsurp').style.display=s===3?'flex':'none';
+  document.getElementById('row-vtamp').style.display=s>=2?'flex':'none';
+  document.getElementById('row-qaj2').style.display=s>=2?'flex':'none';
+  resetSim();
+});
+// Initial state
+document.getElementById('row-vsurp').style.display='flex';
+
+// ===================== PROTECTION MATRIX =====================
+function buildProtectionMatrix() {
+  const protScen=document.getElementById('prot-scen').value;
+  let Sdisp, Vsurp, Vtamp, Qaj_Ls, scen;
+
+  if(protScen==='sim'){
+    const p=getSimParams();
+    Sdisp=p.Sdisp; Vsurp=p.Vsurp; Vtamp=p.Vtamp; Qaj_Ls=p.Qaj; scen=p.scen;
+  } else if(protScen==='1' && state.s1){
+    Sdisp=state.s1.Smin; Vsurp=0; Vtamp=state.s1.Vbuf; Qaj_Ls=0; scen=1;
+  } else if(protScen==='2' && state.s2){
+    Sdisp=state.s2.Sdisp; Vsurp=0; Vtamp=state.s2.Vbuf; Qaj_Ls=state.s2.Qaj_Ls; scen=2;
+  } else if(protScen==='3' && state.s3){
+    Sdisp=state.s3.Sdisp; Vsurp=state.s3.Vsurp; Vtamp=state.s3.Vbuf; Qaj_Ls=state.s3.Qaj_Ls; scen=3;
+  } else {
+    document.getElementById('prot-table-wrap').innerHTML='<div style="color:var(--red);font-size:12px;">Calculez d\'abord le scénario correspondant.</div>';
+    return;
+  }
+
+  const {seff}=getSurfaces();
+  const k=getKcalc();
+  const rp_design=getRp();
+  const Vtotal=Vsurp+Vtamp;
+
+  // Show only first 9 durations and all 12 return periods for performance
+  const testDurs=DURATIONS_MIN.slice(0,14);
+  const testDurLbls=DUR_LABELS.slice(0,14);
+
+  let html=`<table class="prot-table"><tr><th>Durée \\ T. retour</th>`;
+  RETURN_PERIODS.forEach(rp=>html+=`<th>${rp} ans</th>`);
+  html+=`</tr>`;
+
+  testDurs.forEach((dur,di)=>{
+    html+=`<tr><td>${testDurLbls[di]}</td>`;
+    RETURN_PERIODS.forEach(rp=>{
+      const inten=getRainIntensity(dur,rp);
+      const Qr=inten*seff; // L/s
+      const Qinfil=k*Sdisp*1000;
+      const Qout=scen>=2?Qinfil+Qaj_Ls:Qinfil;
+      const dur_s=dur*60;
+      let overflows=false;
+      if(Vtotal>0){
+        const Qnet=Qr-Qout;
+        if(Qnet>0){
+          // For scenario 3: check if surp absorbs it first
+          if(scen===3 && Vsurp>0){
+            const Qnet_surp=Qr-Qinfil;
+            if(Qnet_surp>0){
+              const t_fill=Vsurp/(Qnet_surp/1000);
+              if(t_fill<dur_s){
+                const t_rem=dur_s-t_fill;
+                const Vbuf_needed=Math.max(0,(Qr-Qinfil-Qaj_Ls)/1000*t_rem);
+                overflows=Vbuf_needed>Vtamp;
+              }
+            }
+          } else {
+            const Vneeded=Qnet/1000*dur_s;
+            overflows=Vneeded>Vtotal;
+          }
+        }
+      } else {
+        overflows=Qr>Qout;
+      }
+      const isDim=rp===rp_design;
+      html+=`<td class="${overflows?'prot-over':'prot-ok'}${isDim?' prot-dim':''}">${overflows?'✗':'✓'}</td>`;
+    });
+    html+=`</tr>`;
+  });
+  html+=`</table>`;
+  html+=`<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
+    <span class="prot-ok" style="padding:2px 6px;border-radius:3px;">✓ Vert</span> = pas de débordement &nbsp;
+    <span class="prot-over" style="padding:2px 6px;border-radius:3px;">✗ Rouge</span> = débordement &nbsp;
+    <span class="prot-dim" style="padding:2px 6px;border-radius:3px;">Fond jaune</span> = période de retour de dimensionnement (${rp_design} ans)
+  </div>`;
+
+  document.getElementById('prot-table-wrap').innerHTML=html;
+}
+
+// ===================== INITIAL DRAW =====================
+window.addEventListener('load',()=>{
+  initSimIfNeeded();
+  drawBasin(0);
+});
+</script>
+</body>
+</html>
