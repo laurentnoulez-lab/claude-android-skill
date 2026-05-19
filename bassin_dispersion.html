@@ -133,7 +133,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
 
 <div id="hdr">
   <div><h1>💧 Simulateur de Bassin de Dispersion / Rétention</h1></div>
-  <span class="sub">Tableur AIDE — Données IRM Flémalle — v2 corrigée</span>
+  <span class="sub">Tableur AIDE — Données IRM Flémalle — v3</span>
 </div>
 
 <div id="body">
@@ -216,6 +216,15 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
         <span class="formula">S_min = V_pluie / (k × t_max)</span> avec t_max = durée_pluie + 24h<br>
         <span class="formula">V_tampon = max(0, Q_pluie − Q_infiltration) × durée_pluie</span><br>
         <span class="formula">V_empierrement = V_tampon × 3</span> (les pierres occupent 2/3 du volume)
+      </div>
+      <div class="section-card" style="margin-bottom:10px;">
+        <div class="col-title">Surface disponible (optionnel)</div>
+        <div class="param-row">
+          <label>Surface de dispersion disponible</label>
+          <input type="number" id="s1-suser" value="" min="0" placeholder="laisser vide = S_min"> <span class="unit">m²</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Laisser vide pour utiliser S_min comme base de calcul. Si une surface plus grande est disponible, le volume tampon sera recalculé avec la capacité d'infiltration correspondante.</div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
       </div>
       <div id="s1-results">
         <div style="color:var(--text-muted);font-size:12px;">Entrez les surfaces et cliquez sur « Calculer ».</div>
@@ -529,40 +538,46 @@ function calcS1() {
   const Tmax_s = getTmax_s();
   const {seff} = getSurfaces();
 
-  if (seff <= 0) return null;
+  if (seff <= 0) return { error: 'no_surface' };
+  if (k <= 0) return { error: 'impermeable', msg: 'Vitesse d\'infiltration nulle (k = 0). Dispersion impossible — le sol est imperméable. Volume de stockage infini requis sans ajutage.' };
 
   let Smin = 0;
   const rows = [];
 
   for (let i=0; i<DUR.length; i++) {
     const d = DUR[i];
-    const Q = rainFlow_Ls(d, rp); // L/s
+    const Q = rainFlow_Ls(d, rp);
     const dur_s = d * 60;
-    const V = Q * dur_s / 1000; // m³
-    const t_max = dur_s + Tmax_s; // s
-    const Smin_d = (k * t_max) > 0 ? V / (k * t_max) : 0;
+    const V = Q * dur_s / 1000;
+    const t_max = dur_s + Tmax_s;
+    const Smin_d = V / (k * t_max);
     rows.push({ d, label: DUR_LBL[i], Q, V, t_max, Smin_d });
     if (Smin_d > Smin) Smin = Smin_d;
   }
 
-  const Qinfil_m3s = k * Smin; // m³/s
-  const Qinfil_Ls = Qinfil_m3s * 1000; // L/s
+  // Optional user-provided surface
+  const S_user_raw = parseFloat($('s1-suser').value);
+  const S_user = (!isNaN(S_user_raw) && S_user_raw > 0) ? S_user_raw : null;
+  const Seff_used = S_user !== null ? S_user : Smin;
+  const warnSurf = S_user !== null && S_user < Smin;
+
+  const Qinfil_m3s = k * Seff_used;
+  const Qinfil_Ls = Qinfil_m3s * 1000;
 
   let Vbuf = 0, critIdx = 0;
   for (let i=0; i<rows.length; i++) {
     const r = rows[i];
     const Q_m3s = r.Q / 1000;
     const excess_m3s = Math.max(0, Q_m3s - Qinfil_m3s);
-    const vb = r.d * 60 * excess_m3s; // m³
+    const vb = r.d * 60 * excess_m3s;
     r.Vbuf = vb;
     if (vb > Vbuf) { Vbuf = vb; critIdx = i; }
   }
 
-  // EXCEL: G93 = B91 × 3 (empierrement: pierres occupent 2/3, eau dans 1/3 des vides → total = eau × 3)
   const Vemp = Vbuf * 3;
-  const h_moy = Smin > 0 ? Vemp / Smin : 0;
+  const h_moy = Seff_used > 0 ? Vemp / Seff_used : 0;
 
-  return { Smin, Qinfil_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, rp, Tmax_s };
+  return { Smin, S_user, Seff_used, warnSurf, Qinfil_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, rp, Tmax_s };
 }
 
 // ===================== SCÉNARIO 2 — Dispersion + Ajutage =====================
@@ -587,30 +602,71 @@ function calcS2() {
   const Sdisp = parseFloat($('s2-sdisp').value) || 0;
   const qajRate_Lsha = parseFloat($('s2-qaj').value) || 0;
 
-  if (seff <= 0 || Sdisp <= 0) return null;
+  if (seff <= 0) return { error: 'no_surface' };
 
-  const Qinfil_m3s = k * Sdisp;
+  const noInfil = k <= 0 || Sdisp <= 0;
+  const noAjutage = qajRate_Lsha <= 0;
+
+  // Both zero → impossible to drain
+  if (noInfil && noAjutage) {
+    const msg = (Sdisp <= 0 && k > 0)
+      ? 'Surface de dispersion nulle et pas d\'ajutage. Entrez une surface de dispersion ou un débit d\'ajutage.'
+      : 'Sol imperméable (k = 0) et pas d\'ajutage. Volume de rétention infini requis.';
+    return { error: 'no_drainage', msg };
+  }
+
+  // No ajutage → pure dispersion mode with given S_disp
+  if (noAjutage) {
+    const Qinfil_m3s = k * Sdisp;
+    const Qinfil_Ls = Qinfil_m3s * 1000;
+    // Compute S_min for reference and warning
+    let Smin = 0;
+    const rows = [];
+    for (let i=0; i<DUR.length; i++) {
+      const d = DUR[i];
+      const Q = rainFlow_Ls(d, rp);
+      const dur_s = d * 60;
+      const V = Q * dur_s / 1000;
+      const t_max = dur_s + Tmax_s;
+      const Smin_d = V / (k * t_max);
+      const excess_m3s = Math.max(0, Q/1000 - Qinfil_m3s);
+      const Vbuf_d = d * 60 * excess_m3s;
+      rows.push({ d, label: DUR_LBL[i], Q, V, Smin_d, V_infil_max: Math.min(k*Sdisp*t_max, V), V_aj: 0, Q_aj_d_Ls: 0, Vbuf: Vbuf_d });
+      if (Smin_d > Smin) Smin = Smin_d;
+    }
+    let Vbuf = 0, critIdx = 0;
+    rows.forEach((r, i) => { if (r.Vbuf > Vbuf) { Vbuf = r.Vbuf; critIdx = i; } });
+    const Vemp = Vbuf * 3;
+    const h_moy = Sdisp > 0 ? Vemp / Sdisp : 0;
+    const warnSurf = Sdisp < Smin;
+    return {
+      mode: 'dispersion_only', Sdisp, Smin, warnSurf,
+      Qinfil_Ls, Qaj_min_Ls: 0, Qaj_min_Lsha: 0, Qaj_user_Ls: 0, qajRate_Lsha: 0,
+      ajutageOK: true, Qvidange_Ls: Qinfil_Ls,
+      Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s
+    };
+  }
+
+  // Normal or orifice-only: compute Q_infil (0 if noInfil)
+  const Qinfil_m3s = noInfil ? 0 : k * Sdisp;
   const Qinfil_Ls = Qinfil_m3s * 1000;
-  // EXCEL: Q_ajutage utilise la surface TOTALE (E29 = B29/10000), pas l'effective
   const Qaj_user_Ls = qajRate_Lsha * sha_tot;
 
   let Qaj_min_Ls = 0;
   const rows = [];
-
   for (let i=0; i<DUR.length; i++) {
     const d = DUR[i];
     const Q = rainFlow_Ls(d, rp);
     const dur_s = d * 60;
     const V = Q * dur_s / 1000;
     const t_max = dur_s + Tmax_s;
-    const V_infil_max = Math.min(k * Sdisp * t_max, V); // m³ -- comme Excel MIN()
-    const V_aj = V - V_infil_max; // m³
+    const V_infil_max = noInfil ? 0 : Math.min(k * Sdisp * t_max, V);
+    const V_aj = V - V_infil_max;
     const Q_aj_d_Ls = t_max > 0 ? V_aj * 1000 / t_max : 0;
     rows.push({ d, label: DUR_LBL[i], Q, V, V_infil_max, V_aj, Q_aj_d_Ls });
     if (Q_aj_d_Ls > Qaj_min_Ls) Qaj_min_Ls = Q_aj_d_Ls;
   }
 
-  // Q_vidange utilisé pour V_buf = Q_infil + Q_ajutage (avec le débit utilisateur, pas min)
   const Qvidange_Ls = Qinfil_Ls + Qaj_user_Ls;
   const Qvidange_m3s = Qvidange_Ls / 1000;
 
@@ -625,11 +681,12 @@ function calcS2() {
   }
 
   const Vemp = Vbuf * 3;
-  const h_moy = Sdisp > 0 ? Vemp / Sdisp : 0;
+  const h_moy = (!noInfil && Sdisp > 0) ? Vemp / Sdisp : null;
   const ajutageOK = Qaj_user_Ls >= Qaj_min_Ls;
   const Qaj_min_Lsha = sha_tot > 0 ? Qaj_min_Ls / sha_tot : 0;
+  const mode = noInfil ? 'orifice_only' : 'normal';
 
-  return { Sdisp, Qinfil_Ls, Qaj_min_Ls, Qaj_min_Lsha, Qaj_user_Ls, qajRate_Lsha, ajutageOK, Qvidange_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s };
+  return { mode, Sdisp, Qinfil_Ls, Qaj_min_Ls, Qaj_min_Lsha, Qaj_user_Ls, qajRate_Lsha, ajutageOK, Qvidange_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s };
 }
 
 // ===================== SCÉNARIO 3 — Avec surprofondeur =====================
@@ -660,9 +717,19 @@ function calcS3() {
   const Vsurp = parseFloat($('s3-vsurp').value) || 0;
   const qajRate_Lsha = parseFloat($('s3-qaj').value) || 0;
 
-  if (seff <= 0 || Sdisp <= 0) return null;
+  if (seff <= 0) return { error: 'no_surface' };
 
-  const Qinfil_Ls = Sdisp * k * 1000; // = C181 = C185
+  const noInfil = k <= 0 || Sdisp <= 0;
+  const noAjutage = qajRate_Lsha <= 0;
+
+  if (noInfil && noAjutage) {
+    const msg = (Sdisp <= 0 && k > 0)
+      ? 'Surface de dispersion nulle et pas d\'ajutage. Entrez une surface de dispersion ou un débit d\'ajutage.'
+      : 'Sol imperméable (k = 0) et pas d\'ajutage. Volume de rétention infini requis.';
+    return { error: 'no_drainage', msg };
+  }
+
+  const Qinfil_Ls = noInfil ? 0 : Sdisp * k * 1000;
   const Qaj_Ls = qajRate_Lsha * sha_tot; // = B187 (sur surface TOTALE)
   const Qvidange_above_Ls = Qinfil_Ls + Qaj_Ls;
 
@@ -723,11 +790,12 @@ function calcS3() {
     // If phase1=PARTIEL → surp didn't completely fill, so no buffer needed
     // If phase1=NA → rain ≤ infil_surp, no buffer
 
-    // Phase 3 : vidange tampon
-    const t_drain_buf_h = Qvidange_above_Ls > 0 ? ((1000 * Vbuf_d) / Qvidange_above_Ls) / 3600 : 0;
+    // Phase 3 : vidange tampon (infil + ajutage)
+    const t_drain_buf_h = Qvidange_above_Ls > 0 ? ((1000 * Vbuf_d) / Qvidange_above_Ls) / 3600 : (Vbuf_d > 0 ? Infinity : 0);
 
     // Phase 4 : vidange surprofondeur (par infiltration seule)
-    const t_drain_surp_h = Qinfil_Ls > 0 ? ((1000 * Vfill_surp) / Qinfil_Ls) / 3600 : 0;
+    // Si Qinfil_Ls = 0 et Vfill_surp > 0 → impossible de vider → temps infini
+    const t_drain_surp_h = Qinfil_Ls > 0 ? ((1000 * Vfill_surp) / Qinfil_Ls) / 3600 : (Vfill_surp > 0 ? Infinity : 0);
 
     const t_total_drain_h = t_drain_buf_h + t_drain_surp_h;
     const compliant = t_total_drain_h <= (Tmax_s / 3600);
@@ -743,10 +811,10 @@ function calcS3() {
   }
 
   const Vemp = Vbuf * 3;
-  const h_moy = Sdisp > 0 ? Vemp / Sdisp : 0;
+  const h_moy = (!noInfil && Sdisp > 0) ? Vemp / Sdisp : null;
   const anyNonCompliant = rows.some(r => !r.compliant);
 
-  return { Sdisp, Vsurp, Qinfil_Ls, Qaj_Ls, qajRate_Lsha, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s, anyNonCompliant };
+  return { Sdisp, Vsurp, Qinfil_Ls, Qaj_Ls, qajRate_Lsha, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s, anyNonCompliant, noInfil };
 }
 
 // ===================== MAIN CALCULATE =====================
@@ -762,37 +830,50 @@ function calculateAll() {
 
 // ===================== RENDER =====================
 function renderS1(r) {
-  if (!r) {
+  if (!r || r.error === 'no_surface') {
     $('s1-results').innerHTML = '<div class="warn-box">Entrez au moins une surface non nulle.</div>';
     return;
   }
+  if (r.error === 'impermeable') {
+    $('s1-results').innerHTML = `
+      <div class="err-box">⚠ ${r.msg}</div>
+      <div class="info-box">Pour un sol imperméable, utilisez le <strong>Scénario 2</strong> avec S_disp = 0 et un ajutage, ou le <strong>Scénario 3</strong> avec ajutage uniquement.</div>`;
+    return;
+  }
+
+  const surfaceLabel = r.S_user !== null ? `Surface encodée (${fmt(r.S_user,0)} m²)` : 'Surface utilisée (= S_min)';
+  const warnSurfHTML = r.warnSurf
+    ? `<div class="err-box">⚠ Surface disponible (${fmt(r.S_user,0)} m²) inférieure à S_min (${fmt(r.Smin,0)} m²). Le massif NE peut PAS être vidangé en ${fmt(r.Tmax_s/3600,0)}h — risque de débordement. Augmentez la surface ou ajoutez un ajutage (Scénario 2).</div>`
+    : (r.S_user !== null ? `<div class="info-box">✓ Surface disponible (${fmt(r.S_user,0)} m²) ≥ S_min (${fmt(r.Smin,0)} m²). Volume tampon calculé avec cette surface (capacité d'infiltration plus grande, stockage réduit).</div>` : '');
+
   $('s1-results').innerHTML = `
+  ${warnSurfHTML}
   <div class="results-grid">
     <div class="result-card highlight">
-      <div class="rc-label">Surface de dispersion minimale</div>
+      <div class="rc-label">Surface de dispersion minimale (S_min)</div>
       <div class="rc-value">${fmt(r.Smin,1)} <span class="rc-unit">m²</span></div>
-      <div class="rc-sub">Pluie dimensionnante : ${r.rows[r.critIdx].label}</div>
+      <div class="rc-sub">Pluie critique : ${r.rows[r.critIdx].label}</div>
+    </div>
+    <div class="result-card ${r.warnSurf ? '' : 'highlight'}">
+      <div class="rc-label">${surfaceLabel}</div>
+      <div class="rc-value">${fmt(r.Seff_used,1)} <span class="rc-unit">m²</span></div>
+      <div class="rc-sub">Q_infil = ${fmt(r.Qinfil_Ls,3)} L/s</div>
     </div>
     <div class="result-card highlight">
       <div class="rc-label">Volume tampon (eau)</div>
       <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
-      <div class="rc-sub">Q_infil = ${fmt(r.Qinfil_Ls,3)} L/s à S_min</div>
+      <div class="rc-sub">Calculé pour S = ${fmt(r.Seff_used,0)} m²</div>
     </div>
     <div class="result-card">
       <div class="rc-label">Volume d'empierrement total</div>
       <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
-      <div class="rc-sub">= V_tampon × 3 (pierres 2/3)</div>
-    </div>
-    <div class="result-card">
-      <div class="rc-label">Épaisseur moyenne du massif</div>
-      <div class="rc-value">${fmt(r.h_moy,2)} <span class="rc-unit">m</span></div>
-      <div class="rc-sub">${r.h_moy < 0.5 ? '⚠️ &lt; 50cm (mini AIDE)' : '✓ ≥ 50cm'}</div>
+      <div class="rc-sub">= V_tampon × 3 · Ép. ≈ ${fmt(r.h_moy,2)} m${r.h_moy < 0.5 ? ' ⚠️ &lt;50cm' : ''}</div>
     </div>
   </div>
   <div class="col-title">Détail par durée de pluie <span class="tag-critical">⭐ pluie critique</span></div>
   <div style="overflow-x:auto;">
   <table class="res-table">
-    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infiltration (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th></tr>
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infil. (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th></tr>
     ${r.rows.map((row,i)=>`
     <tr class="${i===r.critIdx?'critical':''}">
       <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
@@ -804,33 +885,52 @@ function renderS1(r) {
 }
 
 function renderS2(r) {
-  if (!r) {
-    $('s2-results').innerHTML = '<div class="warn-box">Entrez les surfaces et une surface de dispersion non nulle.</div>';
+  if (!r || r.error === 'no_surface') {
+    $('s2-results').innerHTML = '<div class="warn-box">Entrez au moins une surface non nulle.</div>';
     return;
   }
-  const warnHTML = !r.ajutageOK ? `<div class="err-box">⚠️ Débit d'ajutage utilisateur (${fmt(r.Qaj_user_Ls,3)} L/s = ${fmt(r.qajRate_Lsha,2)} L/(s·ha)) INSUFFISANT. Minimum requis : ${fmt(r.Qaj_min_Ls,3)} L/s = ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha).</div>` : `<div class="info-box">✓ Débit d'ajutage utilisateur (${fmt(r.qajRate_Lsha,2)} L/(s·ha)) ≥ minimum requis (${fmt(r.Qaj_min_Lsha,2)} L/(s·ha)).</div>`;
+  if (r.error === 'no_drainage' || r.error === 'impermeable') {
+    $('s2-results').innerHTML = `<div class="err-box">⚠ ${r.msg}</div>`;
+    return;
+  }
+
+  // Mode banner
+  let modeBanner = '';
+  if (r.mode === 'dispersion_only') {
+    modeBanner = r.warnSurf
+      ? `<div class="err-box">⚠ Ajutage nul → mode dispersion pure. Surface disponible (${fmt(r.Sdisp,0)} m²) inférieure à S_min (${fmt(r.Smin,0)} m²). Drainage en 24h impossible — augmentez S_disp ou ajoutez un ajutage.</div>`
+      : `<div class="info-box">Ajutage = 0 → mode <strong>dispersion pure</strong> équivalent au Scénario 1. S_disp = ${fmt(r.Sdisp,0)} m² ${r.warnSurf===false && r.Smin!==undefined?`≥ S_min (${fmt(r.Smin,0)} m²) ✓`:''}</div>`;
+  } else if (r.mode === 'orifice_only') {
+    modeBanner = `<div class="warn-box">⚠ Sol imperméable (k = 0 ou S_disp = 0) → mode <strong>bassin étanche avec ajutage uniquement</strong>. Pas d'infiltration. Le bassin est vidangé exclusivement par l'ajutage.</div>`;
+  } else {
+    modeBanner = !r.ajutageOK
+      ? `<div class="err-box">⚠ Débit d'ajutage utilisateur (${fmt(r.Qaj_user_Ls,3)} L/s = ${fmt(r.qajRate_Lsha,2)} L/(s·ha)) INSUFFISANT. Minimum requis : ${fmt(r.Qaj_min_Ls,3)} L/s = ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha).</div>`
+      : `<div class="info-box">✓ Débit d'ajutage (${fmt(r.qajRate_Lsha,2)} L/(s·ha)) ≥ minimum requis (${fmt(r.Qaj_min_Lsha,2)} L/(s·ha)).</div>`;
+  }
+
+  const h_moy_str = r.h_moy !== null ? `${fmt(r.h_moy,2)} m` : 'N/A (étanche)';
+  const ajutMinCard = r.mode === 'dispersion_only'
+    ? `<div class="rc-label">Mode dispersion pure</div><div class="rc-value" style="font-size:14px;">S_min = ${fmt(r.Smin,0)} m²</div><div class="rc-sub">S_disp = ${fmt(r.Sdisp,0)} m² ${r.warnSurf?'⚠ insuffisant':'✓'}</div>`
+    : `<div class="rc-label">Débit d'ajutage minimal requis</div><div class="rc-value">${fmt(r.Qaj_min_Ls,3)} <span class="rc-unit">L/s</span></div><div class="rc-sub">= ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha) sur surface totale</div>`;
+
   $('s2-results').innerHTML = `
-  ${warnHTML}
+  ${modeBanner}
   <div class="results-grid">
-    <div class="result-card highlight">
-      <div class="rc-label">Débit d'ajutage minimal requis</div>
-      <div class="rc-value">${fmt(r.Qaj_min_Ls,3)} <span class="rc-unit">L/s</span></div>
-      <div class="rc-sub">= ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha) sur surface totale</div>
-    </div>
+    <div class="result-card highlight">${ajutMinCard}</div>
     <div class="result-card highlight">
       <div class="rc-label">Volume tampon (eau)</div>
       <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
-      <div class="rc-sub">Q_vidange total = ${fmt(r.Qvidange_Ls,3)} L/s</div>
+      <div class="rc-sub">Q_vidange = ${fmt(r.Qvidange_Ls,3)} L/s</div>
     </div>
     <div class="result-card">
       <div class="rc-label">Volume d'empierrement</div>
       <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
-      <div class="rc-sub">Épaisseur ≈ ${fmt(r.h_moy,2)} m</div>
+      <div class="rc-sub">Épaisseur ≈ ${h_moy_str}</div>
     </div>
     <div class="result-card">
       <div class="rc-label">Débits</div>
-      <div style="font-size:13px;line-height:1.5;">
-        Q infiltration : <strong>${fmt(r.Qinfil_Ls,3)} L/s</strong><br>
+      <div style="font-size:12px;line-height:1.6;">
+        Q infiltration : <strong>${fmt(r.Qinfil_Ls,3)} L/s</strong>${r.mode==='orifice_only'?' <em>(0 — étanche)</em>':''}<br>
         Q ajutage (user) : <strong>${fmt(r.Qaj_user_Ls,3)} L/s</strong><br>
         Q vidange total : <strong>${fmt(r.Qvidange_Ls,3)} L/s</strong>
       </div>
@@ -851,12 +951,19 @@ function renderS2(r) {
 }
 
 function renderS3(r) {
-  if (!r) {
-    $('s3-results').innerHTML = '<div class="warn-box">Entrez les surfaces et une surface de dispersion non nulle.</div>';
+  if (!r || r.error === 'no_surface') {
+    $('s3-results').innerHTML = '<div class="warn-box">Entrez au moins une surface non nulle.</div>';
     return;
   }
-  const warnHTML = r.anyNonCompliant ? `<div class="err-box">⚠️ Temps de vidange total &gt; 24h pour au moins une durée de pluie. Augmenter S_disp et/ou Q_ajutage, ou réduire V_surp.</div>` : `<div class="info-box">✓ Temps de vidange ≤ 24h pour toutes les durées.</div>`;
+  if (r.error === 'no_drainage' || r.error === 'impermeable') {
+    $('s3-results').innerHTML = `<div class="err-box">⚠ ${r.msg}</div>`;
+    return;
+  }
+  const noInfilBanner = r.noInfil ? `<div class="warn-box">⚠ Sol imperméable ou S_disp = 0 → mode <strong>bassin étanche avec ajutage uniquement</strong>. La surprofondeur ne se vide pas par infiltration — Q_infil = 0.</div>` : '';
+  const warnHTML = r.anyNonCompliant ? `<div class="err-box">⚠ Temps de vidange total &gt; 24h pour au moins une durée de pluie. Augmenter S_disp et/ou Q_ajutage, ou réduire V_surp.</div>` : `<div class="info-box">✓ Temps de vidange ≤ 24h pour toutes les durées.</div>`;
+  const h_moy_s3 = r.h_moy !== null ? `${fmt(r.h_moy,2)} m` : 'N/A (étanche)';
   $('s3-results').innerHTML = `
+  ${noInfilBanner}
   ${warnHTML}
   <div class="results-grid">
     <div class="result-card highlight">
@@ -867,7 +974,7 @@ function renderS3(r) {
     <div class="result-card highlight">
       <div class="rc-label">Volume d'empierrement total</div>
       <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
-      <div class="rc-sub">Épaisseur ≈ ${fmt(r.h_moy,2)} m</div>
+      <div class="rc-sub">Épaisseur ≈ ${h_moy_s3}</div>
     </div>
     <div class="result-card">
       <div class="rc-label">Débit ajutage</div>
@@ -892,9 +999,9 @@ function renderS3(r) {
         <td>${stateLbl}</td>
         <td>${row.phase1_state === 'NA' ? '–' : fmt(row.t_fill_surp_min,1)}</td>
         <td>${fmt(row.Vbuf_d,3)}</td>
-        <td>${fmt(row.t_drain_buf_h,2)}</td>
-        <td>${fmt(row.t_drain_surp_h,2)}</td>
-        <td style="font-weight:700;">${fmt(row.t_total_drain_h,2)}</td>
+        <td>${isFinite(row.t_drain_buf_h)?fmt(row.t_drain_buf_h,2):'∞'}</td>
+        <td>${isFinite(row.t_drain_surp_h)?fmt(row.t_drain_surp_h,2):'∞'}</td>
+        <td style="font-weight:700;">${isFinite(row.t_total_drain_h)?fmt(row.t_total_drain_h,2):'∞'}</td>
         <td>${row.compliant ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">✗</span>'}</td>
       </tr>`;
     }).join('')}
@@ -1276,23 +1383,26 @@ function showSimStats() {
 
 function prefillFromScenario() {
   const scen = parseInt($('sim-scen').value);
-  if (scen === 1 && state.s1) {
-    $('sim-sdisp').value = state.s1.Smin.toFixed(0);
+  const s1ok = state.s1 && !state.s1.error;
+  const s2ok = state.s2 && !state.s2.error;
+  const s3ok = state.s3 && !state.s3.error;
+  if (scen === 1 && s1ok) {
+    $('sim-sdisp').value = state.s1.Seff_used.toFixed(0);
     $('sim-vsurp').value = '0';
     $('sim-vtamp').value = state.s1.Vbuf.toFixed(3);
     $('sim-qaj').value = '0';
-  } else if (scen === 2 && state.s2) {
+  } else if (scen === 2 && s2ok) {
     $('sim-sdisp').value = state.s2.Sdisp.toFixed(0);
     $('sim-vsurp').value = '0';
     $('sim-vtamp').value = state.s2.Vbuf.toFixed(3);
     $('sim-qaj').value = state.s2.Qaj_user_Ls.toFixed(3);
-  } else if (scen === 3 && state.s3) {
+  } else if (scen === 3 && s3ok) {
     $('sim-sdisp').value = state.s3.Sdisp.toFixed(0);
     $('sim-vsurp').value = state.s3.Vsurp.toFixed(3);
     $('sim-vtamp').value = state.s3.Vbuf.toFixed(3);
     $('sim-qaj').value = state.s3.Qaj_Ls.toFixed(3);
   } else {
-    alert('Calculez d\'abord le scénario correspondant.');
+    alert('Calculez d\'abord le scénario correspondant (sans erreur).');
     return;
   }
   resetSim();
@@ -1314,17 +1424,20 @@ function buildProtectionMatrix() {
   const which = $('prot-scen').value;
   let Sdisp, Vsurp, Vtamp, Qaj_Ls, scen;
 
+  const s1ok = state.s1 && !state.s1.error;
+  const s2ok = state.s2 && !state.s2.error;
+  const s3ok = state.s3 && !state.s3.error;
   if (which === 'sim') {
     const p = getSimParams();
     Sdisp = p.Sdisp; Vsurp = p.Vsurp; Vtamp = p.Vtamp; Qaj_Ls = p.Qaj_Ls; scen = p.scen;
-  } else if (which === '1' && state.s1) {
-    Sdisp = state.s1.Smin; Vsurp = 0; Vtamp = state.s1.Vbuf; Qaj_Ls = 0; scen = 1;
-  } else if (which === '2' && state.s2) {
+  } else if (which === '1' && s1ok) {
+    Sdisp = state.s1.Seff_used; Vsurp = 0; Vtamp = state.s1.Vbuf; Qaj_Ls = 0; scen = 1;
+  } else if (which === '2' && s2ok) {
     Sdisp = state.s2.Sdisp; Vsurp = 0; Vtamp = state.s2.Vbuf; Qaj_Ls = state.s2.Qaj_user_Ls; scen = 2;
-  } else if (which === '3' && state.s3) {
+  } else if (which === '3' && s3ok) {
     Sdisp = state.s3.Sdisp; Vsurp = state.s3.Vsurp; Vtamp = state.s3.Vbuf; Qaj_Ls = state.s3.Qaj_Ls; scen = 3;
   } else {
-    $('prot-table-wrap').innerHTML = '<div class="err-box">Calculez d\'abord le scénario correspondant.</div>';
+    $('prot-table-wrap').innerHTML = '<div class="err-box">Calculez d\'abord le scénario correspondant (sans erreur).</div>';
     return;
   }
 
