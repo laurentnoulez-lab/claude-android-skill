@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur Bassin de Dispersion — AIDE</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --blue: #1565C0; --blue-light: #42A5F5; --blue-pale: #E3F2FD;
+  --green: #2E7D32; --green-light: #66BB6A; --green-pale: #E8F5E9;
+  --red: #C62828; --red-light: #EF5350; --red-pale: #FFEBEE;
+  --orange: #E65100; --orange-pale: #FFF3E0;
+  --gray: #546E7A; --gray-light: #CFD8DC; --gray-pale: #ECEFF1;
+  --water: #1E88E5; --water-light: #90CAF9;
+  --ground: #8D6E63;
+  --white: #FFFFFF; --bg: #F0F4F8;
+  --text: #1C2B36; --text-muted: #546E7A;
+  --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+
+#hdr { background: linear-gradient(135deg, #0D47A1, #1565C0); color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.3); flex-shrink: 0; }
+#hdr h1 { font-size: 17px; font-weight: 700; }
+#hdr .sub { font-size: 12px; opacity: .8; margin-left: auto; }
+
+#body { display: flex; flex: 1; overflow: hidden; }
+#sidebar { width: 320px; background: var(--white); border-right: 1px solid var(--gray-light); overflow-y: auto; padding: 12px; flex-shrink: 0; }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.s-section { margin-bottom: 14px; }
+.s-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--blue); letter-spacing: .6px; border-bottom: 2px solid var(--blue-pale); padding-bottom: 4px; margin-bottom: 8px; }
+.s-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.s-row label { flex: 1; color: var(--text-muted); font-size: 12px; }
+.s-row input, .s-row select { width: 100px; padding: 4px 6px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; background: var(--gray-pale); }
+.s-row .unit { font-size: 11px; color: var(--text-muted); width: 38px; }
+.surf-table { width: 100%; border-collapse: collapse; }
+.surf-table th { font-size: 10px; color: var(--text-muted); text-align: center; padding: 3px 2px; background: var(--gray-pale); }
+.surf-table td { padding: 2px 3px; border-bottom: 1px solid var(--gray-pale); }
+.surf-table td:first-child { font-size: 11px; }
+.surf-table input[type=number] { width: 75px; padding: 2px 4px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 12px; text-align: right; }
+.surf-coeff { font-size: 11px; color: var(--text-muted); text-align: center; }
+
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-blue { background: var(--blue-pale); color: var(--blue); }
+.badge-green { background: var(--green-pale); color: var(--green); }
+.badge-red { background: var(--red-pale); color: var(--red); }
+.badge-orange { background: var(--orange-pale); color: var(--orange); }
+
+#btn-calc { width: 100%; padding: 9px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 6px; transition: background .2s; }
+#btn-calc:hover { background: #0D47A1; }
+.info-box { background: var(--blue-pale); border-left: 3px solid var(--blue); padding: 6px 8px; border-radius: 0 4px 4px 0; font-size: 11px; color: var(--blue); margin-bottom: 8px; }
+.warn-box { background: var(--orange-pale); border-left: 3px solid var(--orange); padding: 6px 8px; border-radius: 0 4px 4px 0; font-size: 11px; color: var(--orange); margin: 6px 0; }
+.err-box { background: var(--red-pale); border-left: 3px solid var(--red); padding: 6px 8px; border-radius: 0 4px 4px 0; font-size: 11px; color: var(--red); margin: 6px 0; }
+
+#tabs { display: flex; background: var(--white); border-bottom: 1px solid var(--gray-light); flex-shrink: 0; }
+.tab { padding: 10px 16px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent; transition: all .2s; white-space: nowrap; }
+.tab:hover { color: var(--blue); background: var(--blue-pale); }
+.tab.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--white); }
+
+#tab-content { flex: 1; overflow: hidden; position: relative; }
+.tab-pane { display: none; height: 100%; overflow-y: auto; padding: 14px 16px; }
+.tab-pane.active { display: block; }
+
+.results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.result-card { background: var(--white); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.result-card.highlight { background: linear-gradient(135deg, var(--blue-pale), #fff); border: 1px solid var(--blue-light); }
+.rc-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.rc-value { font-size: 22px; font-weight: 700; color: var(--blue); }
+.rc-unit { font-size: 12px; color: var(--text-muted); }
+.rc-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.res-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.res-table th { background: var(--blue); color: #fff; padding: 6px 8px; text-align: center; position: sticky; top: 0; }
+.res-table td { padding: 5px 8px; border-bottom: 1px solid var(--gray-pale); text-align: right; }
+.res-table td:first-child { text-align: left; font-weight: 600; }
+.res-table tr:hover td { background: var(--blue-pale); }
+.res-table tr.critical td { background: #FFF9C4; font-weight: 700; }
+.res-table tr.overflow td { background: var(--red-pale); }
+.col-title { font-size: 13px; font-weight: 700; color: var(--blue); margin: 10px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--blue-pale); }
+.section-card { background: var(--white); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 10px; }
+
+.param-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.param-row label { width: 250px; font-size: 12px; color: var(--text-muted); }
+.param-row input { width: 110px; padding: 5px 8px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 13px; font-weight: 600; }
+.param-row .unit { font-size: 11px; color: var(--text-muted); }
+.btn-small { padding: 5px 14px; background: var(--green); color: #fff; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-small:hover { background: var(--green-light); }
+
+#sim-layout { display: flex; gap: 12px; height: 100%; }
+#sim-controls { width: 280px; flex-shrink: 0; overflow-y: auto; }
+#sim-visual { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+#basin-svg-wrap { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; flex-shrink: 0; }
+#chart-wrap { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; flex: 1; min-height: 200px; }
+#basin-svg { width: 100%; height: 240px; }
+
+.ctrl-card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; margin-bottom: 10px; }
+.ctrl-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--blue); margin-bottom: 8px; letter-spacing: .5px; }
+.ctrl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.ctrl-row label { flex: 1; font-size: 12px; color: var(--text-muted); min-width: 90px; }
+.ctrl-row input, .ctrl-row select { width: 100px; padding: 4px 6px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; }
+.ctrl-row .unit { font-size: 11px; color: var(--text-muted); }
+#sim-play-bar { display: flex; align-items: center; gap: 8px; background: var(--white); border-radius: var(--radius); padding: 8px 12px; box-shadow: var(--shadow); flex-wrap: wrap; }
+#btn-play { padding: 6px 16px; background: var(--blue); color: #fff; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 13px; }
+#btn-reset { padding: 6px 12px; background: var(--gray-light); color: var(--text); border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+#sim-time-display { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+#sim-status { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+.status-ok { background: var(--green-pale); color: var(--green); }
+.status-overflow { background: var(--red-pale); color: var(--red); animation: blink .6s infinite; }
+.status-rain { background: var(--blue-pale); color: var(--blue); }
+.status-drain { background: var(--orange-pale); color: var(--orange); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+.prot-table { border-collapse: collapse; font-size: 11px; }
+.prot-table th { background: var(--blue); color: #fff; padding: 4px 8px; text-align: center; font-size: 10px; }
+.prot-table td { padding: 4px 8px; text-align: center; border: 1px solid #eee; font-size: 11px; font-weight: 600; }
+.prot-ok { background: #A5D6A7; color: #1B5E20; }
+.prot-over { background: #EF9A9A; color: #B71C1C; }
+.prot-dim { box-shadow: inset 0 0 0 3px #F9A825; }
+.prot-table td:first-child { text-align: left; font-weight: 400; background: var(--gray-pale); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--gray-pale); }
+::-webkit-scrollbar-thumb { background: var(--gray-light); border-radius: 3px; }
+
+.tag-critical { background: #FFF176; color: #F57F17; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 0; }
+.formula { font-family: 'Consolas', monospace; font-size: 11px; background: var(--gray-pale); padding: 4px 8px; border-radius: 3px; color: var(--text); display: inline-block; margin: 2px 0; }
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div><h1>💧 Simulateur de Bassin de Dispersion / Rétention</h1></div>
+  <span class="sub">Tableur AIDE — Données IRM Flémalle — v2 corrigée</span>
+</div>
+
+<div id="body">
+<aside id="sidebar">
+
+  <div class="s-section">
+    <div class="s-title">Période de retour (IRM)</div>
+    <div class="s-row">
+      <label>Période de retour</label>
+      <select id="inp-rp">
+        <option value="2">2 ans</option><option value="5">5 ans</option>
+        <option value="10">10 ans</option><option value="15">15 ans</option>
+        <option value="20">20 ans</option><option value="25" selected>25 ans</option>
+        <option value="30">30 ans</option><option value="40">40 ans</option>
+        <option value="50">50 ans</option><option value="75">75 ans</option>
+        <option value="100">100 ans</option><option value="200">200 ans</option>
+      </select>
+    </div>
+    <div class="info-box">Source : IRM — Flémalle (INS 62120)</div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-title">Surfaces drainées (m²)</div>
+    <table class="surf-table">
+      <tr><th>Type de surface</th><th>Cr</th><th>m²</th></tr>
+      <tr><td>Forêt, bois</td><td class="surf-coeff">0.05</td><td><input type="number" id="sf0" value="0" min="0"></td></tr>
+      <tr><td>Prairies, jardins</td><td class="surf-coeff">0.15</td><td><input type="number" id="sf1" value="0" min="0"></td></tr>
+      <tr><td>Champs, landes</td><td class="surf-coeff">0.25</td><td><input type="number" id="sf2" value="0" min="0"></td></tr>
+      <tr><td>Dalles gazon, toit. vert &gt;15cm</td><td class="surf-coeff">0.40</td><td><input type="number" id="sf3" value="0" min="0"></td></tr>
+      <tr><td>Terres battues, toit. vert ≤15cm</td><td class="surf-coeff">0.50</td><td><input type="number" id="sf4" value="0" min="0"></td></tr>
+      <tr><td>Pavés drainants</td><td class="surf-coeff">0.70</td><td><input type="number" id="sf5" value="0" min="0"></td></tr>
+      <tr><td>Parkings, allées pavées</td><td class="surf-coeff">0.90</td><td><input type="number" id="sf6" value="0" min="0"></td></tr>
+      <tr><td>Toitures, routes</td><td class="surf-coeff">1.00</td><td><input type="number" id="sf7" value="0" min="0"></td></tr>
+    </table>
+    <div style="margin-top:6px; padding:6px; background:var(--gray-pale); border-radius:4px; font-size:11px;">
+      Total : <strong id="lbl-stot">0 m²</strong> = <strong id="lbl-stot-ha">0 ha</strong><br>
+      Eff. (×Cr) : <strong id="lbl-seff">0 m²</strong> | Cr moy : <strong id="lbl-crm">–</strong>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-title">Perméabilité</div>
+    <div class="s-row">
+      <label>Vitesse mesurée (k mesuré)</label>
+      <input type="number" id="inp-kmes" value="2.145e-6" step="1e-7">
+      <span class="unit">m/s</span>
+    </div>
+    <div class="s-row">
+      <label>Coefficient de sécurité</label>
+      <input type="number" id="inp-ks" value="1.5" step="0.1" min="1">
+    </div>
+    <div class="s-row">
+      <label>k de calcul (= mesuré / Cs)</label>
+      <span id="lbl-kcalc" style="font-size:12px;font-weight:700;color:var(--blue);">1.430e-6 m/s</span>
+    </div>
+    <div class="s-row">
+      <label>Vidange max (AIDE)</label>
+      <input type="number" id="inp-tmax" value="24" min="1" style="width:70px"> <span class="unit">h</span>
+    </div>
+  </div>
+
+  <button id="btn-calc" onclick="calculateAll()">⟳ Calculer les scénarios</button>
+</aside>
+
+<main id="main">
+  <div id="tabs">
+    <div class="tab active" onclick="showTab('s1')">Sc. 1 — Dispersion pure</div>
+    <div class="tab" onclick="showTab('s2')">Sc. 2 — Disp. + Ajutage</div>
+    <div class="tab" onclick="showTab('s3')">Sc. 3 — Surprofondeur</div>
+    <div class="tab" onclick="showTab('sim')">🎬 Simulation</div>
+    <div class="tab" onclick="showTab('prot')">🛡️ Matrice protection</div>
+  </div>
+
+  <div id="tab-content">
+
+    <div id="pane-s1" class="tab-pane active">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 1 — Dispersion à 100% (sans ajutage)</strong><br>
+        Toute l'eau est infiltrée. Le massif doit être <strong>intégralement vidangé en 24h après la fin de la pluie</strong>.<br>
+        <span class="formula">S_min = V_pluie / (k × t_max)</span> avec t_max = durée_pluie + 24h<br>
+        <span class="formula">V_tampon = max(0, Q_pluie − Q_infiltration) × durée_pluie</span><br>
+        <span class="formula">V_empierrement = V_tampon × 3</span> (les pierres occupent 2/3 du volume)
+      </div>
+      <div id="s1-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les surfaces et cliquez sur « Calculer ».</div>
+      </div>
+    </div>
+
+    <div id="pane-s2" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 2 — Dispersion + ajutage (surface connue)</strong><br>
+        Une surface de dispersion limitée + un ajutage de fuite. On calcule le débit d'ajutage minimal et le volume tampon.<br>
+        <span class="formula">Q_aj_min = (V_pluie − V_infil_max) × 1000 / t_max</span><br>
+        <span class="formula">Q_ajutage = taux [L/(s·ha)] × S_totale [ha]</span> (sur la surface totale, non pondérée)<br>
+        <span class="formula">V_tampon = max(0, Q_pluie − Q_infil − Q_ajutage) × durée_pluie</span>
+      </div>
+      <div class="section-card mb-10">
+        <div class="col-title">Paramètres spécifiques</div>
+        <div class="param-row">
+          <label>Surface de dispersion disponible</label>
+          <input type="number" id="s2-sdisp" value="0" min="0"> <span class="unit">m²</span>
+        </div>
+        <div class="param-row">
+          <label>Débit d'ajutage à régler</label>
+          <input type="number" id="s2-qaj" value="5" min="0" step="0.5"> <span class="unit">L/(s·ha)</span>
+        </div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
+      </div>
+      <div id="s2-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les paramètres et cliquez sur « Calculer ».</div>
+      </div>
+    </div>
+
+    <div id="pane-s3" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 3 — Dispersion + ajutage + surprofondeur</strong><br>
+        Une surprofondeur sous le niveau d'ajutage favorise la dispersion des petites pluies et offre une marge de sécurité (curage).<br>
+        Phases : 1) remplissage surprofondeur 2) remplissage tampon 3) vidange tampon (infil+ajutage) 4) vidange surprofondeur (infil).<br>
+        <span class="formula">t_vidange_total = t_vidange_tampon + t_vidange_surp ≤ 24h</span>
+      </div>
+      <div class="section-card mb-10">
+        <div class="col-title">Paramètres spécifiques</div>
+        <div class="param-row">
+          <label>Surface de dispersion</label>
+          <input type="number" id="s3-sdisp" value="0" min="0"> <span class="unit">m²</span>
+        </div>
+        <div class="param-row">
+          <label>Volume surprofondeur (sous ajutage)</label>
+          <input type="number" id="s3-vsurp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+        </div>
+        <div class="param-row">
+          <label>Débit ajutage</label>
+          <input type="number" id="s3-qaj" value="5" min="0" step="0.5"> <span class="unit">L/(s·ha)</span>
+        </div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
+      </div>
+      <div id="s3-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez les paramètres et cliquez sur « Calculer ».</div>
+      </div>
+    </div>
+
+    <div id="pane-sim" class="tab-pane" style="padding:10px;">
+      <div id="sim-layout">
+        <div id="sim-controls">
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Événement pluvieux</div>
+            <div class="ctrl-row">
+              <label>Durée pluie</label>
+              <select id="sim-dur">
+                <option value="10">10 min</option><option value="20">20 min</option>
+                <option value="30">30 min</option><option value="60">1 h</option>
+                <option value="120">2 h</option><option value="180" selected>3 h</option>
+                <option value="360">6 h</option><option value="720">12 h</option>
+                <option value="1440">1 j</option><option value="2880">2 j</option>
+                <option value="4320">3 j</option><option value="7200">5 j</option>
+              </select>
+            </div>
+            <div class="ctrl-row">
+              <label>Période retour</label>
+              <select id="sim-rp">
+                <option value="2">2 ans</option><option value="5">5 ans</option>
+                <option value="10">10 ans</option><option value="25" selected>25 ans</option>
+                <option value="50">50 ans</option><option value="100">100 ans</option>
+                <option value="200">200 ans</option>
+              </select>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+              Pluie : <strong id="sim-rain-info">–</strong>
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Géométrie du bassin</div>
+            <div class="ctrl-row">
+              <label>Type</label>
+              <select id="sim-scen">
+                <option value="1">1 – Dispersion pure</option>
+                <option value="2">2 – Disp. + Ajutage</option>
+                <option value="3" selected>3 – Surprofondeur</option>
+              </select>
+            </div>
+            <div class="ctrl-row">
+              <label>Surface dispersion</label>
+              <input type="number" id="sim-sdisp" value="0" min="0"> <span class="unit">m²</span>
+            </div>
+            <div class="ctrl-row" id="row-vsurp">
+              <label>Vol. surprofondeur</label>
+              <input type="number" id="sim-vsurp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+            </div>
+            <div class="ctrl-row" id="row-vtamp">
+              <label>Vol. tampon</label>
+              <input type="number" id="sim-vtamp" value="0" min="0" step="0.1"> <span class="unit">m³</span>
+            </div>
+            <div class="ctrl-row" id="row-qaj2">
+              <label>Q ajutage</label>
+              <input type="number" id="sim-qaj" value="0" min="0" step="0.1"> <span class="unit">L/s</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+              <a href="#" onclick="prefillFromScenario();return false;" style="color:var(--blue);">📥 Importer depuis le scénario calculé</a>
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <div class="ctrl-title">Vitesse animation</div>
+            <div class="ctrl-row">
+              <label>Accélération</label>
+              <select id="speed-sel">
+                <option value="60">×60 (1s = 1min)</option>
+                <option value="300">×300 (1s = 5min)</option>
+                <option value="600" selected>×600 (1s = 10min)</option>
+                <option value="1800">×1800 (1s = 30min)</option>
+                <option value="3600">×3600 (1s = 1h)</option>
+                <option value="10800">×10800 (1s = 3h)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="sim-stats" class="ctrl-card" style="display:none;">
+            <div class="ctrl-title">Résultats</div>
+            <div id="sim-stats-inner"></div>
+          </div>
+
+        </div>
+
+        <div id="sim-visual">
+          <div id="sim-play-bar">
+            <button id="btn-play" onclick="togglePlay()">▶ Démarrer</button>
+            <button id="btn-reset" onclick="resetSim()">↺ Reset</button>
+            <div id="sim-status" class="status-ok">Prêt</div>
+            <div id="sim-time-display">t = 0</div>
+          </div>
+          <div id="basin-svg-wrap">
+            <svg id="basin-svg" viewBox="0 0 720 240"></svg>
+          </div>
+          <div id="chart-wrap">
+            <canvas id="sim-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="pane-prot" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Matrice de protection</strong> — Pour la configuration du bassin choisie, indique pour chaque combinaison <em>durée × période de retour</em> si le bassin déborde ou non. La cellule encadrée jaune correspond à la période de retour de dimensionnement.
+      </div>
+      <div id="prot-controls" style="margin-bottom:10px;display:flex;gap:10px;align-items:center;">
+        <div class="param-row" style="margin:0;">
+          <label style="width:auto;margin-right:6px;">Bassin à analyser :</label>
+          <select id="prot-scen" style="width:200px;padding:4px;">
+            <option value="1">Sc. 1 — Dimensionnement min.</option>
+            <option value="2">Sc. 2 — Dimensionnement min.</option>
+            <option value="3" selected>Sc. 3 — Dimensionnement min.</option>
+            <option value="sim">Paramètres de simulation</option>
+          </select>
+          <button class="btn-small" onclick="buildProtectionMatrix()" style="margin-left:8px;">Générer</button>
+        </div>
+      </div>
+      <div id="prot-table-wrap" style="overflow-x:auto;">
+        <div style="color:var(--text-muted);font-size:12px;">Cliquez sur « Générer ».</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<script>
+// ===================== DONNÉES IRM FLÉMALLE =====================
+// Lignes : durée (10min, 20min, 30min, 1h, 2h, 3h, 6h, 12h, 1j, 2j, 3j, 4j, 5j, 7j, 10j, 15j, 20j, 25j, 30j)
+// Colonnes : période de retour (2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 200 ans)
+const RAIN = [
+  [7.7,11,13.5,15.1,16.2,17.1,17.8,19,20,21.9,23.2,26.7],
+  [11.1,16,19.6,21.9,23.5,24.8,25.9,27.7,29.1,31.7,33.7,38.8],
+  [13.1,19.1,23.5,26.2,28.2,29.8,31.1,33.3,35,38.2,40.6,46.8],
+  [16.3,22.9,27.8,30.8,33,34.7,36.2,38.5,40.4,44,46.6,53.3],
+  [19.6,27,32.6,35.9,38.4,40.3,42,44.6,46.7,50.7,53.6,61.1],
+  [21.7,29.9,35.9,39.6,42.3,44.4,46.2,49,51.3,55.6,58.8,67],
+  [26.2,34.6,40.7,44.4,47.2,49.3,51.1,54,56.3,60.7,63.9,72.1],
+  [32,42,49.4,53.8,57,59.6,61.7,65.2,67.9,73.1,76.9,86.5],
+  [39,50.4,58.7,63.6,67.1,69.9,72.2,75.9,78.9,84.4,88.4,98.4],
+  [49.6,63.3,73,78.7,82.7,85.9,88.5,92.7,96,102,106.4,117.3],
+  [52.8,67.5,77.7,83.6,87.8,91.1,93.8,98,101.4,107.6,112,122.9],
+  [57.5,73.1,83.9,90.1,94.5,97.9,100.7,105.1,108.6,115,119.5,130.7],
+  [65.2,82.2,93.8,100.4,105.1,108.7,111.7,116.4,120.1,126.8,131.6,143.3],
+  [75.2,93.6,106,113,118,121.8,125,129.9,133.8,140.8,145.7,157.8],
+  [89.6,110.4,124.3,132.1,137.6,141.8,145.3,150.7,154.9,162.5,167.8,180.8],
+  [108.5,132.8,148.7,157.7,163.9,168.6,172.5,178.6,183.3,191.7,197.7,211.9],
+  [126.4,154.8,173.2,183.4,190.5,196,200.4,207.3,212.5,222.1,228.8,244.7],
+  [134.9,165.1,184.4,195.2,202.6,208.3,212.9,220.1,225.6,235.4,242.3,258.7],
+  [157.5,189.9,210.5,221.9,229.8,235.8,240.6,248.1,253.9,264.3,271.5,288.5]
+];
+const DUR = [10,20,30,60,120,180,360,720,1440,2880,4320,5760,7200,10080,14400,21600,28800,36000,43200];
+const DUR_LBL = ['10 min','20 min','30 min','1 h','2 h','3 h','6 h','12 h','1 j','2 j','3 j','4 j','5 j','7 j','10 j','15 j','20 j','25 j','30 j'];
+const RP = [2,5,10,15,20,25,30,40,50,75,100,200];
+const CR = [0.05,0.15,0.25,0.40,0.50,0.70,0.90,1.00];
+
+// ===================== ÉTAT =====================
+let state = { s1: null, s2: null, s3: null, simData: [], simIdx: 0, simPlaying: false, simRAF: null, simLastT: null };
+let simChart = null;
+
+// ===================== HELPERS =====================
+function $(id) { return document.getElementById(id); }
+function fmt(v, d=2) { if (v===null||v===undefined||isNaN(v)||!isFinite(v)) return '–'; return v.toFixed(d); }
+function fmtTime(s) { if (s<60) return `${s.toFixed(0)}s`; if (s<3600) return `${(s/60).toFixed(0)} min`; if (s<86400) return `${(s/3600).toFixed(1)} h`; return `${(s/86400).toFixed(1)} j`; }
+
+function getRp() { return parseInt($('inp-rp').value); }
+function getKmes() { return parseFloat($('inp-kmes').value)||2.145e-6; }
+function getKs() { return parseFloat($('inp-ks').value)||1.5; }
+function getKcalc() { return getKmes()/getKs(); }
+function getTmax_s() { return (parseFloat($('inp-tmax').value)||24)*3600; }
+
+function getSurfaces() {
+  let stot=0, seff=0;
+  for (let i=0; i<8; i++) {
+    const a = parseFloat($('sf'+i).value)||0;
+    stot += a;
+    seff += a * CR[i];
+  }
+  return { stot, seff, sha_tot: stot/10000, sha_eff: seff/10000, crmoy: stot>0 ? seff/stot : 0 };
+}
+
+// Pluie [mm] pour durée et période de retour
+function rainMm(dur_min, rp) {
+  const di = DUR.indexOf(dur_min);
+  const rpi = RP.indexOf(rp);
+  if (di<0 || rpi<0) return 0;
+  return RAIN[di][rpi];
+}
+
+// Intensité [L/(s·m²)] = mm / s
+function rainIntensity_Lsm2(dur_min, rp) {
+  return rainMm(dur_min, rp) / (dur_min * 60);
+}
+
+// Intensité [L/(s·ha)] = L/(s·m²) × 10000
+function rainIntensity_Lsha(dur_min, rp) {
+  return rainIntensity_Lsm2(dur_min, rp) * 10000;
+}
+
+// Débit de pluie total [L/s] pour les surfaces saisies
+// Excel D17 = (area_m2/10000) × Cr × intensity_Lsha = area_ha × Cr × Lsha = L/s
+// Somme sur toutes surfaces = D27 [L/s]
+function rainFlow_Ls(dur_min, rp) {
+  const inten_Lsha = rainIntensity_Lsha(dur_min, rp);
+  let q = 0;
+  for (let i=0; i<8; i++) {
+    const a = parseFloat($('sf'+i).value)||0;
+    q += (a / 10000) * CR[i] * inten_Lsha;
+  }
+  return q;
+}
+
+// ===================== SIDEBAR SUMMARY =====================
+function updateSummary() {
+  const s = getSurfaces();
+  $('lbl-stot').textContent = `${s.stot.toFixed(0)} m²`;
+  $('lbl-stot-ha').textContent = `${s.sha_tot.toFixed(4)} ha`;
+  $('lbl-seff').textContent = `${s.seff.toFixed(0)} m²`;
+  $('lbl-crm').textContent = s.stot>0 ? s.crmoy.toFixed(2) : '–';
+  $('lbl-kcalc').textContent = `${getKcalc().toExponential(3)} m/s`;
+  updateSimRainInfo();
+}
+['inp-kmes','inp-ks','inp-rp'].forEach(id => $(id).addEventListener('input', updateSummary));
+for (let i=0; i<8; i++) $('sf'+i).addEventListener('input', updateSummary);
+$('sim-dur').addEventListener('change', updateSimRainInfo);
+$('sim-rp').addEventListener('change', updateSimRainInfo);
+
+function updateSimRainInfo() {
+  const d = parseInt($('sim-dur').value);
+  const rp = parseInt($('sim-rp').value);
+  const mm = rainMm(d, rp);
+  const Q = rainFlow_Ls(d, rp);
+  const V = mm * getSurfaces().seff / 1000; // V_pluie = mm × S_eff / 1000 (m³)
+  $('sim-rain-info').textContent = `${mm.toFixed(1)} mm | Q=${Q.toFixed(2)} L/s | V=${V.toFixed(2)} m³`;
+}
+
+// ===================== SCÉNARIO 1 — Dispersion pure =====================
+// Excel formulas (Section 1, rows 41-94):
+// B55 = D27 (L/s)
+// B56 = B55/1000 × (B54×60) = V_pluie [m³]
+// B57 = (B54 + 24×60) × 60 = t_max [s]
+// B58 = B56 / (B39 × B57) = S_min_d [m²]
+// B60 = MAX(B58:T58)
+// C68 = B39 × E66 = k × S_min [m³/s]
+// B71-89 buffer table: V_buf_d = duration_s × max(0, Q_pluie_m3s - Q_infil_m3s)
+// B91 = MAX(E71:E89)
+// G93 = B91 × 3  <- empierrement (pierres = 2/3 du volume)
+// B94 = G93 / E66 = épaisseur moyenne
+function calcS1() {
+  const k = getKcalc();
+  const rp = getRp();
+  const Tmax_s = getTmax_s();
+  const {seff} = getSurfaces();
+
+  if (seff <= 0) return null;
+
+  let Smin = 0;
+  const rows = [];
+
+  for (let i=0; i<DUR.length; i++) {
+    const d = DUR[i];
+    const Q = rainFlow_Ls(d, rp); // L/s
+    const dur_s = d * 60;
+    const V = Q * dur_s / 1000; // m³
+    const t_max = dur_s + Tmax_s; // s
+    const Smin_d = (k * t_max) > 0 ? V / (k * t_max) : 0;
+    rows.push({ d, label: DUR_LBL[i], Q, V, t_max, Smin_d });
+    if (Smin_d > Smin) Smin = Smin_d;
+  }
+
+  const Qinfil_m3s = k * Smin; // m³/s
+  const Qinfil_Ls = Qinfil_m3s * 1000; // L/s
+
+  let Vbuf = 0, critIdx = 0;
+  for (let i=0; i<rows.length; i++) {
+    const r = rows[i];
+    const Q_m3s = r.Q / 1000;
+    const excess_m3s = Math.max(0, Q_m3s - Qinfil_m3s);
+    const vb = r.d * 60 * excess_m3s; // m³
+    r.Vbuf = vb;
+    if (vb > Vbuf) { Vbuf = vb; critIdx = i; }
+  }
+
+  // EXCEL: G93 = B91 × 3 (empierrement: pierres occupent 2/3, eau dans 1/3 des vides → total = eau × 3)
+  const Vemp = Vbuf * 3;
+  const h_moy = Smin > 0 ? Vemp / Smin : 0;
+
+  return { Smin, Qinfil_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, rp, Tmax_s };
+}
+
+// ===================== SCÉNARIO 2 — Dispersion + Ajutage =====================
+// Excel formulas (Section 2, rows 96-162):
+// C106 = S_disp (user input)
+// B119 = 1000 × S_disp × k = Q_infil [L/s]
+// B120 = MIN(k × S_disp × t_max, V_pluie) = V_infil_max [m³]
+// B121 = V_pluie - V_infil_max = V_à_évacuer [m³]
+// B122 = (V_à_évacuer × 1000) / t_max = Q_aj_d [L/s]
+// C124 = MAX(B122:T122) = Q_aj_min
+// B133 = 5 L/(s·ha) (user)
+// B134 = B133 × E29 = Q_ajutage [L/s] (E29 = TOTAL surface en ha, pas effective!)
+// G136 = (B132 + B134) / 1000 = Q_vidange [m³/s]
+// E139-157 = duration_s × max(0, Q_pluie_m3s - Q_vidange_m3s) = V_buf_d
+// B159 = MAX(E139:E157)
+// G161 = B159 × 3 = V_empierrement
+function calcS2() {
+  const k = getKcalc();
+  const rp = getRp();
+  const Tmax_s = getTmax_s();
+  const {seff, stot, sha_tot} = getSurfaces();
+  const Sdisp = parseFloat($('s2-sdisp').value) || 0;
+  const qajRate_Lsha = parseFloat($('s2-qaj').value) || 0;
+
+  if (seff <= 0 || Sdisp <= 0) return null;
+
+  const Qinfil_m3s = k * Sdisp;
+  const Qinfil_Ls = Qinfil_m3s * 1000;
+  // EXCEL: Q_ajutage utilise la surface TOTALE (E29 = B29/10000), pas l'effective
+  const Qaj_user_Ls = qajRate_Lsha * sha_tot;
+
+  let Qaj_min_Ls = 0;
+  const rows = [];
+
+  for (let i=0; i<DUR.length; i++) {
+    const d = DUR[i];
+    const Q = rainFlow_Ls(d, rp);
+    const dur_s = d * 60;
+    const V = Q * dur_s / 1000;
+    const t_max = dur_s + Tmax_s;
+    const V_infil_max = Math.min(k * Sdisp * t_max, V); // m³ -- comme Excel MIN()
+    const V_aj = V - V_infil_max; // m³
+    const Q_aj_d_Ls = t_max > 0 ? V_aj * 1000 / t_max : 0;
+    rows.push({ d, label: DUR_LBL[i], Q, V, V_infil_max, V_aj, Q_aj_d_Ls });
+    if (Q_aj_d_Ls > Qaj_min_Ls) Qaj_min_Ls = Q_aj_d_Ls;
+  }
+
+  // Q_vidange utilisé pour V_buf = Q_infil + Q_ajutage (avec le débit utilisateur, pas min)
+  const Qvidange_Ls = Qinfil_Ls + Qaj_user_Ls;
+  const Qvidange_m3s = Qvidange_Ls / 1000;
+
+  let Vbuf = 0, critIdx = 0;
+  for (let i=0; i<rows.length; i++) {
+    const r = rows[i];
+    const Q_m3s = r.Q / 1000;
+    const excess_m3s = Math.max(0, Q_m3s - Qvidange_m3s);
+    const vb = r.d * 60 * excess_m3s;
+    r.Vbuf = vb;
+    if (vb > Vbuf) { Vbuf = vb; critIdx = i; }
+  }
+
+  const Vemp = Vbuf * 3;
+  const h_moy = Sdisp > 0 ? Vemp / Sdisp : 0;
+  const ajutageOK = Qaj_user_Ls >= Qaj_min_Ls;
+  const Qaj_min_Lsha = sha_tot > 0 ? Qaj_min_Ls / sha_tot : 0;
+
+  return { Sdisp, Qinfil_Ls, Qaj_min_Ls, Qaj_min_Lsha, Qaj_user_Ls, qajRate_Lsha, ajutageOK, Qvidange_Ls, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s };
+}
+
+// ===================== SCÉNARIO 3 — Avec surprofondeur =====================
+// Excel formulas (Section 3, rows 164-214):
+// C178 = V_surp (user)
+// C180 = S_disp (user)
+// C181 = C180 × k × 1000 = Q_infil_surp [L/s]
+// C184 = C180; C185 = C184 × k × 1000 (même valeur)
+// B186 = 5 L/(s·ha); B187 = B186 × E29 = Q_ajutage [L/s] (E29 = TOTAL surface ha)
+//
+// Pour chaque durée:
+// B196 = "OUI" si Q_pluie > Q_infil_surp
+// B197 = (1000 × V_surp) / (Q_pluie - Q_infil_surp) / 60 [min]   (si "OUI")
+// B198 = "OUI" si B197 < durée_min (surp pleinement remplie)
+// B199 = volume rempli dans la surp
+// B202 = durée - t_fill_surp (temps restant)
+// B203 = "OUI" si Q_pluie > Q_infil_above + Q_ajutage
+// B204 = (B202 × 60) × (Q_pluie - C185 - B187) / 1000 = V_buf [m³]
+// B207 = (1000 × V_buf) / (C185 + B187) / 3600 = t_vidange_buf [h]
+// B210 = (1000 × V_surp_rempli) / C181 / 3600 = t_vidange_surp [h]
+// B212 = B207 + B210 = t_total_vidange [h]
+function calcS3() {
+  const k = getKcalc();
+  const rp = getRp();
+  const Tmax_s = getTmax_s();
+  const {seff, stot, sha_tot} = getSurfaces();
+  const Sdisp = parseFloat($('s3-sdisp').value) || 0;
+  const Vsurp = parseFloat($('s3-vsurp').value) || 0;
+  const qajRate_Lsha = parseFloat($('s3-qaj').value) || 0;
+
+  if (seff <= 0 || Sdisp <= 0) return null;
+
+  const Qinfil_Ls = Sdisp * k * 1000; // = C181 = C185
+  const Qaj_Ls = qajRate_Lsha * sha_tot; // = B187 (sur surface TOTALE)
+  const Qvidange_above_Ls = Qinfil_Ls + Qaj_Ls;
+
+  let Vbuf = 0, critIdx = 0;
+  const rows = [];
+
+  for (let i=0; i<DUR.length; i++) {
+    const d = DUR[i];
+    const Q = rainFlow_Ls(d, rp); // L/s
+    const dur_s = d * 60;
+    const dur_min = d;
+    const V = Q * dur_s / 1000;
+
+    // Phase 1 : remplissage surprofondeur
+    let phase1_state = ''; // 'NA' (pas de surp ou rain≤infil), 'OUI' (remplie), 'PARTIEL'
+    let t_fill_surp_min = 0;
+    let Vfill_surp = 0;
+
+    if (Q > Qinfil_Ls) {
+      // Rain exceeds infil rate of surp
+      if (Vsurp > 0) {
+        t_fill_surp_min = ((1000 * Vsurp) / (Q - Qinfil_Ls)) / 60;
+        if (t_fill_surp_min <= dur_min) {
+          phase1_state = 'OUI'; // fully filled
+          Vfill_surp = Vsurp;
+        } else {
+          phase1_state = 'PARTIEL';
+          Vfill_surp = dur_min * 60 * (Q - Qinfil_Ls) / 1000;
+          t_fill_surp_min = dur_min; // capped
+        }
+      } else {
+        // V_surp = 0 → instantly "filled"
+        phase1_state = 'OUI';
+        t_fill_surp_min = 0;
+        Vfill_surp = 0;
+      }
+    } else {
+      // Rain ≤ infil rate → no fill needed, no buffer required
+      phase1_state = 'NA';
+      t_fill_surp_min = 0;
+      Vfill_surp = 0;
+    }
+
+    // Phase 2 : remplissage tampon
+    let Vbuf_d = 0;
+    let t_remaining_min = 0;
+    let phase2_needed = false;
+
+    if (phase1_state === 'OUI') {
+      // Surp filled, remaining time for tampon
+      t_remaining_min = dur_min - t_fill_surp_min;
+      // Excel B203: V_buf > 0 only if Q_pluie > Q_infil_above + Q_ajutage
+      if (Q > Qvidange_above_Ls && t_remaining_min > 0) {
+        phase2_needed = true;
+        Vbuf_d = (t_remaining_min * 60) * (Q - Qvidange_above_Ls) / 1000;
+      }
+    }
+    // If phase1=PARTIEL → surp didn't completely fill, so no buffer needed
+    // If phase1=NA → rain ≤ infil_surp, no buffer
+
+    // Phase 3 : vidange tampon
+    const t_drain_buf_h = Qvidange_above_Ls > 0 ? ((1000 * Vbuf_d) / Qvidange_above_Ls) / 3600 : 0;
+
+    // Phase 4 : vidange surprofondeur (par infiltration seule)
+    const t_drain_surp_h = Qinfil_Ls > 0 ? ((1000 * Vfill_surp) / Qinfil_Ls) / 3600 : 0;
+
+    const t_total_drain_h = t_drain_buf_h + t_drain_surp_h;
+    const compliant = t_total_drain_h <= (Tmax_s / 3600);
+
+    rows.push({
+      d, label: DUR_LBL[i], Q, V,
+      phase1_state, t_fill_surp_min, Vfill_surp,
+      t_remaining_min, Vbuf_d, phase2_needed,
+      t_drain_buf_h, t_drain_surp_h, t_total_drain_h, compliant
+    });
+
+    if (Vbuf_d > Vbuf) { Vbuf = Vbuf_d; critIdx = i; }
+  }
+
+  const Vemp = Vbuf * 3;
+  const h_moy = Sdisp > 0 ? Vemp / Sdisp : 0;
+  const anyNonCompliant = rows.some(r => !r.compliant);
+
+  return { Sdisp, Vsurp, Qinfil_Ls, Qaj_Ls, qajRate_Lsha, Vbuf, Vemp, h_moy, rows, critIdx, k, seff, stot, rp, Tmax_s, anyNonCompliant };
+}
+
+// ===================== MAIN CALCULATE =====================
+function calculateAll() {
+  updateSummary();
+  state.s1 = calcS1();
+  state.s2 = calcS2();
+  state.s3 = calcS3();
+  renderS1(state.s1);
+  renderS2(state.s2);
+  renderS3(state.s3);
+}
+
+// ===================== RENDER =====================
+function renderS1(r) {
+  if (!r) {
+    $('s1-results').innerHTML = '<div class="warn-box">Entrez au moins une surface non nulle.</div>';
+    return;
+  }
+  $('s1-results').innerHTML = `
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Surface de dispersion minimale</div>
+      <div class="rc-value">${fmt(r.Smin,1)} <span class="rc-unit">m²</span></div>
+      <div class="rc-sub">Pluie dimensionnante : ${r.rows[r.critIdx].label}</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon (eau)</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Q_infil = ${fmt(r.Qinfil_Ls,3)} L/s à S_min</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Volume d'empierrement total</div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">= V_tampon × 3 (pierres 2/3)</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Épaisseur moyenne du massif</div>
+      <div class="rc-value">${fmt(r.h_moy,2)} <span class="rc-unit">m</span></div>
+      <div class="rc-sub">${r.h_moy < 0.5 ? '⚠️ &lt; 50cm (mini AIDE)' : '✓ ≥ 50cm'}</div>
+    </div>
+  </div>
+  <div class="col-title">Détail par durée de pluie <span class="tag-critical">⭐ pluie critique</span></div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infiltration (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th></tr>
+    ${r.rows.map((row,i)=>`
+    <tr class="${i===r.critIdx?'critical':''}">
+      <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+      <td>${fmt(row.Q,3)}</td><td>${fmt(row.V,3)}</td>
+      <td>${fmt(row.t_max/3600,1)}</td>
+      <td>${fmt(row.Smin_d,1)}</td><td>${fmt(row.Vbuf,3)}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+function renderS2(r) {
+  if (!r) {
+    $('s2-results').innerHTML = '<div class="warn-box">Entrez les surfaces et une surface de dispersion non nulle.</div>';
+    return;
+  }
+  const warnHTML = !r.ajutageOK ? `<div class="err-box">⚠️ Débit d'ajutage utilisateur (${fmt(r.Qaj_user_Ls,3)} L/s = ${fmt(r.qajRate_Lsha,2)} L/(s·ha)) INSUFFISANT. Minimum requis : ${fmt(r.Qaj_min_Ls,3)} L/s = ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha).</div>` : `<div class="info-box">✓ Débit d'ajutage utilisateur (${fmt(r.qajRate_Lsha,2)} L/(s·ha)) ≥ minimum requis (${fmt(r.Qaj_min_Lsha,2)} L/(s·ha)).</div>`;
+  $('s2-results').innerHTML = `
+  ${warnHTML}
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Débit d'ajutage minimal requis</div>
+      <div class="rc-value">${fmt(r.Qaj_min_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">= ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha) sur surface totale</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon (eau)</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Q_vidange total = ${fmt(r.Qvidange_Ls,3)} L/s</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Volume d'empierrement</div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Épaisseur ≈ ${fmt(r.h_moy,2)} m</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Débits</div>
+      <div style="font-size:13px;line-height:1.5;">
+        Q infiltration : <strong>${fmt(r.Qinfil_Ls,3)} L/s</strong><br>
+        Q ajutage (user) : <strong>${fmt(r.Qaj_user_Ls,3)} L/s</strong><br>
+        Q vidange total : <strong>${fmt(r.Qvidange_Ls,3)} L/s</strong>
+      </div>
+    </div>
+  </div>
+  <div class="col-title">Détail par durée</div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>V infil max (m³)</th><th>V à évacuer (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th></tr>
+    ${r.rows.map((row,i)=>`
+    <tr class="${i===r.critIdx?'critical':''}">
+      <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+      <td>${fmt(row.Q,3)}</td><td>${fmt(row.V,3)}</td>
+      <td>${fmt(row.V_infil_max,3)}</td><td>${fmt(row.V_aj,3)}</td>
+      <td>${fmt(row.Q_aj_d_Ls,3)}</td><td>${fmt(row.Vbuf,3)}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+function renderS3(r) {
+  if (!r) {
+    $('s3-results').innerHTML = '<div class="warn-box">Entrez les surfaces et une surface de dispersion non nulle.</div>';
+    return;
+  }
+  const warnHTML = r.anyNonCompliant ? `<div class="err-box">⚠️ Temps de vidange total &gt; 24h pour au moins une durée de pluie. Augmenter S_disp et/ou Q_ajutage, ou réduire V_surp.</div>` : `<div class="info-box">✓ Temps de vidange ≤ 24h pour toutes les durées.</div>`;
+  $('s3-results').innerHTML = `
+  ${warnHTML}
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Volume tampon (au-dessus de l'ajutage)</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Surprofondeur : ${fmt(r.Vsurp,2)} m³</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume d'empierrement total</div>
+      <div class="rc-value">${fmt(r.Vemp,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Épaisseur ≈ ${fmt(r.h_moy,2)} m</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Débit ajutage</div>
+      <div class="rc-value">${fmt(r.Qaj_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">= ${fmt(r.qajRate_Lsha,1)} L/(s·ha) × ${fmt(r.stot/10000,4)} ha</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Débit infiltration (= Q_infil_surp = Q_infil_above)</div>
+      <div class="rc-value">${fmt(r.Qinfil_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">k × S_disp × 1000</div>
+    </div>
+  </div>
+  <div class="col-title">Vérification phase par phase</div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>Surp. remplie?</th><th>t fill (min)</th><th>V tampon (m³)</th><th>t vid. tampon (h)</th><th>t vid. surp (h)</th><th>t total (h)</th><th>OK?</th></tr>
+    ${r.rows.map((row,i)=>{
+      const stateLbl = row.phase1_state === 'OUI' ? '✓ Oui' : (row.phase1_state === 'PARTIEL' ? '~ Partiel' : '– Non');
+      return `<tr class="${i===r.critIdx?'critical':''}${!row.compliant?' overflow':''}">
+        <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+        <td>${fmt(row.Q,3)}</td>
+        <td>${stateLbl}</td>
+        <td>${row.phase1_state === 'NA' ? '–' : fmt(row.t_fill_surp_min,1)}</td>
+        <td>${fmt(row.Vbuf_d,3)}</td>
+        <td>${fmt(row.t_drain_buf_h,2)}</td>
+        <td>${fmt(row.t_drain_surp_h,2)}</td>
+        <td style="font-weight:700;">${fmt(row.t_total_drain_h,2)}</td>
+        <td>${row.compliant ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">✗</span>'}</td>
+      </tr>`;
+    }).join('')}
+  </table></div>`;
+}
+
+// ===================== TABS =====================
+function showTab(id) {
+  const ids = ['s1','s2','s3','sim','prot'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i]===id));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  $('pane-'+id).classList.add('active');
+  if (id === 'sim') initSimIfNeeded();
+}
+
+// ===================== SIMULATION (modèle dynamique) =====================
+function getSimParams() {
+  const scen = parseInt($('sim-scen').value);
+  const dur = parseInt($('sim-dur').value);
+  const rp = parseInt($('sim-rp').value);
+  const Sdisp = parseFloat($('sim-sdisp').value)||0;
+  const Vsurp = scen === 3 ? (parseFloat($('sim-vsurp').value)||0) : 0;
+  const Vtamp = scen >= 2 ? (parseFloat($('sim-vtamp').value)||0) : parseFloat($('sim-vtamp').value)||0;
+  const Qaj_Ls = scen >= 2 ? (parseFloat($('sim-qaj').value)||0) : 0;
+  const {seff} = getSurfaces();
+  const k = getKcalc();
+  const Qrain_Ls = rainFlow_Ls(dur, rp);
+  const Qinfil_Ls = k * Sdisp * 1000;
+  // For scenario 1, the total basin = Vtamp (no separation)
+  // For scenarios 2,3, Vtotal = Vsurp + Vtamp
+  const Vtotal = scen === 1 ? Vtamp : (Vsurp + Vtamp);
+  return { scen, dur, rp, Sdisp, Vsurp, Vtamp, Vtotal, Qaj_Ls, Qrain_Ls, Qinfil_Ls, seff, k };
+}
+
+// Pas de temps adaptatif pour la simulation
+function getSimDt(dur_min) {
+  if (dur_min <= 60) return 30;
+  if (dur_min <= 360) return 60;
+  if (dur_min <= 1440) return 300;
+  if (dur_min <= 4320) return 600;
+  return 1800;
+}
+
+function computeSimData(p) {
+  const dur_s = p.dur * 60;
+  const dt = getSimDt(p.dur);
+  const Tmax_s = getTmax_s();
+
+  let V = 0;
+  let Vover = 0;
+  const data = [];
+
+  const maxT = dur_s + Tmax_s + 3*dt;
+  let consecutiveZero = 0;
+
+  for (let t=0; t<=maxT; t+=dt) {
+    const raining = t < dur_s;
+    const Qin = raining ? p.Qrain_Ls : 0; // L/s
+
+    // Outflows (ne peuvent extraire plus que ce qui est disponible)
+    let Qinfil = 0, Qorifice = 0;
+    if (V > 0 || Qin > 0) {
+      // capacité d'infiltration limitée par V_disponible (pour dt)
+      const Vavail_for_infil_m3 = V + Qin * dt / 1000; // ce qu'on a au début + ce qui rentre
+      Qinfil = Math.min(p.Qinfil_Ls, Vavail_for_infil_m3 * 1000 / dt);
+      // orifice: ne s'écoule que si niveau > V_surp
+      if (p.scen >= 2 && p.Qaj_Ls > 0) {
+        const V_above = V - p.Vsurp; // niveau au-dessus de l'ajutage
+        if (V_above > 0) {
+          Qorifice = Math.min(p.Qaj_Ls, V_above * 1000 / dt);
+        }
+      }
+    }
+
+    const Qnet_Ls = Qin - Qinfil - Qorifice;
+    const dV = Qnet_Ls * dt / 1000; // m³
+    V += dV;
+    if (V < 0) V = 0;
+
+    // Overflow check
+    let overflow = false;
+    if (p.Vtotal > 0 && V > p.Vtotal) {
+      const excess = V - p.Vtotal;
+      Vover += excess;
+      V = p.Vtotal;
+      overflow = true;
+    }
+
+    data.push({ t, V, Qin, Qinfil, Qorifice, overflow, Vover });
+
+    // Stop conditions
+    if (!raining && V < 1e-5) {
+      consecutiveZero++;
+      if (consecutiveZero > 2) break;
+    } else {
+      consecutiveZero = 0;
+    }
+  }
+  return data;
+}
+
+function initSimIfNeeded() {
+  if (simChart) return;
+  const ctx = $('sim-chart').getContext('2d');
+  simChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Volume bassin (m³)', data: [], borderColor: '#1E88E5', backgroundColor: 'rgba(30,136,229,.15)', fill: true, pointRadius: 0, tension: .2, yAxisID: 'yV', borderWidth: 2 },
+        { label: 'Q pluie (L/s)', data: [], borderColor: '#43A047', borderDash: [4,2], fill: false, pointRadius: 0, tension: .2, yAxisID: 'yQ' },
+        { label: 'Q infiltration (L/s)', data: [], borderColor: '#8D6E63', borderDash: [2,3], fill: false, pointRadius: 0, tension: .2, yAxisID: 'yQ' },
+        { label: 'Q ajutage (L/s)', data: [], borderColor: '#E65100', borderDash: [6,2], fill: false, pointRadius: 0, tension: .2, yAxisID: 'yQ' }
+      ]
+    },
+    options: {
+      animation: { duration: 0 },
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, title: { display: true, text: 'Temps depuis début de la pluie', font: { size: 11 } } },
+        yV: { position: 'left', title: { display: true, text: 'Volume (m³)', font: { size: 11 } }, ticks: { font: { size: 10 } }, beginAtZero: true },
+        yQ: { position: 'right', title: { display: true, text: 'Débit (L/s)', font: { size: 11 } }, ticks: { font: { size: 10 } }, beginAtZero: true, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function updateChart(upTo) {
+  if (!simChart || !state.simData.length) return;
+  const slice = state.simData.slice(0, upTo+1);
+  simChart.data.labels = slice.map(d => fmtTime(d.t));
+  simChart.data.datasets[0].data = slice.map(d => +d.V.toFixed(4));
+  simChart.data.datasets[1].data = slice.map(d => +d.Qin.toFixed(4));
+  simChart.data.datasets[2].data = slice.map(d => +d.Qinfil.toFixed(4));
+  simChart.data.datasets[3].data = slice.map(d => +d.Qorifice.toFixed(4));
+  simChart.update('none');
+}
+
+function drawBasin(idx) {
+  const svg = $('basin-svg');
+  const p = getSimParams();
+  const d = state.simData[idx] || { t: 0, V: 0, Qin: 0, Qinfil: 0, Qorifice: 0, overflow: false };
+  const Vfrac = p.Vtotal > 0 ? Math.min(1, d.V / p.Vtotal) : 0;
+  const raining = d.Qin > 0;
+
+  // Dimensions SVG
+  const W = 720, H = 240;
+  const bx = 140, by = 30, bw = 440, bh = 165;
+  const groundY = by + bh;
+  const waterH = bh * Vfrac;
+  const waterY = by + bh - waterH;
+  const orificeY = p.Vtotal > 0 ? by + bh - bh * (p.Vsurp / p.Vtotal) : groundY;
+  const overflow = d.overflow || (p.Vtotal > 0 && d.V >= p.Vtotal - 1e-6);
+
+  let html = '';
+
+  // Ground texture
+  html += `<rect x="${bx-30}" y="${groundY}" width="${bw+60}" height="30" fill="#8D6E63"/>`;
+  for (let gx = bx - 20; gx < bx + bw + 20; gx += 25) {
+    html += `<circle cx="${gx + 5}" cy="${groundY + 12}" r="2" fill="#6D4C41"/>`;
+    html += `<circle cx="${gx + 15}" cy="${groundY + 20}" r="1.5" fill="#5D4037"/>`;
+  }
+
+  // Basin walls (cut-away)
+  html += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#FAFAFA" stroke="#546E7A" stroke-width="3" rx="3"/>`;
+
+  // Stones/gravel pattern inside basin (visible)
+  for (let sy = by + 8; sy < groundY; sy += 18) {
+    for (let sx = bx + 8; sx < bx + bw - 8; sx += 22) {
+      const op = sy < waterY ? 0.3 : 0.15;
+      html += `<circle cx="${sx + Math.sin(sy*0.3)*4}" cy="${sy}" r="3" fill="#BCAAA4" opacity="${op}"/>`;
+    }
+  }
+
+  // Water fill
+  if (waterH > 0) {
+    const waterColor = overflow ? '#EF5350' : '#1E88E5';
+    const waterOpacity = overflow ? 0.7 : 0.6;
+    html += `<rect x="${bx+2}" y="${waterY}" width="${bw-4}" height="${waterH}" fill="${waterColor}" opacity="${waterOpacity}"/>`;
+    // Surface ripple
+    const rippleY = waterY + 1;
+    html += `<path d="M${bx+2} ${rippleY} Q${bx+bw/4} ${rippleY-3} ${bx+bw/2} ${rippleY} T ${bx+bw-2} ${rippleY}" fill="none" stroke="${overflow?'#C62828':'#0D47A1'}" stroke-width="2"/>`;
+  }
+
+  // Orifice level line (scenarios 2 & 3)
+  if (p.scen >= 2 && p.Vsurp > 0 && p.Vtotal > 0) {
+    html += `<line x1="${bx}" y1="${orificeY}" x2="${bx+bw}" y2="${orificeY}" stroke="#E65100" stroke-width="2" stroke-dasharray="8,3"/>`;
+    html += `<text x="${bx-8}" y="${orificeY+4}" text-anchor="end" fill="#E65100" font-size="11" font-weight="600">Ajutage</text>`;
+    html += `<text x="${bx-8}" y="${orificeY-4}" text-anchor="end" fill="#E65100" font-size="9">Niveau</text>`;
+  }
+
+  // Orifice discharge
+  if (p.scen >= 2 && d.Qorifice > 0) {
+    const arrY = orificeY;
+    html += `<rect x="${bx+bw}" y="${arrY-4}" width="10" height="8" fill="#E65100"/>`;
+    html += `<line x1="${bx+bw+10}" y1="${arrY}" x2="${bx+bw+60}" y2="${arrY}" stroke="#E65100" stroke-width="3" marker-end="url(#arr-orange)"/>`;
+    html += `<text x="${bx+bw+65}" y="${arrY+4}" fill="#E65100" font-size="11" font-weight="600">${d.Qorifice.toFixed(2)} L/s</text>`;
+  }
+
+  // Infiltration arrows
+  if (d.Qinfil > 0) {
+    const nArrows = 5;
+    for (let i = 0; i < nArrows; i++) {
+      const ax = bx + 40 + i * ((bw - 80) / (nArrows - 1));
+      html += `<line x1="${ax}" y1="${groundY+2}" x2="${ax}" y2="${groundY+22}" stroke="#5D4037" stroke-width="2.5" marker-end="url(#arr-brown)"/>`;
+    }
+    html += `<text x="${bx+bw/2}" y="${groundY+45}" text-anchor="middle" fill="#5D4037" font-size="11" font-weight="600">Infiltration : ${d.Qinfil.toFixed(2)} L/s</text>`;
+  }
+
+  // Rain
+  if (raining) {
+    const nDrops = 8;
+    for (let i = 0; i < nDrops; i++) {
+      const dx = bx + 30 + i * ((bw - 60) / (nDrops - 1));
+      const phase = (d.t * 4 + i * 50) % 30;
+      html += `<line x1="${dx}" y1="${by - 25 + phase}" x2="${dx-2}" y2="${by - 15 + phase}" stroke="#1565C0" stroke-width="2.5" stroke-linecap="round"/>`;
+    }
+    html += `<text x="${bx+bw/2}" y="${by-30}" text-anchor="middle" fill="#1565C0" font-size="12" font-weight="700">🌧 Pluie : ${d.Qin.toFixed(2)} L/s</text>`;
+  }
+
+  // Overflow indicator
+  if (overflow) {
+    html += `<path d="M ${bx-5} ${by} L ${bx-25} ${by-12} L ${bx-5} ${by-3} Z" fill="#EF5350"/>`;
+    html += `<text x="${bx-30}" y="${by-15}" text-anchor="end" fill="#C62828" font-size="13" font-weight="700">⚠ DÉBORDEMENT</text>`;
+    html += `<text x="${bx-30}" y="${by-2}" text-anchor="end" fill="#C62828" font-size="10">Total : ${d.Vover.toFixed(2)} m³</text>`;
+  }
+
+  // Volume labels
+  html += `<line x1="${bx+bw+2}" y1="${by}" x2="${bx+bw+8}" y2="${by}" stroke="#666" stroke-width="1"/>`;
+  html += `<text x="${bx+bw+12}" y="${by+4}" fill="#333" font-size="11" font-weight="600">${p.Vtotal.toFixed(2)} m³ (100%)</text>`;
+  if (p.scen >= 2 && p.Vsurp > 0) {
+    html += `<line x1="${bx+bw+2}" y1="${orificeY}" x2="${bx+bw+8}" y2="${orificeY}" stroke="#E65100" stroke-width="1"/>`;
+    html += `<text x="${bx+bw+12}" y="${orificeY+4}" fill="#E65100" font-size="10">${p.Vsurp.toFixed(2)} m³ (surp)</text>`;
+  }
+  html += `<line x1="${bx+bw+2}" y1="${groundY}" x2="${bx+bw+8}" y2="${groundY}" stroke="#666" stroke-width="1"/>`;
+  html += `<text x="${bx+bw+12}" y="${groundY+4}" fill="#333" font-size="10">0 m³</text>`;
+
+  if (Vfrac > 0.05) {
+    const txtY = Math.max(waterY + 15, waterY + waterH * 0.5);
+    html += `<text x="${bx+bw/2}" y="${txtY}" text-anchor="middle" fill="#FFF" font-size="13" font-weight="700" style="text-shadow:0 1px 2px rgba(0,0,0,.5)">${d.V.toFixed(3)} m³ (${(Vfrac*100).toFixed(0)}%)</text>`;
+  }
+
+  // Left vertical bar (visual indicator)
+  const barX = 80, barW = 30, barY = by, barH = bh;
+  html += `<rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" fill="#E3F2FD" stroke="#90A4AE" stroke-width="1"/>`;
+  if (Vfrac > 0) {
+    html += `<rect x="${barX}" y="${barY+barH-barH*Vfrac}" width="${barW}" height="${barH*Vfrac}" fill="${overflow?'#EF5350':'#1E88E5'}"/>`;
+  }
+  // Orifice marker on bar
+  if (p.scen >= 2 && p.Vsurp > 0 && p.Vtotal > 0) {
+    const orY = barY + barH - barH * (p.Vsurp / p.Vtotal);
+    html += `<line x1="${barX-4}" y1="${orY}" x2="${barX+barW+4}" y2="${orY}" stroke="#E65100" stroke-width="2" stroke-dasharray="3,2"/>`;
+  }
+  html += `<text x="${barX+barW/2}" y="${barY-6}" text-anchor="middle" fill="#546E7A" font-size="11" font-weight="600">${(Vfrac*100).toFixed(0)}%</text>`;
+
+  // Time
+  html += `<text x="10" y="20" fill="#333" font-size="13" font-weight="700">t = ${fmtTime(d.t)}</text>`;
+  const phaseLabel = raining ? '🌧 Pluie' : (d.V > 1e-4 ? '↓ Vidange' : '✓ Vide');
+  html += `<text x="10" y="38" fill="#666" font-size="11">${phaseLabel}</text>`;
+
+  // Defs
+  const defs = `<defs>
+    <marker id="arr-orange" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#E65100"/></marker>
+    <marker id="arr-brown" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#5D4037"/></marker>
+  </defs>`;
+
+  svg.innerHTML = defs + html;
+}
+
+function resetSim() {
+  if (state.simRAF) { cancelAnimationFrame(state.simRAF); state.simRAF = null; }
+  state.simPlaying = false; state.simIdx = 0; state.simData = [];
+  $('btn-play').textContent = '▶ Démarrer';
+  $('sim-time-display').textContent = 't = 0';
+  $('sim-status').textContent = 'Prêt';
+  $('sim-status').className = 'status-ok';
+  $('sim-stats').style.display = 'none';
+  if (simChart) {
+    simChart.data.labels = [];
+    simChart.data.datasets.forEach(ds => ds.data = []);
+    simChart.update('none');
+  }
+  drawBasin(0);
+}
+
+function togglePlay() {
+  if (!state.simPlaying) {
+    if (!state.simData.length || state.simIdx >= state.simData.length - 1) {
+      startSim();
+    } else {
+      state.simPlaying = true;
+      state.simLastT = null;
+      $('btn-play').textContent = '⏸ Pause';
+      animLoop();
+    }
+  } else {
+    state.simPlaying = false;
+    $('btn-play').textContent = '▶ Reprendre';
+    if (state.simRAF) { cancelAnimationFrame(state.simRAF); state.simRAF = null; }
+  }
+}
+
+function startSim() {
+  initSimIfNeeded();
+  const p = getSimParams();
+  if (p.Vtotal <= 0) {
+    alert('Volume total du bassin nul. Renseignez V_surprofondeur et/ou V_tampon.');
+    return;
+  }
+  state.simData = computeSimData(p);
+  state.simIdx = 0;
+  state.simPlaying = true;
+  state.simLastT = null;
+  $('btn-play').textContent = '⏸ Pause';
+  animLoop();
+}
+
+function animLoop(ts) {
+  if (!state.simPlaying) return;
+  const data = state.simData;
+  if (!data.length) return;
+
+  const speed = parseInt($('speed-sel').value) || 600;
+  if (state.simLastT === null) state.simLastT = ts || 0;
+  const dt_real = Math.min((ts||0) - state.simLastT, 100);
+  state.simLastT = ts || 0;
+  const dt_sim = dt_real * speed / 1000; // s
+
+  const curT = state.simIdx < data.length ? data[state.simIdx].t : 0;
+  const targetT = curT + dt_sim;
+  while (state.simIdx < data.length - 1 && data[state.simIdx+1].t <= targetT) {
+    state.simIdx++;
+  }
+
+  const d = data[state.simIdx];
+  drawBasin(state.simIdx);
+  updateChart(state.simIdx);
+
+  $('sim-time-display').textContent = `t = ${fmtTime(d.t)}`;
+  const statEl = $('sim-status');
+  if (d.overflow || (d.Vover > 0)) { statEl.textContent = '⚠ DÉBORDEMENT'; statEl.className = 'status-overflow'; }
+  else if (d.Qin > 0) { statEl.textContent = '🌧 Pluie'; statEl.className = 'status-rain'; }
+  else if (d.V > 1e-4) { statEl.textContent = '↓ Vidange'; statEl.className = 'status-drain'; }
+  else { statEl.textContent = '✓ Vide'; statEl.className = 'status-ok'; }
+
+  if (state.simIdx >= data.length - 1) {
+    state.simPlaying = false;
+    $('btn-play').textContent = '▶ Rejouer';
+    showSimStats();
+    return;
+  }
+  state.simRAF = requestAnimationFrame(animLoop);
+}
+
+function showSimStats() {
+  const data = state.simData;
+  if (!data.length) return;
+  const p = getSimParams();
+  const Vmax = Math.max(...data.map(d => d.V));
+  const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
+  const Vover = data[data.length-1].Vover || 0;
+  const idxDrain = data.findIndex((d,i) => i>0 && d.Qin===0 && d.V<1e-4);
+  const dur_s = p.dur * 60;
+  const drainTime = idxDrain > 0 ? data[idxDrain].t - dur_s : null;
+
+  $('sim-stats').style.display = 'block';
+  $('sim-stats-inner').innerHTML = `
+    <div style="margin-bottom:6px;">
+      <span class="badge ${overflowed?'badge-red':'badge-green'}">${overflowed?'⚠ DÉBORDEMENT':'✓ Pas de débordement'}</span>
+    </div>
+    <div style="font-size:11px;line-height:1.6;">
+      Vol. max atteint : <strong>${Vmax.toFixed(3)} m³</strong> / ${p.Vtotal.toFixed(3)} m³<br>
+      Remplissage max : <strong>${p.Vtotal>0?(Vmax/p.Vtotal*100).toFixed(1):0}%</strong>
+      ${overflowed?`<br>Vol. débordement : <strong style="color:var(--red);">${Vover.toFixed(3)} m³</strong>`:''}
+      ${drainTime!==null?`<br>Vidange complète en : <strong>${fmtTime(drainTime)}</strong>${drainTime>24*3600?' <span style="color:var(--red);">&gt; 24h ⚠</span>':' ✓'}`:'<br>Vidange non complète dans la fenêtre simulée'}
+    </div>`;
+}
+
+function prefillFromScenario() {
+  const scen = parseInt($('sim-scen').value);
+  if (scen === 1 && state.s1) {
+    $('sim-sdisp').value = state.s1.Smin.toFixed(0);
+    $('sim-vsurp').value = '0';
+    $('sim-vtamp').value = state.s1.Vbuf.toFixed(3);
+    $('sim-qaj').value = '0';
+  } else if (scen === 2 && state.s2) {
+    $('sim-sdisp').value = state.s2.Sdisp.toFixed(0);
+    $('sim-vsurp').value = '0';
+    $('sim-vtamp').value = state.s2.Vbuf.toFixed(3);
+    $('sim-qaj').value = state.s2.Qaj_user_Ls.toFixed(3);
+  } else if (scen === 3 && state.s3) {
+    $('sim-sdisp').value = state.s3.Sdisp.toFixed(0);
+    $('sim-vsurp').value = state.s3.Vsurp.toFixed(3);
+    $('sim-vtamp').value = state.s3.Vbuf.toFixed(3);
+    $('sim-qaj').value = state.s3.Qaj_Ls.toFixed(3);
+  } else {
+    alert('Calculez d\'abord le scénario correspondant.');
+    return;
+  }
+  resetSim();
+  updateSimRainInfo();
+}
+
+$('sim-scen').addEventListener('change', function() {
+  const s = parseInt(this.value);
+  $('row-vsurp').style.display = s === 3 ? 'flex' : 'none';
+  $('row-vtamp').style.display = 'flex';
+  $('row-qaj2').style.display = s >= 2 ? 'flex' : 'none';
+  document.querySelector('label[for=sim-vtamp]') || null;
+  // Update label of vtamp
+  resetSim();
+});
+
+// ===================== MATRICE DE PROTECTION =====================
+function buildProtectionMatrix() {
+  const which = $('prot-scen').value;
+  let Sdisp, Vsurp, Vtamp, Qaj_Ls, scen;
+
+  if (which === 'sim') {
+    const p = getSimParams();
+    Sdisp = p.Sdisp; Vsurp = p.Vsurp; Vtamp = p.Vtamp; Qaj_Ls = p.Qaj_Ls; scen = p.scen;
+  } else if (which === '1' && state.s1) {
+    Sdisp = state.s1.Smin; Vsurp = 0; Vtamp = state.s1.Vbuf; Qaj_Ls = 0; scen = 1;
+  } else if (which === '2' && state.s2) {
+    Sdisp = state.s2.Sdisp; Vsurp = 0; Vtamp = state.s2.Vbuf; Qaj_Ls = state.s2.Qaj_user_Ls; scen = 2;
+  } else if (which === '3' && state.s3) {
+    Sdisp = state.s3.Sdisp; Vsurp = state.s3.Vsurp; Vtamp = state.s3.Vbuf; Qaj_Ls = state.s3.Qaj_Ls; scen = 3;
+  } else {
+    $('prot-table-wrap').innerHTML = '<div class="err-box">Calculez d\'abord le scénario correspondant.</div>';
+    return;
+  }
+
+  const Vtotal = scen === 1 ? Vtamp : (Vsurp + Vtamp);
+  const k = getKcalc();
+  const rp_design = getRp();
+
+  const testDurs = DUR.slice(0, 14);
+  const testDurLbls = DUR_LBL.slice(0, 14);
+
+  let html = `<table class="prot-table"><tr><th>Durée \\ T.retour</th>`;
+  RP.forEach(rp => html += `<th>${rp} ans</th>`);
+  html += `</tr>`;
+
+  testDurs.forEach((dur, di) => {
+    html += `<tr><td>${testDurLbls[di]}</td>`;
+    RP.forEach(rp => {
+      // Simuler rapidement (quick scan) ce rain event
+      const Qrain = (() => {
+        // recompute with this rp
+        const inten_Lsha = rainMm(dur, rp) / (dur * 60) * 10000;
+        let q = 0;
+        for (let i=0; i<8; i++) {
+          const a = parseFloat($('sf'+i).value)||0;
+          q += (a/10000) * CR[i] * inten_Lsha;
+        }
+        return q;
+      })();
+      const Qinfil_Ls = k * Sdisp * 1000;
+      const dur_s = dur * 60;
+
+      let overflow = false;
+      if (Vtotal === 0) {
+        overflow = Qrain > Qinfil_Ls + Qaj_Ls;
+      } else if (scen === 3 && Vsurp > 0) {
+        // 4-phase logic
+        if (Qrain > Qinfil_Ls) {
+          const t_fill = (1000 * Vsurp) / (Qrain - Qinfil_Ls); // s
+          if (t_fill < dur_s) {
+            const t_rem_s = dur_s - t_fill;
+            const Qnet_above = Qrain - Qinfil_Ls - Qaj_Ls;
+            const Vbuf_needed = Math.max(0, Qnet_above / 1000 * t_rem_s);
+            overflow = Vbuf_needed > Vtamp + 1e-6;
+          }
+        }
+      } else {
+        // scenario 1 or 2: just check buffer fills
+        const Qout = scen >= 2 ? Qinfil_Ls + Qaj_Ls : Qinfil_Ls;
+        if (Qrain > Qout) {
+          const Vneeded = (Qrain - Qout) / 1000 * dur_s;
+          overflow = Vneeded > Vtotal + 1e-6;
+        }
+      }
+
+      const isDim = rp === rp_design;
+      html += `<td class="${overflow?'prot-over':'prot-ok'}${isDim?' prot-dim':''}">${overflow?'✗':'✓'}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</table>`;
+  html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
+    <span class="prot-ok" style="padding:2px 6px;border-radius:3px;">✓ Vert</span> = bassin OK (pas de débordement) ·
+    <span class="prot-over" style="padding:2px 6px;border-radius:3px;">✗ Rouge</span> = débordement ·
+    <span style="border:2px solid #F9A825;padding:1px 5px;border-radius:3px;">Encadré jaune</span> = période de retour de dimensionnement (${rp_design} ans)
+  </div>`;
+  $('prot-table-wrap').innerHTML = html;
+}
+
+// ===================== INIT =====================
+window.addEventListener('load', () => {
+  updateSummary();
+  initSimIfNeeded();
+  drawBasin(0);
+});
+</script>
+</body>
+</html>
