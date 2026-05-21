@@ -927,15 +927,20 @@ function renderS1(r) {
   <div class="col-title">Détail par durée de pluie <span class="tag-critical">⭐ pluie critique</span></div>
   <div style="overflow-x:auto;">
   <table class="res-table">
-    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infil. (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th></tr>
-    ${r.rows.map((row,i)=>`
-    <tr class="${i===r.critIdx?'critical':''}">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infil. (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
+    ${r.rows.map((row,i)=>{
+      const Tmax_h = r.Tmax_s/3600;
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
+      const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
+      const rowClass = ok ? '' : ' overflow';
+      return `<tr class="${i===r.critIdx?'critical':''}${rowClass}">
       <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
       <td>${fmt(row.Q,3)}</td><td>${fmt(row.V,3)}</td>
       <td>${fmt(row.t_max/3600,1)}</td>
       <td>${fmt(row.Smin_d,1)}</td><td>${fmt(row.Vbuf,3)}</td>
       <td>${isFinite(row.t_drain_after_h) ? fmt(row.t_drain_after_h,2) : '∞'}</td>
-    </tr>`).join('')}
+      <td>${badge}</td>
+    </tr>`;}).join('')}
   </table></div>`;
 }
 
@@ -989,15 +994,20 @@ function renderS2(r) {
   <div class="col-title">Détail par durée</div>
   <div style="overflow-x:auto;">
   <table class="res-table">
-    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>V infil max (m³)</th><th>V à évacuer (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th></tr>
-    ${r.rows.map((row,i)=>`
-    <tr class="${i===r.critIdx?'critical':''}">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>V infil max (m³)</th><th>V à évacuer (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
+    ${r.rows.map((row,i)=>{
+      const Tmax_h = r.Tmax_s/3600;
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
+      const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
+      const rowClass = ok ? '' : ' overflow';
+      return `<tr class="${i===r.critIdx?'critical':''}${rowClass}">
       <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
       <td>${fmt(row.Q,3)}</td><td>${fmt(row.V,3)}</td>
       <td>${fmt(row.V_infil_max,3)}</td><td>${fmt(row.V_aj,3)}</td>
       <td>${fmt(row.Q_aj_d_Ls,3)}</td><td>${fmt(row.Vbuf,3)}</td>
       <td>${isFinite(row.t_drain_after_h) ? fmt(row.t_drain_after_h,2) : '∞'}</td>
-    </tr>`).join('')}
+      <td>${badge}</td>
+    </tr>`;}).join('')}
   </table></div>`;
 }
 
