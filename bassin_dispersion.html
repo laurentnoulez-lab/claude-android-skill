@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simulateur Bassin de Dispersion</title>
+<title>SML — Simulateur Bassin de Dispersion v5</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -16,18 +16,26 @@
   --ground: #8D6E63;
   --white: #FFFFFF; --bg: #F0F4F8;
   --text: #1C2B36; --text-muted: #546E7A;
+  --sml-black: #111111; --sml-dark: #1f1f1f;
   --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,.12);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
 
-#hdr { background: linear-gradient(135deg, #0D47A1, #1565C0); color: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.3); flex-shrink: 0; }
-#hdr h1 { font-size: 17px; font-weight: 700; }
-#hdr .sub { font-size: 12px; opacity: .8; margin-left: auto; }
+#hdr { background: #111; color: #fff; padding: 10px 22px; display: flex; align-items: center; gap: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.35); flex-shrink: 0; }
+#hdr .logo-wrap { background: #fff; padding: 4px 10px; border-radius: 4px; display: flex; align-items: center; }
+#hdr h1 { font-size: 16px; font-weight: 600; letter-spacing: .3px; }
+#hdr h1 .accent { color: #42A5F5; font-weight: 700; }
+#hdr .sub { font-size: 11px; opacity: .65; margin-left: auto; }
+#hdr-actions { display: flex; gap: 6px; }
+#hdr-actions button { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; padding: 5px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all .15s; }
+#hdr-actions button:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.4); }
 
 #body { display: flex; flex: 1; overflow: hidden; }
-#sidebar { width: 320px; background: var(--white); border-right: 1px solid var(--gray-light); overflow-y: auto; padding: 12px; flex-shrink: 0; }
-#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#sidebar { width: 360px; background: var(--white); border-right: 1px solid var(--gray-light); overflow-y: auto; padding: 12px; flex-shrink: 0; min-width: 280px; max-width: 600px; }
+#sidebar-resize { width: 5px; background: transparent; cursor: col-resize; flex-shrink: 0; transition: background .15s; }
+#sidebar-resize:hover, #sidebar-resize.dragging { background: var(--blue-light); }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
 .s-section { margin-bottom: 14px; }
 .s-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--blue); letter-spacing: .6px; border-bottom: 2px solid var(--blue-pale); padding-bottom: 4px; margin-bottom: 8px; }
@@ -35,12 +43,17 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .s-row label { flex: 1; color: var(--text-muted); font-size: 12px; }
 .s-row input, .s-row select { width: 100px; padding: 4px 6px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; background: var(--gray-pale); }
 .s-row .unit { font-size: 11px; color: var(--text-muted); width: 38px; }
-.surf-table { width: 100%; border-collapse: collapse; }
-.surf-table th { font-size: 10px; color: var(--text-muted); text-align: center; padding: 3px 2px; background: var(--gray-pale); }
-.surf-table td { padding: 2px 3px; border-bottom: 1px solid var(--gray-pale); }
-.surf-table td:first-child { font-size: 11px; }
-.surf-table input[type=number] { width: 75px; padding: 2px 4px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 12px; text-align: right; }
+.surf-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.surf-table th { font-size: 10px; color: var(--text-muted); text-align: center; padding: 4px 3px; background: var(--gray-pale); }
+.surf-table td { padding: 3px 3px; border-bottom: 1px solid var(--gray-pale); vertical-align: middle; word-wrap: break-word; overflow-wrap: anywhere; }
+.surf-table td input, .surf-table td textarea { box-sizing: border-box; }
+.surf-table textarea { resize: vertical; min-height: 22px; max-height: 80px; font-family: inherit; line-height: 1.3; }
 .surf-coeff { font-size: 11px; color: var(--text-muted); text-align: center; }
+.surf-table col.col-type { width: 38%; }
+.surf-table col.col-cr   { width: 14%; }
+.surf-table col.col-m2   { width: 18%; }
+.surf-table col.col-com  { width: 24%; }
+.surf-table col.col-act  { width: 6%; }
 
 .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge-blue { background: var(--blue-pale); color: var(--blue); }
@@ -124,6 +137,52 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--gray-pale); }
 ::-webkit-scrollbar-thumb { background: var(--gray-light); border-radius: 3px; }
+/* ================= REPORTING / PRINT ================= */
+#report-tab .report-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 12px; }
+#report-tab .report-form .field { display: flex; flex-direction: column; gap: 3px; }
+#report-tab .report-form label { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+#report-tab .report-form input, #report-tab .report-form textarea { padding: 6px 8px; border: 1px solid var(--gray-light); border-radius: 4px; font-size: 12px; font-family: inherit; }
+#report-tab textarea { resize: vertical; min-height: 60px; }
+#report-tab .section-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+#report-tab .section-toggles label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 8px; background: var(--gray-pale); border-radius: 4px; cursor: pointer; user-select: none; }
+#report-tab .section-toggles label:hover { background: var(--blue-pale); }
+#report-tab .report-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+#report-tab .report-actions button { padding: 8px 14px; border: none; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
+.btn-pdf { background: #C62828; color: #fff; }
+.btn-pdf:hover { background: #8E0000; }
+.btn-word { background: #1565C0; color: #fff; }
+.btn-word:hover { background: #0D47A1; }
+.btn-json { background: var(--gray); color: #fff; }
+.btn-json:hover { background: var(--sml-dark); }
+
+/* Report rendered for print */
+.report-doc { background: #fff; padding: 32px 36px; max-width: 780px; margin: 0 auto; font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; line-height: 1.5; }
+.report-doc h1 { font-size: 22px; margin: 12px 0 4px; border-bottom: 3px solid #111; padding-bottom: 6px; }
+.report-doc h2 { font-size: 15px; margin: 18px 0 8px; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; }
+.report-doc h3 { font-size: 13px; margin: 12px 0 6px; color: #1565C0; }
+.report-doc table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px; }
+.report-doc table th { background: #f2f2f2; padding: 5px 7px; text-align: left; border: 1px solid #999; font-weight: 700; }
+.report-doc table td { padding: 5px 7px; border: 1px solid #999; }
+.report-doc .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 8px 0 14px; font-size: 12px; }
+.report-doc .meta-grid div { padding: 3px 0; }
+.report-doc .meta-grid strong { color: #1a1a1a; display: inline-block; min-width: 110px; }
+.report-doc .doc-header { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 10px; border-bottom: 2px solid #111; margin-bottom: 14px; gap: 16px; }
+.report-doc .doc-header .meta { font-size: 11px; color: #555; text-align: right; }
+.report-doc .footer-note { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 10px; color: #777; text-align: center; }
+.report-doc .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+.report-doc .badge-green { background: #E8F5E9; color: #1B5E20; }
+.report-doc .badge-red   { background: #FFEBEE; color: #B71C1C; }
+.report-doc .badge-yellow{ background: #FFF59D; color: #E65100; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  #print-area, #print-area * { visibility: visible !important; }
+  #print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+  #hdr, #sidebar, #sidebar-resize, #tabs, .tab-pane, #btn-calc, .btn-small, #hdr-actions { display: none !important; }
+  @page { size: A4; margin: 14mm; }
+  .report-doc { padding: 0; max-width: 100%; box-shadow: none; }
+  .page-break { page-break-after: always; }
+}
 
 .tag-critical { background: #FFF176; color: #F57F17; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
 hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 0; }
@@ -133,8 +192,22 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
 <body>
 
 <div id="hdr">
-  <div><h1>💧 Simulateur de Bassin de Dispersion / Rétention</h1></div>
-  <span class="sub">Données IRM — Formule de Montana — v4</span>
+  <div class="logo-wrap"><svg viewBox="0 0 250 60" xmlns="http://www.w3.org/2000/svg" style="height:42px;width:auto;">
+  <rect x="0" y="3" width="3" height="32" fill="#111"/>
+  <rect x="5" y="3" width="3" height="32" fill="#111"/>
+  <rect x="10" y="3" width="3" height="32" fill="#111"/>
+  <rect x="16" y="0" width="170" height="38" fill="#111"/>
+  <text x="22" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">SML</text>
+  <text x="74" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">GROUP</text>
+  <text x="0" y="55" fill="#111" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="9" letter-spacing="1.5">SML INGÉNIEURS CONSEILS</text>
+</svg></div>
+  <div><h1>Simulateur de <span class="accent">Bassin de Dispersion / Rétention</span></h1></div>
+  <span class="sub">Données IRM — Formule de Montana — v5</span>
+  <div id="hdr-actions">
+    <button onclick="importStudy()" title="Importer une étude JSON">📂 Importer</button>
+    <button onclick="exportStudyJSON()" title="Exporter l'étude JSON">💾 Exporter</button>
+    <input type="file" id="import-file" accept=".json,application/json" style="display:none;" onchange="handleImportFile(event)">
+  </div>
 </div>
 
 <div id="body">
@@ -163,6 +236,9 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
   <div class="s-section">
     <div class="s-title">Surfaces drainées (m²)</div>
     <table class="surf-table" id="surf-table">
+      <colgroup>
+        <col class="col-type"><col class="col-cr"><col class="col-m2"><col class="col-com"><col class="col-act">
+      </colgroup>
       <thead>
         <tr><th>Type de surface</th><th>Cr</th><th>m²</th><th>Commentaire</th><th></th></tr>
       </thead>
@@ -201,13 +277,16 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
   <button id="btn-calc" onclick="calculateAll()">⟳ Calculer les scénarios</button>
 </aside>
 
+<div id="sidebar-resize" title="Glisser pour redimensionner"></div>
+
 <main id="main">
   <div id="tabs">
     <div class="tab active" onclick="showTab('s1')">Sc. 1 — Dispersion pure</div>
     <div class="tab" onclick="showTab('s2')">Sc. 2 — Disp. + Ajutage</div>
     <div class="tab" onclick="showTab('s3')">Sc. 3 — Surprofondeur</div>
-    <div class="tab" onclick="showTab('sim')">🎬 Simulation</div>
-    <div class="tab" onclick="showTab('prot')">🛡️ Matrice protection</div>
+    <div class="tab" onclick="showTab('sim')">Simulation</div>
+    <div class="tab" onclick="showTab('prot')">Matrice protection</div>
+    <div class="tab" onclick="showTab('report')">📝 Reporting</div>
   </div>
 
   <div id="tab-content">
@@ -367,7 +446,75 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
       </div>
     </div>
 
-    <div id="pane-prot" class="tab-pane">
+    <div id="pane-report" class="tab-pane">
+      <div id="report-tab">
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>Génération de rapport</strong> — Remplissez les informations du projet, choisissez les sections à inclure, puis générez un PDF (impression / enregistrement) ou un document Word.
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Informations du projet</div>
+          <div class="report-form">
+            <div class="field"><label>Titre du projet</label><input type="text" id="rep-title" placeholder="Ex : Lotissement Les Pommiers"></div>
+            <div class="field"><label>Référence projet</label><input type="text" id="rep-ref" placeholder="Ex : SML-2026-001"></div>
+            <div class="field"><label>Maître d'ouvrage</label><input type="text" id="rep-client" placeholder="Nom du client"></div>
+            <div class="field"><label>Auteur du rapport</label><input type="text" id="rep-author" placeholder="Ingénieur responsable"></div>
+            <div class="field"><label>Localisation</label><input type="text" id="rep-location" placeholder="Adresse / parcelle"></div>
+            <div class="field"><label>Date du rapport</label><input type="date" id="rep-date"></div>
+            <div class="field" style="grid-column:1 / -1;"><label>Description du projet</label><textarea id="rep-desc" placeholder="Brève description du projet, contexte, contraintes…"></textarea></div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Sections à inclure</div>
+          <div class="section-toggles">
+            <label><input type="checkbox" id="sec-cover" checked> Page de garde</label>
+            <label><input type="checkbox" id="sec-summary" checked> Synthèse exécutive</label>
+            <label><input type="checkbox" id="sec-hypotheses" checked> Hypothèses</label>
+            <label><input type="checkbox" id="sec-rain" checked> Pluies de référence</label>
+            <label><input type="checkbox" id="sec-surfaces" checked> Surfaces drainées</label>
+            <label><input type="checkbox" id="sec-perm" checked> Perméabilité</label>
+            <label><input type="checkbox" id="sec-s1" checked> Scénario 1 — Dispersion pure</label>
+            <label><input type="checkbox" id="sec-s2" checked> Scénario 2 — Dispersion + ajutage</label>
+            <label><input type="checkbox" id="sec-s3" checked> Scénario 3 — Surprofondeur</label>
+            <label><input type="checkbox" id="sec-prot"> Matrice de protection</label>
+            <label><input type="checkbox" id="sec-conclu" checked> Conclusions et recommandations</label>
+            <label><input type="checkbox" id="sec-signature" checked> Signature</label>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Hypothèses</div>
+          <textarea id="rep-hypotheses" style="width:100%;min-height:90px;padding:6px 8px;border:1px solid var(--gray-light);border-radius:4px;font-size:12px;font-family:inherit;" placeholder="Hypothèses spécifiques à l'étude (ex : drainage gravitaire, profondeur de la nappe, etc.)"></textarea>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Conclusions et recommandations</div>
+          <textarea id="rep-conclu" style="width:100%;min-height:100px;padding:6px 8px;border:1px solid var(--gray-light);border-radius:4px;font-size:12px;font-family:inherit;" placeholder="Synthèse des résultats, recommandations dimensionnelles, remarques…"></textarea>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Génération</div>
+          <div class="report-actions">
+            <button class="btn-pdf" onclick="generatePDF()">📄 Générer PDF (impression)</button>
+            <button class="btn-word" onclick="generateWord()">📘 Télécharger Word (.doc)</button>
+            <button class="btn-json" onclick="exportStudyJSON()">💾 Exporter étude (JSON)</button>
+            <button class="btn-json" onclick="importStudy()" style="background:var(--green);">📂 Importer étude (JSON)</button>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
+            Le PDF s'obtient via la boîte de dialogue d'impression du navigateur (choisissez « Enregistrer au format PDF »).<br>
+            Le fichier Word (.doc) s'ouvre dans Microsoft Word, LibreOffice, etc. et peut être édité librement.
+          </div>
+        </div>
+
+        <div id="report-preview" class="section-card" style="display:none;">
+          <div class="col-title">Aperçu du rapport</div>
+          <div id="report-preview-content"></div>
+        </div>
+      </div>
+    </div>
+
+        <div id="pane-prot" class="tab-pane">
       <div class="info-box" style="margin-bottom:10px;">
         <strong>Matrice de protection</strong> — Pour la configuration du bassin choisie, indique pour chaque combinaison <em>durée × période de retour</em> si le bassin déborde ou non. La cellule encadrée jaune correspond à la période de retour de dimensionnement.
       </div>
@@ -1113,7 +1260,7 @@ function renderS3(r) {
 
 // ===================== TABS =====================
 function showTab(id) {
-  const ids = ['s1','s2','s3','sim','prot'];
+  const ids = ['s1','s2','s3','sim','prot','report'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i]===id));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   $('pane-'+id).classList.add('active');
@@ -1546,14 +1693,14 @@ function renderSurfaceTable() {
   const tbody = $('surf-tbody');
   tbody.innerHTML = surfaceRows.map((r, idx) => `
     <tr>
-      <td><input type="text" value="${escapeHtml(r.name)}" data-surf-idx="${idx}" data-surf-field="name" style="width:100%;min-width:130px;padding:2px 4px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;"></td>
-      <td><input type="number" value="${r.cr}" step="0.05" min="0" max="1" data-surf-idx="${idx}" data-surf-field="cr" style="width:48px;padding:2px 3px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;text-align:center;"></td>
-      <td><input type="number" value="${r.m2}" min="0" data-surf-idx="${idx}" data-surf-field="m2" style="width:70px;padding:2px 4px;border:1px solid var(--gray-light);border-radius:3px;font-size:12px;text-align:right;"></td>
-      <td><input type="text" value="${escapeHtml(r.comment||'')}" data-surf-idx="${idx}" data-surf-field="comment" placeholder="–" style="width:100%;min-width:80px;padding:2px 4px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;"></td>
-      <td><button type="button" onclick="removeSurfaceRow(${idx})" title="Supprimer" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:700;padding:2px 6px;font-size:14px;">×</button></td>
+      <td><input type="text" value="${escapeHtml(r.name)}" data-surf-idx="${idx}" data-surf-field="name" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;"></td>
+      <td><input type="number" value="${r.cr}" step="0.05" min="0" max="1" data-surf-idx="${idx}" data-surf-field="cr" style="width:100%;padding:3px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;text-align:center;"></td>
+      <td><input type="number" value="${r.m2}" min="0" data-surf-idx="${idx}" data-surf-field="m2" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:12px;text-align:right;"></td>
+      <td><textarea data-surf-idx="${idx}" data-surf-field="comment" placeholder="–" rows="1" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;">${escapeHtml(r.comment||'')}</textarea></td>
+      <td style="text-align:center;"><button type="button" onclick="removeSurfaceRow(${idx})" title="Supprimer" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:700;padding:2px 4px;font-size:16px;line-height:1;">×</button></td>
     </tr>
   `).join('');
-  tbody.querySelectorAll('input').forEach(inp => {
+  tbody.querySelectorAll('input, textarea').forEach(inp => {
     inp.addEventListener('input', e => {
       const i = parseInt(e.target.dataset.surfIdx);
       const f = e.target.dataset.surfField;
@@ -1584,6 +1731,405 @@ function populateCommuneDropdown() {
   const keys = Object.keys(COMMUNES_DATA).sort((a,b) => a.localeCompare(b, 'fr', {sensitivity:'base'}));
   sel.innerHTML = keys.map(k => `<option value="${escapeHtml(k)}"${k===DEFAULT_COMMUNE?' selected':''}>${escapeHtml(k)}</option>`).join('');
 }
+
+
+
+// ===================== SML LOGO (réutilisable) =====================
+const SML_LOGO_INLINE = `<svg viewBox="0 0 250 60" xmlns="http://www.w3.org/2000/svg" style="height:42px;width:auto;">
+  <rect x="0" y="3" width="3" height="32" fill="#111"/>
+  <rect x="5" y="3" width="3" height="32" fill="#111"/>
+  <rect x="10" y="3" width="3" height="32" fill="#111"/>
+  <rect x="16" y="0" width="170" height="38" fill="#111"/>
+  <text x="22" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">SML</text>
+  <text x="74" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">GROUP</text>
+  <text x="0" y="55" fill="#111" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="9" letter-spacing="1.5">SML INGÉNIEURS CONSEILS</text>
+</svg>`;
+
+// ===================== SIDEBAR RESIZE =====================
+(function() {
+  const resize = $('sidebar-resize');
+  const sidebar = $('sidebar');
+  if (!resize || !sidebar) return;
+  let dragging = false, startX = 0, startW = 0;
+  resize.addEventListener('mousedown', e => {
+    dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    resize.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const newW = Math.max(280, Math.min(600, startW + (e.clientX - startX)));
+    sidebar.style.width = newW + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging = false; resize.classList.remove('dragging');
+      document.body.style.cursor = '';
+    }
+  });
+})();
+
+// ===================== STUDY IMPORT / EXPORT =====================
+function captureStudyState() {
+  return {
+    version: 5,
+    exported_at: new Date().toISOString(),
+    commune: $('inp-commune').value,
+    rp: $('inp-rp').value,
+    kmes: $('inp-kmes').value,
+    ks: $('inp-ks').value,
+    tmax: $('inp-tmax').value,
+    surfaces: surfaceRows.map(r => ({name: r.name, cr: r.cr, m2: r.m2, comment: r.comment || ''})),
+    s1_suser: $('s1-suser').value,
+    s2_sdisp: $('s2-sdisp').value,
+    s2_qaj: $('s2-qaj').value,
+    s3_sdisp: $('s3-sdisp').value,
+    s3_vsurp: $('s3-vsurp').value,
+    s3_qaj: $('s3-qaj').value,
+    sim: {
+      scen: $('sim-scen').value,
+      rp: $('sim-rp').value,
+      sdisp: $('sim-sdisp').value,
+      vsurp: $('sim-vsurp').value,
+      vtamp: $('sim-vtamp').value,
+      qaj: $('sim-qaj').value,
+      selectedDurs: Array.from(simSelectedDurs)
+    },
+    report: {
+      title: ($('rep-title')||{}).value || '',
+      ref: ($('rep-ref')||{}).value || '',
+      client: ($('rep-client')||{}).value || '',
+      author: ($('rep-author')||{}).value || '',
+      location: ($('rep-location')||{}).value || '',
+      date: ($('rep-date')||{}).value || '',
+      desc: ($('rep-desc')||{}).value || '',
+      hypotheses: ($('rep-hypotheses')||{}).value || '',
+      conclusions: ($('rep-conclu')||{}).value || '',
+      sections: ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','prot','conclu','signature']
+        .reduce((a, k) => { const el = $('sec-'+k); if (el) a[k] = el.checked; return a; }, {})
+    }
+  };
+}
+
+function applyStudyState(s) {
+  if (!s || typeof s !== 'object') return;
+  if (s.commune && COMMUNES_DATA[s.commune]) $('inp-commune').value = s.commune;
+  if (s.rp) $('inp-rp').value = s.rp;
+  if (s.kmes !== undefined) $('inp-kmes').value = s.kmes;
+  if (s.ks !== undefined) $('inp-ks').value = s.ks;
+  if (s.tmax !== undefined) $('inp-tmax').value = s.tmax;
+  if (Array.isArray(s.surfaces) && s.surfaces.length) {
+    surfaceRows = s.surfaces.map(r => ({name: r.name||'', cr: r.cr, m2: r.m2, comment: r.comment||''}));
+    renderSurfaceTable();
+  }
+  if (s.s1_suser !== undefined) $('s1-suser').value = s.s1_suser;
+  if (s.s2_sdisp !== undefined) $('s2-sdisp').value = s.s2_sdisp;
+  if (s.s2_qaj !== undefined) $('s2-qaj').value = s.s2_qaj;
+  if (s.s3_sdisp !== undefined) $('s3-sdisp').value = s.s3_sdisp;
+  if (s.s3_vsurp !== undefined) $('s3-vsurp').value = s.s3_vsurp;
+  if (s.s3_qaj !== undefined) $('s3-qaj').value = s.s3_qaj;
+  if (s.sim) {
+    if (s.sim.scen) { $('sim-scen').value = s.sim.scen; $('sim-scen').dispatchEvent(new Event('change')); }
+    if (s.sim.rp) $('sim-rp').value = s.sim.rp;
+    if (s.sim.sdisp !== undefined) $('sim-sdisp').value = s.sim.sdisp;
+    if (s.sim.vsurp !== undefined) $('sim-vsurp').value = s.sim.vsurp;
+    if (s.sim.vtamp !== undefined) $('sim-vtamp').value = s.sim.vtamp;
+    if (s.sim.qaj !== undefined) $('sim-qaj').value = s.sim.qaj;
+    if (Array.isArray(s.sim.selectedDurs)) {
+      simSelectedDurs = new Set(s.sim.selectedDurs);
+      renderSimDurPills();
+    }
+  }
+  if (s.report) {
+    const r = s.report;
+    ['title','ref','client','author','location','date','desc','hypotheses','conclu'].forEach(k => {
+      const el = $('rep-' + (k === 'conclu' ? 'conclu' : k));
+      if (el && r[k] !== undefined) el.value = r[k];
+    });
+    if (r.sections) Object.keys(r.sections).forEach(k => {
+      const el = $('sec-' + k); if (el) el.checked = !!r.sections[k];
+    });
+  }
+  updateSummary();
+  calculateAll();
+}
+
+function exportStudyJSON() {
+  const data = captureStudyState();
+  const name = ((data.report.ref || data.report.title || 'etude-bassin')+'').replace(/[^\w\-]+/g,'_') + '.json';
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importStudy() {
+  $('import-file').click();
+}
+
+function handleImportFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      applyStudyState(data);
+      alert('Étude importée avec succès.');
+    } catch (err) {
+      alert('Fichier JSON invalide : ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ===================== REPORT GENERATION =====================
+function htmlEsc(s) { return (s==null?'':String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function nl2br(s) { return htmlEsc(s).replace(/\n/g, '<br>'); }
+
+function buildReportHTML() {
+  const sec = {};
+  ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','prot','conclu','signature'].forEach(k => {
+    const el = $('sec-'+k); sec[k] = el ? el.checked : false;
+  });
+  const r = {
+    title: $('rep-title').value || 'Étude de bassin de dispersion',
+    ref: $('rep-ref').value || '',
+    client: $('rep-client').value || '',
+    author: $('rep-author').value || '',
+    location: $('rep-location').value || '',
+    date: $('rep-date').value || new Date().toISOString().slice(0,10),
+    desc: $('rep-desc').value || '',
+    hypotheses: $('rep-hypotheses').value || '',
+    conclusions: $('rep-conclu').value || ''
+  };
+
+  // Make sure scenarios are calculated
+  calculateAll();
+
+  const surf = getSurfaces();
+  const commune = $('inp-commune').value;
+  const rp = parseInt($('inp-rp').value);
+  const k = getKcalc(), kmes = getKmes(), ks = getKs(), tmax_h = getTmax_s()/3600;
+
+  let html = `<div class="report-doc">`;
+
+  // ========== DOC HEADER (logo + meta) ==========
+  html += `<div class="doc-header">
+    <div>${SML_LOGO_INLINE}</div>
+    <div class="meta">
+      <div><strong>Rapport d'étude</strong></div>
+      ${r.ref?`<div>Réf. ${htmlEsc(r.ref)}</div>`:''}
+      <div>${htmlEsc(r.date)}</div>
+    </div>
+  </div>`;
+
+  // ========== COVER ==========
+  if (sec.cover) {
+    html += `<h1>${htmlEsc(r.title)}</h1>`;
+    html += `<div class="meta-grid">`;
+    if (r.client) html += `<div><strong>Maître d'ouvrage :</strong> ${htmlEsc(r.client)}</div>`;
+    if (r.location) html += `<div><strong>Localisation :</strong> ${htmlEsc(r.location)}</div>`;
+    if (r.author) html += `<div><strong>Auteur :</strong> ${htmlEsc(r.author)}</div>`;
+    html += `<div><strong>Date :</strong> ${htmlEsc(r.date)}</div>`;
+    html += `<div><strong>Commune (IRM) :</strong> ${htmlEsc(commune)}</div>`;
+    html += `<div><strong>Période de retour :</strong> ${rp} ans</div>`;
+    html += `</div>`;
+    if (r.desc) html += `<h3>Description du projet</h3><p>${nl2br(r.desc)}</p>`;
+  }
+
+  // ========== SUMMARY ==========
+  if (sec.summary) {
+    html += `<h2>Synthèse exécutive</h2>`;
+    html += `<table>
+      <tr><th>Paramètre</th><th>Valeur</th></tr>
+      <tr><td>Commune de référence (IRM)</td><td>${htmlEsc(commune)}</td></tr>
+      <tr><td>Période de retour de dimensionnement</td><td>${rp} ans</td></tr>
+      <tr><td>Surface totale drainée</td><td>${surf.stot.toFixed(0)} m² (${(surf.stot/10000).toFixed(4)} ha)</td></tr>
+      <tr><td>Surface effective (× Cr)</td><td>${surf.seff.toFixed(0)} m²</td></tr>
+      <tr><td>Coefficient de ruissellement moyen</td><td>${surf.stot>0?surf.crmoy.toFixed(3):'–'}</td></tr>
+      <tr><td>Vitesse mesurée (k_mesuré)</td><td>${kmes.toExponential(3)} m/s</td></tr>
+      <tr><td>Coefficient de sécurité</td><td>${ks.toFixed(2)}</td></tr>
+      <tr><td>Vitesse de calcul (k_calcul)</td><td>${k<=0?'0 (imperméable)':k.toExponential(3)+' m/s'}</td></tr>
+      <tr><td>Temps de vidange max après la pluie</td><td>${tmax_h.toFixed(1)} h</td></tr>
+    </table>`;
+    if (state.s1 && !state.s1.error)
+      html += `<p style="margin-top:6px;"><strong>Sc. 1 (dispersion pure) :</strong> S_min = ${state.s1.Smin.toFixed(1)} m², V_tampon = ${state.s1.Vbuf.toFixed(2)} m³.</p>`;
+    if (state.s2 && !state.s2.error)
+      html += `<p><strong>Sc. 2 (dispersion + ajutage) :</strong> V_tampon = ${state.s2.Vbuf.toFixed(2)} m³, Q_vidange = ${state.s2.Qvidange_Ls.toFixed(2)} L/s.</p>`;
+    if (state.s3 && !state.s3.error) {
+      const s3stat = state.s3.anyNOK ? '<span class="badge badge-red">NOK</span>' : (state.s3.anyNonCompliant ? '<span class="badge badge-yellow">!OK</span>' : '<span class="badge badge-green">OK</span>');
+      html += `<p><strong>Sc. 3 (surprofondeur) :</strong> V_tampon = ${state.s3.Vbuf.toFixed(2)} m³, V_surprofondeur = ${state.s3.Vsurp.toFixed(2)} m³, V_total = ${state.s3.Vtotal.toFixed(2)} m³ — statut global ${s3stat}.</p>`;
+    }
+  }
+
+  // ========== HYPOTHESES ==========
+  if (sec.hypotheses) {
+    html += `<h2>Hypothèses</h2>`;
+    html += `<ul>
+      <li>Source des pluies : IRM — formule de Montana — commune <strong>${htmlEsc(commune)}</strong>.</li>
+      <li>Période de retour de dimensionnement : <strong>${rp} ans</strong>.</li>
+      <li>Vitesse d'infiltration de calcul : k = k_mesuré / Cs = ${k<=0?'0 m/s (sol imperméable)':k.toExponential(3)+' m/s'}.</li>
+      <li>Temps de vidange maximal admissible après la pluie : ${tmax_h.toFixed(1)} h.</li>
+      <li>Le volume tampon est calculé pour la durée de pluie la plus défavorable.</li>
+      <li>Le statut OK / !OK / NOK du scénario 3 est défini comme suit : OK si vidange complète &lt; t_max ; !OK si vidange incomplète mais volume résiduel libre suffisant pour absorber un second épisode pluvieux de même période de retour (toute durée) ; NOK sinon.</li>
+    </ul>`;
+    if (r.hypotheses) html += `<h3>Hypothèses spécifiques</h3><p>${nl2br(r.hypotheses)}</p>`;
+  }
+
+  // ========== RAIN ==========
+  if (sec.rain) {
+    html += `<h2>Pluies de référence</h2>`;
+    html += `<p>Données IRM — Formule de Montana — commune <strong>${htmlEsc(commune)}</strong> — période de retour <strong>${rp} ans</strong>.</p>`;
+    html += `<table>
+      <tr><th>Durée</th><th>Pluie (mm)</th><th>Intensité (L/(s·ha))</th><th>Q ruissellement (L/s)</th><th>V pluie (m³)</th></tr>`;
+    DUR.forEach((d, i) => {
+      const mm = rainMm(d, rp);
+      const Q = rainFlow_Ls(d, rp);
+      const V = mm * surf.seff / 1000;
+      const iLsha = rainIntensity_Lsha(d, rp);
+      html += `<tr><td>${DUR_LBL[i]}</td><td>${mm.toFixed(1)}</td><td>${iLsha.toFixed(2)}</td><td>${Q.toFixed(3)}</td><td>${V.toFixed(2)}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+
+  // ========== SURFACES ==========
+  if (sec.surfaces) {
+    html += `<h2>Surfaces drainées</h2>`;
+    html += `<table>
+      <tr><th>Type</th><th>Cr</th><th>Surface (m²)</th><th>Effective (m²)</th><th>Commentaire</th></tr>`;
+    surfaceRows.forEach(s => {
+      const a = parseFloat(s.m2)||0, c = parseFloat(s.cr)||0;
+      html += `<tr><td>${htmlEsc(s.name)}</td><td>${c.toFixed(2)}</td><td>${a.toFixed(0)}</td><td>${(a*c).toFixed(0)}</td><td>${htmlEsc(s.comment||'')}</td></tr>`;
+    });
+    html += `<tr style="background:#f8f8f8;font-weight:700;"><td>TOTAL</td><td>${surf.crmoy.toFixed(3)}</td><td>${surf.stot.toFixed(0)}</td><td>${surf.seff.toFixed(0)}</td><td></td></tr>`;
+    html += `</table>`;
+  }
+
+  // ========== PERM ==========
+  if (sec.perm) {
+    html += `<h2>Perméabilité du sol</h2>`;
+    html += `<table>
+      <tr><th>Paramètre</th><th>Valeur</th></tr>
+      <tr><td>Vitesse mesurée k_mesuré</td><td>${kmes.toExponential(3)} m/s</td></tr>
+      <tr><td>Coefficient de sécurité Cs</td><td>${ks.toFixed(2)}</td></tr>
+      <tr><td>Vitesse de calcul k_calcul</td><td>${k<=0?'0 m/s (sol imperméable)':k.toExponential(3)+' m/s'}</td></tr>
+      <tr><td>Temps de vidange max après la pluie</td><td>${tmax_h.toFixed(1)} h</td></tr>
+    </table>`;
+  }
+
+  // ========== S1 ==========
+  if (sec.s1 && state.s1 && !state.s1.error) {
+    html += `<h2>Scénario 1 — Dispersion pure</h2>`;
+    const s = state.s1;
+    html += `<p>S_min = <strong>${s.Smin.toFixed(2)} m²</strong> — Surface utilisée = ${s.Seff_used.toFixed(2)} m² — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — V tampon (dim.) = <strong>${s.Vbuf.toFixed(2)} m³</strong> — Pluie critique : ${s.rows[s.critIdx].label}.</p>`;
+    html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>S_min (m²)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>`;
+    s.rows.forEach((row, i) => {
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
+      html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.Smin_d.toFixed(1)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+
+  // ========== S2 ==========
+  if (sec.s2 && state.s2 && !state.s2.error) {
+    html += `<h2>Scénario 2 — Dispersion + ajutage</h2>`;
+    const s = state.s2;
+    html += `<p>S_disp = ${s.Sdisp.toFixed(0)} m² — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — Q_ajutage = ${s.Qaj_user_Ls.toFixed(3)} L/s — Q_vidange = ${s.Qvidange_Ls.toFixed(3)} L/s — V tampon = <strong>${s.Vbuf.toFixed(2)} m³</strong>.</p>`;
+    html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>V infil max</th><th>V à évacuer</th><th>Q ajut. min (L/s)</th><th>V tampon</th><th>t vidange (h)</th><th>Statut</th></tr>`;
+    s.rows.forEach((row, i) => {
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
+      html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.V_infil_max.toFixed(3)}</td><td>${row.V_aj.toFixed(3)}</td><td>${row.Q_aj_d_Ls.toFixed(3)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+
+  // ========== S3 ==========
+  if (sec.s3 && state.s3 && !state.s3.error) {
+    html += `<h2>Scénario 3 — Surprofondeur</h2>`;
+    const s = state.s3;
+    html += `<p>S_disp = ${s.Sdisp.toFixed(0)} m² — V_surprofondeur = ${s.Vsurp.toFixed(2)} m³ — V_tampon = <strong>${s.Vbuf.toFixed(2)} m³</strong> — V_total = ${s.Vtotal.toFixed(2)} m³ — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — Q_ajutage = ${s.Qaj_Ls.toFixed(3)} L/s.</p>`;
+    html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V tampon (m³)</th><th>t vid. tampon (h)</th><th>t vid. surp (h)</th><th>t total (h)</th><th>V libre à t_max</th><th>Statut</th></tr>`;
+    s.rows.forEach((row, i) => {
+      const badge = row.status === 'OK' ? '<span class="badge badge-green">OK</span>'
+                  : row.status === 'PARTIAL' ? '<span class="badge badge-yellow">!OK</span>'
+                  : '<span class="badge badge-red">NOK</span>';
+      html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.Vbuf_d.toFixed(3)}</td><td>${isFinite(row.t_drain_buf_h)?row.t_drain_buf_h.toFixed(2):'∞'}</td><td>${isFinite(row.t_drain_surp_h)?row.t_drain_surp_h.toFixed(2):'∞'}</td><td>${isFinite(row.t_total_drain_h)?row.t_total_drain_h.toFixed(2):'∞'}</td><td>${row.V_free_after_Tmax.toFixed(2)}</td><td>${badge}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+
+  // ========== CONCLUSIONS ==========
+  if (sec.conclu && r.conclusions) {
+    html += `<h2>Conclusions et recommandations</h2><p>${nl2br(r.conclusions)}</p>`;
+  }
+
+  // ========== SIGNATURE ==========
+  if (sec.signature) {
+    html += `<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+      <div><strong>Auteur</strong><br>${htmlEsc(r.author||'—')}<br><br><br>Signature : ____________________</div>
+      <div><strong>Date</strong><br>${htmlEsc(r.date)}<br><br><br>Cachet : ____________________</div>
+    </div>`;
+  }
+
+  html += `<div class="footer-note">Rapport généré par le Simulateur Bassin de Dispersion — SML Ingénieurs Conseils — Données pluviométriques IRM.</div>`;
+  html += `</div>`;
+  return html;
+}
+
+function generatePDF() {
+  const html = buildReportHTML();
+  // Place rendered report into a #print-area and call window.print()
+  let pa = $('print-area');
+  if (!pa) {
+    pa = document.createElement('div');
+    pa.id = 'print-area';
+    document.body.appendChild(pa);
+  }
+  pa.innerHTML = html;
+  // Also show in preview
+  $('report-preview').style.display = 'block';
+  $('report-preview-content').innerHTML = html;
+  window.print();
+}
+
+function generateWord() {
+  const html = buildReportHTML();
+  const fullDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>Rapport</title>
+<style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
+h1 { font-size: 20pt; border-bottom: 3px solid #111; padding-bottom: 6px; }
+h2 { font-size: 13pt; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; margin-top: 18pt; }
+h3 { font-size: 11pt; color: #1565C0; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }
+table th { background: #f2f2f2; padding: 5px 7px; border: 1px solid #999; text-align: left; }
+table td { padding: 5px 7px; border: 1px solid #999; }
+.meta-grid { font-size: 10pt; margin-bottom: 14px; }
+.meta-grid div { padding: 2px 0; }
+.doc-header { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+.badge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:9pt; font-weight:700; }
+.badge-green { background:#E8F5E9; color:#1B5E20; }
+.badge-red { background:#FFEBEE; color:#B71C1C; }
+.badge-yellow { background:#FFF59D; color:#E65100; }
+.footer-note { font-size: 9pt; color: #777; text-align: center; border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 18pt; }
+</style></head><body>${html}</body></html>`;
+  const blob = new Blob(['\ufeff', fullDoc], {type: 'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const refOrTitle = (($('rep-ref').value || $('rep-title').value || 'rapport-bassin')+'').replace(/[^\w\-]+/g,'_');
+  a.href = url; a.download = refOrTitle + '.doc'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Initialize report date to today
+window.addEventListener('load', () => {
+  const dEl = $('rep-date');
+  if (dEl && !dEl.value) dEl.value = new Date().toISOString().slice(0,10);
+});
 
 // ===================== INIT =====================
 window.addEventListener('load', () => {
