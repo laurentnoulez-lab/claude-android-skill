@@ -299,17 +299,11 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
 
           <div class="ctrl-card">
             <div class="ctrl-title">Événement pluvieux</div>
-            <div class="ctrl-row">
-              <label>Durée pluie</label>
-              <select id="sim-dur">
-                <option value="10">10 min</option><option value="20">20 min</option>
-                <option value="30">30 min</option><option value="60">1 h</option>
-                <option value="120">2 h</option><option value="180" selected>3 h</option>
-                <option value="360">6 h</option><option value="720">12 h</option>
-                <option value="1440">1 j</option><option value="2880">2 j</option>
-                <option value="4320">3 j</option><option value="7200">5 j</option>
-              </select>
+            <div class="ctrl-row" style="align-items:flex-start;">
+              <label style="margin-top:2px;">Durée(s) pluie</label>
+              <div id="sim-dur-pills" style="flex:1;display:flex;flex-wrap:wrap;gap:3px;"></div>
             </div>
+            <div style="font-size:10px;color:var(--text-muted);margin:2px 0 6px 0;">Cliquez pour activer/désactiver une durée. Chaque durée donne une courbe sur le graphique.</div>
             <div class="ctrl-row">
               <label>Période retour</label>
               <select id="sim-rp">
@@ -424,7 +418,7 @@ const DEFAULT_SURF_TYPES = [
 let surfaceRows = []; // {name, cr, m2, comment}
 
 // ===================== ÉTAT =====================
-let state = { s1: null, s2: null, s3: null, simData: [], simCrossings: [] };
+let state = { s1: null, s2: null, s3: null, simRuns: [] };
 let simChart = null;
 
 // ===================== HELPERS =====================
@@ -505,16 +499,58 @@ function updateSummary() {
 ['inp-kmes','inp-ks','inp-rp','inp-commune'].forEach(id => {
   const el = $(id); if (el) el.addEventListener('input', updateSummary);
 });
-$('sim-dur').addEventListener('change', updateSimRainInfo);
 $('sim-rp').addEventListener('change', updateSimRainInfo);
 
+// Simulation supports multiple rain durations on the same chart
+const SIM_DURATIONS = [10,20,30,60,120,180,360,720,1440,2880,4320,7200];
+const SIM_DUR_LABELS = ['10 min','20 min','30 min','1 h','2 h','3 h','6 h','12 h','1 j','2 j','3 j','5 j'];
+const SIM_DUR_COLORS = ['#1E88E5','#43A047','#FB8C00','#8E24AA','#E53935','#00ACC1','#3949AB','#7CB342','#F4511E','#5E35B1','#00897B','#C0CA33'];
+let simSelectedDurs = new Set([180]);
+
+function renderSimDurPills() {
+  const wrap = $('sim-dur-pills');
+  if (!wrap) return;
+  wrap.innerHTML = SIM_DURATIONS.map((d,i) => {
+    const sel = simSelectedDurs.has(d);
+    const color = SIM_DUR_COLORS[i];
+    return `<button type="button" data-dur="${d}" style="padding:2px 8px;font-size:10px;border-radius:11px;border:1.5px solid ${sel?color:'var(--gray-light)'};background:${sel?color:'var(--white)'};color:${sel?'#fff':'var(--text-muted)'};cursor:pointer;font-weight:${sel?'700':'400'};transition:all .15s;">${SIM_DUR_LABELS[i]}</button>`;
+  }).join('');
+  wrap.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      const d = parseInt(b.dataset.dur);
+      if (simSelectedDurs.has(d)) {
+        if (simSelectedDurs.size > 1) simSelectedDurs.delete(d);
+      } else {
+        simSelectedDurs.add(d);
+      }
+      renderSimDurPills();
+      updateSimRainInfo();
+    });
+  });
+}
+
+function getSelectedSimDurs() {
+  return SIM_DURATIONS.filter(d => simSelectedDurs.has(d));
+}
+
 function updateSimRainInfo() {
-  const d = parseInt($('sim-dur').value);
   const rp = parseInt($('sim-rp').value);
-  const mm = rainMm(d, rp);
-  const Q = rainFlow_Ls(d, rp);
-  const V = mm * getSurfaces().seff / 1000; // V_pluie = mm × S_eff / 1000 (m³)
-  $('sim-rain-info').textContent = `${mm.toFixed(1)} mm | Q=${Q.toFixed(2)} L/s | V=${V.toFixed(2)} m³`;
+  const durs = getSelectedSimDurs();
+  const seff = getSurfaces().seff;
+  if (durs.length === 1) {
+    const d = durs[0];
+    const mm = rainMm(d, rp);
+    const Q = rainFlow_Ls(d, rp);
+    const V = mm * seff / 1000;
+    $('sim-rain-info').textContent = `${mm.toFixed(1)} mm | Q=${Q.toFixed(2)} L/s | V=${V.toFixed(2)} m³`;
+  } else {
+    $('sim-rain-info').innerHTML = durs.map(d => {
+      const i = SIM_DURATIONS.indexOf(d);
+      const mm = rainMm(d, rp);
+      const V = mm * seff / 1000;
+      return `<span style="color:${SIM_DUR_COLORS[i]};font-weight:600;">${SIM_DUR_LABELS[i]}</span> : ${mm.toFixed(1)} mm · V=${V.toFixed(2)} m³`;
+    }).join('<br>');
+  }
 }
 
 // ===================== SCÉNARIO 1 — Dispersion pure =====================
@@ -1104,9 +1140,8 @@ function showTab(id) {
 }
 
 // ===================== SIMULATION (modèle dynamique) =====================
-function getSimParams() {
+function getSimParamsBase() {
   const scen = parseInt($('sim-scen').value);
-  const dur = parseInt($('sim-dur').value);
   const rp = parseInt($('sim-rp').value);
   const Sdisp = parseFloat($('sim-sdisp').value)||0;
   const Vsurp = scen === 3 ? (parseFloat($('sim-vsurp').value)||0) : 0;
@@ -1114,12 +1149,15 @@ function getSimParams() {
   const Qaj_Ls = scen >= 2 ? (parseFloat($('sim-qaj').value)||0) : 0;
   const {seff} = getSurfaces();
   const k = getKcalc();
-  const Qrain_Ls = rainFlow_Ls(dur, rp);
   const Qinfil_Ls = k * Sdisp * 1000;
-  // For scenario 1, the total basin = Vtamp (no separation)
-  // For scenarios 2,3, Vtotal = Vsurp + Vtamp
   const Vtotal = scen === 1 ? Vtamp : (Vsurp + Vtamp);
-  return { scen, dur, rp, Sdisp, Vsurp, Vtamp, Vtotal, Qaj_Ls, Qrain_Ls, Qinfil_Ls, seff, k };
+  return { scen, rp, Sdisp, Vsurp, Vtamp, Vtotal, Qaj_Ls, Qinfil_Ls, seff, k };
+}
+function getSimParams(dur) {
+  const base = getSimParamsBase();
+  base.dur = dur;
+  base.Qrain_Ls = rainFlow_Ls(dur, base.rp);
+  return base;
 }
 
 // Pas de temps adaptatif pour la simulation
@@ -1189,60 +1227,27 @@ function computeSimData(p) {
   return data;
 }
 
-// ---- chart annotation state ----
-let simCrossingAnnotations = [];
-let simRainDur_s = 0;
+// ---- chart rain-period bands (one per active duration) ----
+let simRainBands = []; // [{dur_s, color}, ...]
 
 const simChartPlugin = {
   id: 'simAnnotations',
   beforeDatasetsDraw(chart) {
-    if (!state.simData.length || simRainDur_s <= 0) return;
-    const meta0 = chart.getDatasetMeta(0);
-    if (!meta0 || !meta0.data || meta0.data.length < 2) return;
+    if (!simRainBands.length) return;
+    const xScale = chart.scales.x;
     const yScale = chart.scales.y;
-    if (!yScale) return;
-    let rainEndIdx = state.simData.length - 1;
-    for (let i = 0; i < state.simData.length; i++) {
-      if (state.simData[i].t >= simRainDur_s) { rainEndIdx = i; break; }
-    }
-    const x0 = meta0.data[0].x;
-    const xEnd = meta0.data[Math.min(rainEndIdx, meta0.data.length - 1)].x;
+    if (!xScale || !yScale) return;
     const ctx = chart.ctx;
-    ctx.save();
-    ctx.fillStyle = 'rgba(21,101,192,0.06)';
-    ctx.fillRect(x0, yScale.top, xEnd - x0, yScale.bottom - yScale.top);
-    if (xEnd - x0 > 30) {
-      ctx.fillStyle = 'rgba(21,101,192,0.45)';
-      ctx.font = '10px Segoe UI';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('🌧 Pluie', x0 + (xEnd - x0) / 2, yScale.top + 4);
-    }
-    ctx.restore();
-  },
-  afterDatasetsDraw(chart) {
-    if (!simCrossingAnnotations.length) return;
-    const meta0 = chart.getDatasetMeta(0);
-    if (!meta0 || !meta0.data || !meta0.data.length) return;
-    const yScale = chart.scales.y;
-    if (!yScale) return;
-    const ctx = chart.ctx;
-    simCrossingAnnotations.forEach(ann => {
-      if (ann.idx < 0 || ann.idx >= meta0.data.length) return;
-      const px = meta0.data[ann.idx].x;
-      const py = yScale.getPixelForValue(ann.value);
+    simRainBands.forEach((band, idx) => {
+      const x0 = xScale.getPixelForValue(0);
+      const xEnd = xScale.getPixelForValue(band.dur_s);
+      if (xEnd <= x0) return;
       ctx.save();
-      ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = ann.color + 'CC';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, yScale.bottom); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = ann.color;
-      ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.font = 'bold 9px Segoe UI,Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(ann.timeLabel, px, yScale.bottom + 4);
+      const c = band.color;
+      ctx.fillStyle = c + '14'; // ~8% alpha
+      const bandHeight = 6;
+      const yTop = yScale.top + idx * (bandHeight + 1);
+      ctx.fillRect(x0, yTop, xEnd - x0, bandHeight);
       ctx.restore();
     });
   }
@@ -1253,12 +1258,13 @@ function initSimIfNeeded() {
   const ctx = $('sim-chart').getContext('2d');
   simChart = new Chart(ctx, {
     type: 'line',
-    data: { labels: [], datasets: [] },
+    data: { datasets: [] },
     plugins: [simChartPlugin],
     options: {
       animation: { duration: 0 },
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { bottom: 24 } },
+      parsing: false,
+      layout: { padding: { bottom: 12 } },
       plugins: {
         legend: {
           position: 'top',
@@ -1266,77 +1272,63 @@ function initSimIfNeeded() {
         },
         tooltip: {
           callbacks: {
-            title: items => `t = ${items[0].label}`,
-            label: item => typeof item.raw === 'number' ? `${item.dataset.label}: ${item.raw.toFixed(3)} m³` : ''
+            title: items => items.length ? `t = ${fmtTime(items[0].parsed.x)}` : '',
+            label: item => item.dataset.refLine ? `${item.dataset.label}` : `${item.dataset.label}: ${item.parsed.y.toFixed(3)} m³`
           }
         }
       },
       scales: {
-        x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, title: { display: true, text: 'Temps depuis début de la pluie', font: { size: 11 } } },
+        x: {
+          type: 'linear', beginAtZero: true,
+          ticks: { maxTicksLimit: 10, font: { size: 10 }, callback: v => fmtTime(v) },
+          title: { display: true, text: 'Temps depuis début de la pluie', font: { size: 11 } }
+        },
         y: { beginAtZero: true, title: { display: true, text: 'Volume (m³)', font: { size: 11 } }, ticks: { font: { size: 10 } } }
       }
     }
   });
 }
 
-function buildFullChart(data, p) {
-  if (!simChart || !data.length) return [];
-  simRainDur_s = p.dur * 60;
-  const n = data.length;
-  const labels = data.map(d => fmtTime(d.t));
-  const Vdata = data.map(d => parseFloat(d.V.toFixed(4)));
+// Build chart with one V(t) curve per simulated duration + horizontal reference lines.
+// `runs` is an array of {dur, data, color, label}.
+function buildFullChart(runs, base) {
+  if (!simChart || !runs.length) return;
 
-  const datasets = [{
-    label: 'Volume V(t) [m³]',
-    data: Vdata,
-    borderColor: '#1E88E5',
-    backgroundColor: 'rgba(30,136,229,.12)',
-    fill: true, pointRadius: 0, tension: 0.3, borderWidth: 2.5, order: 10
-  }];
+  // Volume curves (linear x = time in seconds since rain start)
+  const datasets = runs.map(run => ({
+    label: `V(t) — ${run.label}`,
+    data: run.data.map(d => ({ x: d.t, y: parseFloat(d.V.toFixed(4)) })),
+    borderColor: run.color,
+    backgroundColor: run.color + '20',
+    fill: runs.length === 1, pointRadius: 0, tension: 0.3,
+    borderWidth: runs.length === 1 ? 2.5 : 2, order: 10
+  }));
 
-  // Horizontal reference levels
+  // x-range: 0 to max time across all runs
+  let xMax = 0;
+  runs.forEach(run => { run.data.forEach(d => { if (d.t > xMax) xMax = d.t; }); });
+
+  // Horizontal reference levels (constant across durations)
   const refs = [];
-  if (p.scen >= 2 && p.Vsurp > 0)
-    refs.push({ label: `V surprofondeur = ${p.Vsurp.toFixed(2)} m³`, value: p.Vsurp, color: '#E65100' });
-  if (p.Vtotal > 0)
-    refs.push({ label: `V total bassin = ${p.Vtotal.toFixed(2)} m³`, value: p.Vtotal, color: '#C62828' });
+  if (base.scen >= 2 && base.Vsurp > 0)
+    refs.push({ label: `V surprofondeur = ${base.Vsurp.toFixed(2)} m³`, value: base.Vsurp, color: '#E65100' });
+  if (base.Vtotal > 0)
+    refs.push({ label: `V total bassin = ${base.Vtotal.toFixed(2)} m³`, value: base.Vtotal, color: '#C62828' });
 
   refs.forEach(ref => datasets.push({
     label: ref.label,
-    data: new Array(n).fill(ref.value),
+    data: [{x: 0, y: ref.value}, {x: xMax, y: ref.value}],
     borderColor: ref.color, borderDash: [8, 4], borderWidth: 1.8,
-    fill: false, pointRadius: 0, tension: 0, order: 5
+    fill: false, pointRadius: 0, tension: 0, order: 5,
+    refLine: true
   }));
 
-  // Find crossing points (upward then downward per reference)
-  simCrossingAnnotations = [];
-  const crossings = [];
-  refs.forEach(ref => {
-    for (let i = 1; i < n; i++) {
-      if (data[i-1].V < ref.value - 1e-6 && data[i].V >= ref.value - 1e-6) {
-        const frac = (data[i].V - data[i-1].V) > 1e-9 ? (ref.value - data[i-1].V) / (data[i].V - data[i-1].V) : 0;
-        const t = data[i-1].t + frac * (data[i].t - data[i-1].t);
-        crossings.push({ label: ref.label, dir: '↑', t, color: ref.color });
-        simCrossingAnnotations.push({ idx: i, value: ref.value, color: ref.color, timeLabel: fmtTime(t) });
-        break;
-      }
-    }
-    for (let i = n - 1; i > 0; i--) {
-      if (data[i].V < ref.value - 1e-6 && data[i-1].V >= ref.value - 1e-6) {
-        const dV = data[i].V - data[i-1].V;
-        const frac = Math.abs(dV) > 1e-9 ? (ref.value - data[i-1].V) / dV : 1;
-        const t = data[i-1].t + frac * (data[i].t - data[i-1].t);
-        crossings.push({ label: ref.label, dir: '↓', t, color: ref.color });
-        simCrossingAnnotations.push({ idx: i, value: ref.value, color: ref.color, timeLabel: fmtTime(t) });
-        break;
-      }
-    }
-  });
+  // Rain duration bands (small color stripes at top of plot)
+  simRainBands = runs.map(run => ({ dur_s: run.dur * 60, color: run.color }));
 
-  simChart.data.labels = labels;
   simChart.data.datasets = datasets;
+  simChart.options.scales.x.max = xMax;
   simChart.update('none');
-  return crossings;
 }
 
 // drawBasin retired (no SVG/animation).
@@ -1344,60 +1336,76 @@ function buildFullChart(data, p) {
 
 function runSimulation() {
   initSimIfNeeded();
-  const p = getSimParams();
-  if (p.Vtotal <= 0) {
+  const base = getSimParamsBase();
+  if (base.Vtotal <= 0) {
     $('sim-stats').style.display = 'block';
     $('sim-stats-inner').innerHTML = '<div class="warn-box">Volume nul — importez un scénario calculé ou saisissez les volumes du bassin.</div>';
     if (simChart) {
-      simChart.data.labels = [];
       simChart.data.datasets = [];
+      simRainBands = [];
       simChart.update('none');
     }
     return;
   }
-  state.simData = computeSimData(p);
-  state.simCrossings = buildFullChart(state.simData, p);
-  showSimStats();
+  const durs = getSelectedSimDurs();
+  if (!durs.length) {
+    $('sim-stats').style.display = 'block';
+    $('sim-stats-inner').innerHTML = '<div class="warn-box">Sélectionnez au moins une durée de pluie.</div>';
+    return;
+  }
+  const runs = durs.map(dur => {
+    const i = SIM_DURATIONS.indexOf(dur);
+    const p = getSimParams(dur);
+    const data = computeSimData(p);
+    return { dur, label: SIM_DUR_LABELS[i], color: SIM_DUR_COLORS[i], data, p };
+  });
+  state.simRuns = runs;
+  buildFullChart(runs, base);
+  showSimStats(runs, base);
 }
 
-function showSimStats() {
-  const data = state.simData;
-  if (!data.length) return;
-  const p = getSimParams();
-  const Vmax = Math.max(...data.map(d => d.V));
-  const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
-  const Vover = data[data.length-1].Vover || 0;
-  const dur_s = p.dur * 60;
-  // Find drainage complete time (after rain stops, V reaches ~0)
-  let drainT = null;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i].t > dur_s && data[i].V < 1e-4 && data[i-1].V >= 1e-4) {
-      drainT = data[i].t;
-      break;
-    }
-  }
-  const drainTime = drainT !== null ? drainT - dur_s : null;
-
-  // Format crossings
-  const crossings = state.simCrossings || [];
-  const crossHTML = crossings.length > 0
-    ? '<hr style="margin:6px 0;border-color:var(--gray-pale);">' +
-      crossings.map(c => `<span style="color:${c.color};font-weight:700;">${c.dir}</span> <em>${c.label}</em> : <strong>${fmtTime(c.t)}</strong>`).join('<br>')
-    : '';
-
+function showSimStats(runs, base) {
+  if (!runs || !runs.length) return;
   $('sim-stats').style.display = 'block';
-  $('sim-stats-inner').innerHTML = `
-    <div style="margin-bottom:6px;">
-      <span class="badge ${overflowed?'badge-red':'badge-green'}">${overflowed?'⚠ DÉBORDEMENT':'✓ Pas de débordement'}</span>
+  const rows = runs.map(run => {
+    const data = run.data;
+    const dur_s = run.dur * 60;
+    const Vmax = Math.max(...data.map(d => d.V));
+    const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
+    const Vover = data[data.length-1].Vover || 0;
+    let drainT = null;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i].t > dur_s && data[i].V < 1e-4 && data[i-1].V >= 1e-4) {
+        drainT = data[i].t;
+        break;
+      }
+    }
+    const drainTime = drainT !== null ? drainT - dur_s : null;
+    const Tmax_s = getTmax_s();
+    const drainOK = drainTime !== null && drainTime <= Tmax_s;
+    return { run, Vmax, overflowed, Vover, drainTime, drainOK };
+  });
+  const anyOverflow = rows.some(r => r.overflowed);
+  const html = `
+    <div style="margin-bottom:8px;">
+      <span class="badge ${anyOverflow?'badge-red':'badge-green'}">${anyOverflow?'⚠ Débordement sur au moins une durée':'✓ Pas de débordement'}</span>
     </div>
-    <div style="font-size:11px;line-height:1.7;">
-      Vol. max : <strong>${Vmax.toFixed(3)} m³</strong> / ${p.Vtotal.toFixed(3)} m³
-        (${p.Vtotal>0?(Vmax/p.Vtotal*100).toFixed(0):0}%)<br>
-      ${overflowed?`Vol. débordement : <strong style="color:var(--red);">${Vover.toFixed(3)} m³</strong><br>`:''}
-      Fin pluie → vidange : <strong>${drainTime!==null?fmtTime(drainTime):'> fenêtre'}</strong>
-        ${drainTime!==null?(drainTime>24*3600?'<span style="color:var(--red);">⚠ > 24h</span>':'✓'):''}
-      ${crossHTML}
-    </div>`;
+    <table style="width:100%;font-size:10px;border-collapse:collapse;">
+      <tr style="background:var(--gray-pale);">
+        <th style="padding:3px 4px;text-align:left;">Durée</th>
+        <th style="padding:3px 4px;text-align:right;">V max (m³)</th>
+        <th style="padding:3px 4px;text-align:right;">%</th>
+        <th style="padding:3px 4px;text-align:right;">Vidange après pluie</th>
+      </tr>
+      ${rows.map(r => `
+        <tr style="border-bottom:1px solid var(--gray-pale);">
+          <td style="padding:3px 4px;color:${r.run.color};font-weight:700;">${r.run.label}</td>
+          <td style="padding:3px 4px;text-align:right;">${r.Vmax.toFixed(2)}${r.overflowed?` <span style="color:var(--red);">+${r.Vover.toFixed(2)} déb.</span>`:''}</td>
+          <td style="padding:3px 4px;text-align:right;">${base.Vtotal>0?(r.Vmax/base.Vtotal*100).toFixed(0):0}%</td>
+          <td style="padding:3px 4px;text-align:right;color:${r.drainOK===true?'var(--green)':(r.drainTime===null?'var(--red)':'var(--orange)')};">${r.drainTime!==null?fmtTime(r.drainTime):'> fenêtre'}</td>
+        </tr>`).join('')}
+    </table>`;
+  $('sim-stats-inner').innerHTML = html;
 }
 
 function prefillFromScenario() {
@@ -1425,7 +1433,7 @@ function prefillFromScenario() {
     return;
   }
   if (simChart) {
-    simChart.data.labels = [];
+    simRainBands = [];
     simChart.data.datasets = [];
     simChart.update('none');
   }
@@ -1439,7 +1447,7 @@ $('sim-scen').addEventListener('change', function() {
   $('row-vtamp').style.display = 'flex';
   $('row-qaj2').style.display = s >= 2 ? 'flex' : 'none';
   if (simChart) {
-    simChart.data.labels = [];
+    simRainBands = [];
     simChart.data.datasets = [];
     simChart.update('none');
   }
@@ -1582,6 +1590,7 @@ window.addEventListener('load', () => {
   populateCommuneDropdown();
   surfaceRows = DEFAULT_SURF_TYPES.map(t => ({name: t.name, cr: t.cr, m2: 0, comment: ''}));
   renderSurfaceTable();
+  renderSimDurPills();
   updateSummary();
   initSimIfNeeded();
 });
