@@ -23,7 +23,8 @@
 body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
 
 #hdr { background: #111; color: #fff; padding: 10px 22px; display: flex; align-items: center; gap: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.35); flex-shrink: 0; }
-#hdr .logo-wrap { background: #fff; padding: 4px 10px; border-radius: 4px; display: flex; align-items: center; }
+#hdr .logo-wrap { background: #fff; padding: 6px 12px; border-radius: 4px; display: flex; align-items: center; height: 60px; box-sizing: border-box; }
+#hdr .logo-wrap svg, #hdr .logo-wrap img { height: 100%; width: auto; max-width: 220px; }
 #hdr h1 { font-size: 16px; font-weight: 600; letter-spacing: .3px; }
 #hdr h1 .accent { color: #42A5F5; font-weight: 700; }
 #hdr .sub { font-size: 11px; opacity: .65; margin-left: auto; }
@@ -49,9 +50,9 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .surf-table td input, .surf-table td textarea { box-sizing: border-box; }
 .surf-table textarea { resize: vertical; min-height: 22px; max-height: 80px; font-family: inherit; line-height: 1.3; }
 .surf-coeff { font-size: 11px; color: var(--text-muted); text-align: center; }
-.surf-table col.col-type { width: 38%; }
-.surf-table col.col-cr   { width: 14%; }
-.surf-table col.col-m2   { width: 18%; }
+.surf-table col.col-type { width: 32%; }
+.surf-table col.col-cr   { width: 18%; }
+.surf-table col.col-m2   { width: 20%; }
 .surf-table col.col-com  { width: 24%; }
 .surf-table col.col-act  { width: 6%; }
 
@@ -174,6 +175,30 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .report-doc .badge-red   { background: #FFEBEE; color: #B71C1C; }
 .report-doc .badge-yellow{ background: #FFF59D; color: #E65100; }
 
+
+/* Page breaks in print/report */
+.report-doc h2 { page-break-before: always; break-before: page; }
+.report-doc h2:first-of-type, .report-doc .first-section h2 { page-break-before: avoid; break-before: avoid; }
+.report-doc .no-break-before h2 { page-break-before: avoid; break-before: avoid; }
+.report-doc table, .report-doc tr { page-break-inside: avoid; break-inside: avoid; }
+.report-doc h2 + p, .report-doc h2 + table { page-break-before: avoid; }
+
+/* Custom sections editor */
+#custom-sections-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.custom-section-item { background: var(--gray-pale); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--blue); }
+.custom-section-item .row { display: flex; gap: 6px; align-items: center; }
+.custom-section-item input[type=text] { flex: 1; padding: 5px 7px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 12px; }
+.custom-section-item textarea { padding: 5px 7px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 12px; min-height: 60px; font-family: inherit; resize: vertical; }
+.custom-section-item .btn-icon { background: none; border: 1px solid var(--gray-light); border-radius: 3px; padding: 3px 7px; cursor: pointer; font-size: 12px; color: var(--text-muted); }
+.custom-section-item .btn-icon:hover { background: var(--white); color: var(--blue); }
+.custom-section-item .btn-icon.danger:hover { color: var(--red); border-color: var(--red); }
+.custom-section-item .position-select { padding: 3px 6px; border: 1px solid var(--gray-light); border-radius: 3px; font-size: 11px; background: #fff; }
+.btn-add-section { background: var(--green); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-add-section:hover { background: #1B5E20; }
+.btn-demo { background: var(--orange); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-demo:hover { background: #BF360C; }
+
+/* Print-only fix: avoid the global *visibility:hidden* breaking new-window prints */
 @media print {
   body * { visibility: hidden !important; }
   #print-area, #print-area * { visibility: visible !important; }
@@ -192,15 +217,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
 <body>
 
 <div id="hdr">
-  <div class="logo-wrap"><svg viewBox="0 0 250 60" xmlns="http://www.w3.org/2000/svg" style="height:42px;width:auto;">
-  <rect x="0" y="3" width="3" height="32" fill="#111"/>
-  <rect x="5" y="3" width="3" height="32" fill="#111"/>
-  <rect x="10" y="3" width="3" height="32" fill="#111"/>
-  <rect x="16" y="0" width="170" height="38" fill="#111"/>
-  <text x="22" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">SML</text>
-  <text x="74" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">GROUP</text>
-  <text x="0" y="55" fill="#111" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="9" letter-spacing="1.5">SML INGÉNIEURS CONSEILS</text>
-</svg></div>
+  <div class="logo-wrap" id="hdr-logo-wrap"></div>
   <div><h1>Simulateur de <span class="accent">Bassin de Dispersion / Rétention</span></h1></div>
   <span class="sub">Données IRM — Formule de Montana — v5</span>
   <div id="hdr-actions">
@@ -385,12 +402,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             <div style="font-size:10px;color:var(--text-muted);margin:2px 0 6px 0;">Cliquez pour activer/désactiver une durée. Chaque durée donne une courbe sur le graphique.</div>
             <div class="ctrl-row">
               <label>Période retour</label>
-              <select id="sim-rp">
-                <option value="2">2 ans</option><option value="5">5 ans</option>
-                <option value="10">10 ans</option><option value="25" selected>25 ans</option>
-                <option value="50">50 ans</option><option value="100">100 ans</option>
-                <option value="200">200 ans</option>
-              </select>
+              <select id="sim-rp"></select>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
               Pluie : <strong id="sim-rain-info">–</strong>
@@ -477,10 +489,30 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             <label><input type="checkbox" id="sec-s1" checked> Scénario 1 — Dispersion pure</label>
             <label><input type="checkbox" id="sec-s2" checked> Scénario 2 — Dispersion + ajutage</label>
             <label><input type="checkbox" id="sec-s3" checked> Scénario 3 — Surprofondeur</label>
-            <label><input type="checkbox" id="sec-prot"> Matrice de protection</label>
+            <label><input type="checkbox" id="sec-prot" checked> Matrice de protection</label>
             <label><input type="checkbox" id="sec-conclu" checked> Conclusions et recommandations</label>
             <label><input type="checkbox" id="sec-signature" checked> Signature</label>
           </div>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Logo personnalisé</div>
+          <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+            <div id="logo-preview" style="background:#fff;border:1px solid var(--gray-light);padding:8px;border-radius:4px;height:80px;display:flex;align-items:center;justify-content:center;min-width:200px;"></div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <input type="file" id="logo-file" accept="image/png,image/jpeg,image/svg+xml" style="display:none;" onchange="handleLogoUpload(event)">
+              <button class="btn-json" onclick="document.getElementById('logo-file').click()" style="background:var(--blue);">📁 Téléverser logo (PNG/JPG/SVG)</button>
+              <button class="btn-json" onclick="resetLogo()">↺ Réinitialiser (logo par défaut)</button>
+              <div style="font-size:11px;color:var(--text-muted);max-width:280px;">Le logo téléversé est utilisé dans l'en-tête de l'application et dans tous les rapports générés. Il est conservé localement dans votre navigateur.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="col-title">Rubriques personnalisées</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Ajoutez vos propres rubriques (description, méthodologie, contraintes…). Elles sont insérées dans le rapport à la position choisie.</div>
+          <button class="btn-add-section" onclick="addCustomSection()">+ Ajouter une rubrique</button>
+          <div id="custom-sections-list"></div>
         </div>
 
         <div class="section-card">
@@ -496,13 +528,14 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
         <div class="section-card">
           <div class="col-title">Génération</div>
           <div class="report-actions">
-            <button class="btn-pdf" onclick="generatePDF()">📄 Générer PDF (impression)</button>
+            <button class="btn-pdf" onclick="generatePDF()">📄 Générer PDF (nouvel onglet)</button>
             <button class="btn-word" onclick="generateWord()">📘 Télécharger Word (.doc)</button>
             <button class="btn-json" onclick="exportStudyJSON()">💾 Exporter étude (JSON)</button>
             <button class="btn-json" onclick="importStudy()" style="background:var(--green);">📂 Importer étude (JSON)</button>
+            <button class="btn-demo" onclick="loadDemoProject()">🎯 Charger projet démo</button>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
-            Le PDF s'obtient via la boîte de dialogue d'impression du navigateur (choisissez « Enregistrer au format PDF »).<br>
+            Le PDF s'ouvre dans un nouvel onglet — la boîte de dialogue d'impression apparaît automatiquement (choisissez « Enregistrer au format PDF »). L'application reste ouverte dans l'onglet courant.<br>
             Le fichier Word (.doc) s'ouvre dans Microsoft Word, LibreOffice, etc. et peut être édité librement.
           </div>
         </div>
@@ -1694,7 +1727,7 @@ function renderSurfaceTable() {
   tbody.innerHTML = surfaceRows.map((r, idx) => `
     <tr>
       <td><input type="text" value="${escapeHtml(r.name)}" data-surf-idx="${idx}" data-surf-field="name" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;"></td>
-      <td><input type="number" value="${r.cr}" step="0.05" min="0" max="1" data-surf-idx="${idx}" data-surf-field="cr" style="width:100%;padding:3px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;text-align:center;"></td>
+      <td><input type="number" value="${r.cr}" step="0.05" min="0" max="1" data-surf-idx="${idx}" data-surf-field="cr" style="width:100%;padding:3px 1px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;text-align:center;box-sizing:border-box;"></td>
       <td><input type="number" value="${r.m2}" min="0" data-surf-idx="${idx}" data-surf-field="m2" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:12px;text-align:right;"></td>
       <td><textarea data-surf-idx="${idx}" data-surf-field="comment" placeholder="–" rows="1" style="width:100%;padding:3px 5px;border:1px solid var(--gray-light);border-radius:3px;font-size:11px;">${escapeHtml(r.comment||'')}</textarea></td>
       <td style="text-align:center;"><button type="button" onclick="removeSurfaceRow(${idx})" title="Supprimer" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:700;padding:2px 4px;font-size:16px;line-height:1;">×</button></td>
@@ -1735,15 +1768,21 @@ function populateCommuneDropdown() {
 
 
 // ===================== SML LOGO (réutilisable) =====================
-const SML_LOGO_INLINE = `<svg viewBox="0 0 250 60" xmlns="http://www.w3.org/2000/svg" style="height:42px;width:auto;">
-  <rect x="0" y="3" width="3" height="32" fill="#111"/>
-  <rect x="5" y="3" width="3" height="32" fill="#111"/>
-  <rect x="10" y="3" width="3" height="32" fill="#111"/>
-  <rect x="16" y="0" width="170" height="38" fill="#111"/>
-  <text x="22" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">SML</text>
-  <text x="74" y="27" fill="#fff" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="22" letter-spacing="0.5">GROUP</text>
-  <text x="0" y="55" fill="#111" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="9" letter-spacing="1.5">SML INGÉNIEURS CONSEILS</text>
+const SML_LOGO_INLINE_DEFAULT = `<svg viewBox="0 0 260 80" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMid meet" style="height:100%;width:auto;display:block;">
+  <rect x="0"  y="6"  width="4" height="44" fill="#111"/>
+  <rect x="6"  y="6"  width="4" height="44" fill="#111"/>
+  <rect x="12" y="6"  width="4" height="44" fill="#111"/>
+  <rect x="20" y="0"  width="240" height="56" fill="#111"/>
+  <text x="28" y="42" fill="#fff" font-family="'Arial Black', 'Helvetica Black', Helvetica, sans-serif" font-weight="900" font-size="38" letter-spacing="-0.5">SML</text>
+  <text x="108" y="42" fill="#fff" font-family="'Arial Black', 'Helvetica Black', Helvetica, sans-serif" font-weight="900" font-size="38" letter-spacing="-0.5">GROUP</text>
+  <text x="0" y="74" fill="#111" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="11" letter-spacing="2">SML INGÉNIEURS CONSEILS</text>
 </svg>`;
+let CUSTOM_LOGO_DATAURL = null;
+try { CUSTOM_LOGO_DATAURL = localStorage.getItem('sml-custom-logo') || null; } catch(e) {}
+function currentLogoHTML() {
+  if (CUSTOM_LOGO_DATAURL) return `<img src="${CUSTOM_LOGO_DATAURL}" alt="Logo" style="height:100%;width:auto;display:block;object-fit:contain;max-height:60px;">`;
+  return SML_LOGO_INLINE_DEFAULT;
+}
 
 // ===================== SIDEBAR RESIZE =====================
 (function() {
@@ -1807,8 +1846,10 @@ function captureStudyState() {
       hypotheses: ($('rep-hypotheses')||{}).value || '',
       conclusions: ($('rep-conclu')||{}).value || '',
       sections: ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','prot','conclu','signature']
-        .reduce((a, k) => { const el = $('sec-'+k); if (el) a[k] = el.checked; return a; }, {})
-    }
+        .reduce((a, k) => { const el = $('sec-'+k); if (el) a[k] = el.checked; return a; }, {}),
+      customSections: customSections.map(s => ({title: s.title, content: s.content, position: s.position}))
+    },
+    logoDataUrl: CUSTOM_LOGO_DATAURL || null
   };
 }
 
@@ -1850,9 +1891,89 @@ function applyStudyState(s) {
     if (r.sections) Object.keys(r.sections).forEach(k => {
       const el = $('sec-' + k); if (el) el.checked = !!r.sections[k];
     });
+    if (Array.isArray(r.customSections)) {
+      customSections = [];
+      r.customSections.forEach(cs => addCustomSection(cs));
+    }
+  }
+  if (s.logoDataUrl !== undefined) {
+    CUSTOM_LOGO_DATAURL = s.logoDataUrl || null;
+    try { if (CUSTOM_LOGO_DATAURL) localStorage.setItem('sml-custom-logo', CUSTOM_LOGO_DATAURL); else localStorage.removeItem('sml-custom-logo'); } catch(e) {}
+    refreshLogoUI();
   }
   updateSummary();
   calculateAll();
+}
+
+function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    CUSTOM_LOGO_DATAURL = ev.target.result;
+    try { localStorage.setItem('sml-custom-logo', CUSTOM_LOGO_DATAURL); } catch(err) {}
+    refreshLogoUI();
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+function resetLogo() {
+  CUSTOM_LOGO_DATAURL = null;
+  try { localStorage.removeItem('sml-custom-logo'); } catch(e) {}
+  refreshLogoUI();
+}
+function refreshLogoUI() {
+  const hdr = $('hdr-logo-wrap'); if (hdr) hdr.innerHTML = currentLogoHTML();
+  const prev = $('logo-preview'); if (prev) prev.innerHTML = currentLogoHTML();
+}
+
+function populateSimRP() {
+  const sel = $('sim-rp'); if (!sel) return;
+  const current = sel.value || '25';
+  sel.innerHTML = RP.map(rp => `<option value="${rp}" ${String(rp)===String(current)?'selected':''}>${rp} ans</option>`).join('');
+}
+
+function loadDemoProject() {
+  const demoState = {
+    version: 5,
+    commune: 'Liège',
+    rp: '25',
+    kmes: '2.5e-6',
+    ks: '1.5',
+    tmax: '24',
+    surfaces: [
+      {name: 'Toitures bâtiment principal', cr: 1.0, m2: 1250, comment: 'Toiture tuile, pente 25%'},
+      {name: 'Voiries asphaltées', cr: 0.95, m2: 680, comment: 'Accès et parking'},
+      {name: 'Parking pavé non-jointif', cr: 0.55, m2: 320, comment: 'Pavés perméables 10cm'},
+      {name: 'Allées gravier', cr: 0.30, m2: 180, comment: 'Cheminements piétons'},
+      {name: 'Espaces verts', cr: 0.15, m2: 920, comment: 'Pelouse, plantations'}
+    ],
+    s1_suser: 50,
+    s2_sdisp: 60,
+    s2_qaj: 2.5,
+    s3_sdisp: 120,
+    s3_vsurp: 25,
+    s3_qaj: 2.0,
+    sim: {scen:'3', rp:'25', sdisp:120, vsurp:25, vtamp:60, qaj:2.0, selectedDurs:[10,30,120,360]},
+    report: {
+      title: 'Projet démo — Étude de bassin de dispersion',
+      ref: 'SML-DEMO-2026-001',
+      client: 'Commune de Liège — Service Travaux',
+      author: 'Ing. Civil — SML Ingénieurs Conseils',
+      location: 'Rue de la Démonstration, 4000 Liège',
+      date: new Date().toISOString().slice(0,10),
+      desc: 'Projet de référence illustrant l\'usage du simulateur. Lotissement résidentiel de 5 lots avec voiries, parking et espaces verts. L\'eau pluviale est gérée intégralement sur la parcelle par un système de dispersion avec surprofondeur.',
+      hypotheses: 'Le sol est constitué de limon sableux de perméabilité modérée (k≈2,5·10⁻⁶ m/s). La nappe se situe à plus de 4 m. Aucune contrainte de servitude n\'est connue. Le dimensionnement applique le coefficient de sécurité standard Cs=1,5.',
+      conclusions: 'Le scénario 3 (surprofondeur) est retenu : il offre la meilleure compacité tout en garantissant un statut OK pour toutes les pluies de référence jusqu\'à T=25 ans. Le volume total à réaliser est d\'environ 30 m³ (tampon) + 15 m³ (surprofondeur). Un ajutage calibré à 1,5 L/s sera placé en aval. La matrice de protection confirme l\'absence de débordement jusqu\'à T=50 ans, marge raisonnable au-delà du dimensionnement.',
+      sections: {cover:true, summary:true, hypotheses:true, rain:true, surfaces:true, perm:true, s1:true, s2:true, s3:true, prot:true, conclu:true, signature:true},
+      customSections: [
+        {title:'Contexte et méthodologie', content:'L\'étude suit la méthodologie hydrologique standard utilisée par SML Ingénieurs Conseils pour les bassins de dispersion en Région wallonne. Les coefficients de Montana proviennent de la base IRM la plus récente. Les surfaces et perméabilités sont issues des relevés de terrain (test d\'infiltration réalisé le ' + new Date().toISOString().slice(0,10) + ').', position:'after-cover'},
+        {title:'Contraintes et données d\'entrée', content:'• Topographie : pente moyenne 2-3% vers le SO\n• Sol : limon sableux compacté en zone de circulation\n• Nappe : profondeur > 4 m (sondage du 12/03/2026)\n• Aucun cours d\'eau récepteur à proximité immédiate', position:'after-hypotheses'}
+      ]
+    }
+  };
+  applyStudyState(demoState);
+  alert('Projet démo chargé. Naviguez dans les onglets pour voir les résultats, puis générez le rapport.');
 }
 
 function exportStudyJSON() {
@@ -1890,6 +2011,144 @@ function handleImportFile(e) {
 function htmlEsc(s) { return (s==null?'':String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function nl2br(s) { return htmlEsc(s).replace(/\n/g, '<br>'); }
 
+function renderMatrixForReport(rp_design) {
+  // Build a clean copy of the protection matrix from current calculated state.
+  let Sdisp, Vsurp, Vtamp, Qaj_Ls, scen;
+  if (state.s3 && !state.s3.error) {
+    Sdisp = state.s3.Sdisp; Vsurp = state.s3.Vsurp; Vtamp = state.s3.Vbuf; Qaj_Ls = state.s3.Qaj_Ls; scen = 3;
+  } else if (state.s2 && !state.s2.error) {
+    Sdisp = state.s2.Sdisp; Vsurp = 0; Vtamp = state.s2.Vbuf; Qaj_Ls = state.s2.Qaj_user_Ls; scen = 2;
+  } else if (state.s1 && !state.s1.error) {
+    Sdisp = state.s1.Seff_used; Vsurp = 0; Vtamp = state.s1.Vbuf; Qaj_Ls = 0; scen = 1;
+  } else return '<p><em>Aucun scénario calculé. La matrice n\'est pas disponible.</em></p>';
+
+  const Vtotal = scen === 1 ? Vtamp : (Vsurp + Vtamp);
+  const k = getKcalc();
+  const testDurs = DUR.slice(0, 14);
+  const testDurLbls = DUR_LBL.slice(0, 14);
+
+  let html = `<p style="font-size:10pt;margin:4px 0;">Scénario retenu : <strong>Sc. ${scen}</strong> · S_disp = ${Sdisp.toFixed(0)} m² · V_total = ${Vtotal.toFixed(2)} m³ · Q_ajutage = ${Qaj_Ls.toFixed(3)} L/s · Période de dimensionnement : <strong>${rp_design} ans</strong>.</p>`;
+  html += `<table style="font-size:9pt;"><tr><th style="background:#1565C0;color:#fff;">Durée ↓ / T.retour →</th>`;
+  RP.forEach(rp => html += `<th style="background:${rp===rp_design?'#F9A825':'#1565C0'};color:#fff;text-align:center;">${rp} ans</th>`);
+  html += `</tr>`;
+
+  testDurs.forEach((dur, di) => {
+    html += `<tr><td style="font-weight:600;">${testDurLbls[di]}</td>`;
+    RP.forEach(rp => {
+      const inten_Lsha = rainMm(dur, rp) / (dur * 60) * 10000;
+      let Qrain = 0;
+      surfaceRows.forEach(sr => {
+        const a = parseFloat(sr.m2)||0, c = parseFloat(sr.cr)||0;
+        Qrain += (a/10000) * c * inten_Lsha;
+      });
+      const Qinfil_Ls = k * Sdisp * 1000;
+      const dur_s = dur * 60;
+      let overflow = false;
+      if (Vtotal === 0) overflow = Qrain > Qinfil_Ls + Qaj_Ls;
+      else if (scen === 3 && Vsurp > 0) {
+        if (Qrain > Qinfil_Ls) {
+          const t_fill = (1000 * Vsurp) / (Qrain - Qinfil_Ls);
+          if (t_fill < dur_s) {
+            const t_rem_s = dur_s - t_fill;
+            const Vbuf_needed = Math.max(0, (Qrain - Qinfil_Ls - Qaj_Ls) / 1000 * t_rem_s);
+            overflow = Vbuf_needed > Vtamp + 1e-6;
+          }
+        }
+      } else {
+        const Qout = scen >= 2 ? Qinfil_Ls + Qaj_Ls : Qinfil_Ls;
+        if (Qrain > Qout) {
+          const Vneeded = (Qrain - Qout) / 1000 * dur_s;
+          overflow = Vneeded > Vtotal + 1e-6;
+        }
+      }
+      const bg = overflow ? '#EF9A9A' : '#A5D6A7';
+      const color = overflow ? '#B71C1C' : '#1B5E20';
+      const border = rp===rp_design ? 'box-shadow:inset 0 0 0 2px #F9A825;' : '';
+      html += `<td style="background:${bg};color:${color};text-align:center;font-weight:700;${border}">${overflow?'✗':'✓'}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</table>`;
+  html += `<p style="font-size:9pt;margin-top:6px;color:#555;">✓ = bassin OK (pas de débordement) · ✗ = débordement · case dorée = période de retour de dimensionnement.</p>`;
+  return html;
+}
+
+// Custom sections store: {id, title, content, position}
+// position: 'after-cover' | 'after-summary' | 'after-hypotheses' | 'after-rain' | 'after-surfaces' | 'after-perm' | 'after-s1' | 'after-s2' | 'after-s3' | 'after-prot' | 'before-conclu' | 'end'
+let customSections = [];
+const POSITION_LABELS = {
+  'after-cover':'Après page de garde','after-summary':'Après synthèse','after-hypotheses':'Après hypothèses',
+  'after-rain':'Après pluies de référence','after-surfaces':'Après surfaces','after-perm':'Après perméabilité',
+  'after-s1':'Après scénario 1','after-s2':'Après scénario 2','after-s3':'Après scénario 3',
+  'after-prot':'Après matrice','before-conclu':'Avant conclusions','end':'Fin du rapport'
+};
+let customSectionSeq = 0;
+
+function addCustomSection(prefill) {
+  const id = ++customSectionSeq;
+  customSections.push({
+    id,
+    title: (prefill && prefill.title) || 'Nouvelle rubrique',
+    content: (prefill && prefill.content) || '',
+    position: (prefill && prefill.position) || 'before-conclu'
+  });
+  renderCustomSectionsList();
+}
+function removeCustomSection(id) {
+  customSections = customSections.filter(s => s.id !== id);
+  renderCustomSectionsList();
+}
+function moveCustomSection(id, dir) {
+  const idx = customSections.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const tgt = idx + dir;
+  if (tgt < 0 || tgt >= customSections.length) return;
+  [customSections[idx], customSections[tgt]] = [customSections[tgt], customSections[idx]];
+  renderCustomSectionsList();
+}
+function renderCustomSectionsList() {
+  const wrap = $('custom-sections-list');
+  if (!wrap) return;
+  if (customSections.length === 0) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--text-muted);font-style:italic;padding:6px 0;">Aucune rubrique personnalisée. Cliquez sur « Ajouter une rubrique » pour en créer une.</div>';
+    return;
+  }
+  wrap.innerHTML = customSections.map((s, idx) => `
+    <div class="custom-section-item">
+      <div class="row">
+        <input type="text" value="${escapeHtml(s.title)}" data-cs-id="${s.id}" data-cs-field="title" placeholder="Titre de la rubrique">
+        <select class="position-select" data-cs-id="${s.id}" data-cs-field="position" title="Position dans le rapport">
+          ${Object.entries(POSITION_LABELS).map(([k,v]) => `<option value="${k}" ${s.position===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+        <button class="btn-icon" onclick="moveCustomSection(${s.id},-1)" title="Monter" ${idx===0?'disabled':''}>▲</button>
+        <button class="btn-icon" onclick="moveCustomSection(${s.id},1)" title="Descendre" ${idx===customSections.length-1?'disabled':''}>▼</button>
+        <button class="btn-icon danger" onclick="removeCustomSection(${s.id})" title="Supprimer">✕</button>
+      </div>
+      <textarea data-cs-id="${s.id}" data-cs-field="content" placeholder="Contenu de la rubrique (texte libre, retours à la ligne acceptés)">${escapeHtml(s.content)}</textarea>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-cs-id]').forEach(el => {
+    el.addEventListener('input', e => {
+      const id = parseInt(e.target.dataset.csId);
+      const f = e.target.dataset.csField;
+      const s = customSections.find(x => x.id === id);
+      if (s) s[f] = e.target.value;
+    });
+    if (el.tagName === 'SELECT') {
+      el.addEventListener('change', e => {
+        const id = parseInt(e.target.dataset.csId);
+        const s = customSections.find(x => x.id === id);
+        if (s) s.position = e.target.value;
+      });
+    }
+  });
+}
+function renderCustomAt(position) {
+  const matches = customSections.filter(s => s.position === position);
+  if (matches.length === 0) return '';
+  return matches.map(s => `<h2>${htmlEsc(s.title)}</h2><p>${nl2br(s.content)}</p>`).join('');
+}
+
 function buildReportHTML() {
   const sec = {};
   ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','prot','conclu','signature'].forEach(k => {
@@ -1916,10 +2175,15 @@ function buildReportHTML() {
   const k = getKcalc(), kmes = getKmes(), ks = getKs(), tmax_h = getTmax_s()/3600;
 
   let html = `<div class="report-doc">`;
+  let firstSectionFlag = true;
+  const startSection = (skipBreak) => {
+    if (firstSectionFlag || skipBreak) { firstSectionFlag = false; return '<div class="no-break-before">'; }
+    return '<div class="page-break-section">';
+  };
 
-  // ========== DOC HEADER (logo + meta) ==========
+  // ========== DOC HEADER (logo + meta) — only on cover/first page ==========
   html += `<div class="doc-header">
-    <div>${SML_LOGO_INLINE}</div>
+    <div style="height:60px;">${currentLogoHTML()}</div>
     <div class="meta">
       <div><strong>Rapport d'étude</strong></div>
       ${r.ref?`<div>Réf. ${htmlEsc(r.ref)}</div>`:''}
@@ -1929,6 +2193,7 @@ function buildReportHTML() {
 
   // ========== COVER ==========
   if (sec.cover) {
+    html += `<div class="first-section">`;
     html += `<h1>${htmlEsc(r.title)}</h1>`;
     html += `<div class="meta-grid">`;
     if (r.client) html += `<div><strong>Maître d'ouvrage :</strong> ${htmlEsc(r.client)}</div>`;
@@ -1939,7 +2204,10 @@ function buildReportHTML() {
     html += `<div><strong>Période de retour :</strong> ${rp} ans</div>`;
     html += `</div>`;
     if (r.desc) html += `<h3>Description du projet</h3><p>${nl2br(r.desc)}</p>`;
+    html += `</div>`;
+    firstSectionFlag = false;
   }
+  html += renderCustomAt('after-cover');
 
   // ========== SUMMARY ==========
   if (sec.summary) {
@@ -1965,6 +2233,7 @@ function buildReportHTML() {
       html += `<p><strong>Sc. 3 (surprofondeur) :</strong> V_tampon = ${state.s3.Vbuf.toFixed(2)} m³, V_surprofondeur = ${state.s3.Vsurp.toFixed(2)} m³, V_total = ${state.s3.Vtotal.toFixed(2)} m³ — statut global ${s3stat}.</p>`;
     }
   }
+  html += renderCustomAt('after-summary');
 
   // ========== HYPOTHESES ==========
   if (sec.hypotheses) {
@@ -1979,6 +2248,7 @@ function buildReportHTML() {
     </ul>`;
     if (r.hypotheses) html += `<h3>Hypothèses spécifiques</h3><p>${nl2br(r.hypotheses)}</p>`;
   }
+  html += renderCustomAt('after-hypotheses');
 
   // ========== RAIN ==========
   if (sec.rain) {
@@ -1995,6 +2265,7 @@ function buildReportHTML() {
     });
     html += `</table>`;
   }
+  html += renderCustomAt('after-rain');
 
   // ========== SURFACES ==========
   if (sec.surfaces) {
@@ -2008,6 +2279,7 @@ function buildReportHTML() {
     html += `<tr style="background:#f8f8f8;font-weight:700;"><td>TOTAL</td><td>${surf.crmoy.toFixed(3)}</td><td>${surf.stot.toFixed(0)}</td><td>${surf.seff.toFixed(0)}</td><td></td></tr>`;
     html += `</table>`;
   }
+  html += renderCustomAt('after-surfaces');
 
   // ========== PERM ==========
   if (sec.perm) {
@@ -2020,6 +2292,7 @@ function buildReportHTML() {
       <tr><td>Temps de vidange max après la pluie</td><td>${tmax_h.toFixed(1)} h</td></tr>
     </table>`;
   }
+  html += renderCustomAt('after-perm');
 
   // ========== S1 ==========
   if (sec.s1 && state.s1 && !state.s1.error) {
@@ -2033,6 +2306,7 @@ function buildReportHTML() {
     });
     html += `</table>`;
   }
+  html += renderCustomAt('after-s1');
 
   // ========== S2 ==========
   if (sec.s2 && state.s2 && !state.s2.error) {
@@ -2046,6 +2320,7 @@ function buildReportHTML() {
     });
     html += `</table>`;
   }
+  html += renderCustomAt('after-s2');
 
   // ========== S3 ==========
   if (sec.s3 && state.s3 && !state.s3.error) {
@@ -2061,6 +2336,16 @@ function buildReportHTML() {
     });
     html += `</table>`;
   }
+  html += renderCustomAt('after-s3');
+
+  // ========== MATRICE DE PROTECTION ==========
+  if (sec.prot) {
+    html += `<h2>Matrice de protection</h2>`;
+    html += `<p>Pour chaque combinaison (durée × période de retour), la matrice indique si le bassin dimensionné résiste sans débordement au scénario retenu.</p>`;
+    html += renderMatrixForReport(rp);
+  }
+  html += renderCustomAt('after-prot');
+  html += renderCustomAt('before-conclu');
 
   // ========== CONCLUSIONS ==========
   if (sec.conclu && r.conclusions) {
@@ -2068,7 +2353,10 @@ function buildReportHTML() {
   }
 
   // ========== SIGNATURE ==========
+  html += renderCustomAt('end');
+
   if (sec.signature) {
+    html += `<h2>Signature</h2>`;
     html += `<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
       <div><strong>Auteur</strong><br>${htmlEsc(r.author||'—')}<br><br><br>Signature : ____________________</div>
       <div><strong>Date</strong><br>${htmlEsc(r.date)}<br><br><br>Cachet : ____________________</div>
@@ -2081,29 +2369,66 @@ function buildReportHTML() {
 }
 
 function generatePDF() {
-  const html = buildReportHTML();
-  // Place rendered report into a #print-area and call window.print()
-  let pa = $('print-area');
-  if (!pa) {
-    pa = document.createElement('div');
-    pa.id = 'print-area';
-    document.body.appendChild(pa);
-  }
-  pa.innerHTML = html;
-  // Also show in preview
-  $('report-preview').style.display = 'block';
-  $('report-preview-content').innerHTML = html;
-  window.print();
+  const reportBody = buildReportHTML();
+  const title = ($('rep-title').value || 'Rapport bassin').replace(/[<>&"]/g,'');
+  const docHtml = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; line-height: 1.45; margin: 0; padding: 20px; background: #f5f5f5; }
+  .report-doc { background: #fff; padding: 28px 32px; max-width: 780px; margin: 0 auto; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .report-doc h1 { font-size: 22px; margin: 12px 0 6px; border-bottom: 3px solid #111; padding-bottom: 6px; }
+  .report-doc h2 { font-size: 15px; margin: 18px 0 8px; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; page-break-before: always; break-before: page; }
+  .report-doc h2:first-of-type, .report-doc .first-section h2, .report-doc .no-break-before h2 { page-break-before: avoid; break-before: avoid; }
+  .report-doc h3 { font-size: 13px; margin: 12px 0 6px; color: #1565C0; }
+  .report-doc table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px; page-break-inside: avoid; break-inside: avoid; }
+  .report-doc table th { background: #f2f2f2; padding: 5px 7px; border: 1px solid #999; text-align: left; font-weight: 700; }
+  .report-doc table td { padding: 5px 7px; border: 1px solid #999; }
+  .report-doc .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 8px 0 14px; font-size: 12px; }
+  .report-doc .meta-grid div { padding: 3px 0; }
+  .report-doc .meta-grid strong { color: #1a1a1a; display: inline-block; min-width: 110px; }
+  .report-doc .doc-header { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 10px; border-bottom: 2px solid #111; margin-bottom: 14px; gap: 16px; }
+  .report-doc .doc-header > div:first-child { height: 60px; flex-shrink: 0; }
+  .report-doc .doc-header > div:first-child svg, .report-doc .doc-header > div:first-child img { height: 100%; width: auto; max-height: 60px; }
+  .report-doc .doc-header .meta { font-size: 11px; color: #555; text-align: right; }
+  .report-doc .footer-note { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 10px; color: #777; text-align: center; }
+  .report-doc .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .report-doc .badge-green { background: #E8F5E9; color: #1B5E20; }
+  .report-doc .badge-red   { background: #FFEBEE; color: #B71C1C; }
+  .report-doc .badge-yellow{ background: #FFF59D; color: #E65100; }
+  .report-doc p { margin: 6px 0; }
+  .report-doc ul { margin: 6px 0 6px 18px; }
+  #print-bar { position: fixed; top: 10px; right: 10px; background: #1565C0; color: #fff; padding: 8px 14px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.3); cursor: pointer; font-weight: 600; font-size: 13px; z-index: 9999; border: none; }
+  #print-bar:hover { background: #0D47A1; }
+  @media print { body { background: #fff; padding: 0; } .report-doc { box-shadow: none; padding: 0; max-width: 100%; } #print-bar { display: none; } }
+</style>
+</head>
+<body>
+<button id="print-bar" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+${reportBody}
+<script>window.addEventListener('load', () => setTimeout(() => window.print(), 400));</`+`script>
+</body>
+</html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('Le navigateur a bloqué la nouvelle fenêtre. Autorisez les pop-ups pour ce site, puis réessayez.'); return; }
+  w.document.open();
+  w.document.write(docHtml);
+  w.document.close();
 }
 
 function generateWord() {
-  const html = buildReportHTML();
+  const htmlBody = buildReportHTML();
+  const html = htmlBody;
   const fullDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>Rapport</title>
 <style>
 body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
 h1 { font-size: 20pt; border-bottom: 3px solid #111; padding-bottom: 6px; }
-h2 { font-size: 13pt; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; margin-top: 18pt; }
+h2 { font-size: 13pt; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; margin-top: 18pt; page-break-before: always; mso-pagination: widow-orphan; }
+h2:first-of-type, .first-section h2, .no-break-before h2 { page-break-before: avoid; }
 h3 { font-size: 11pt; color: #1565C0; }
 table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }
 table th { background: #f2f2f2; padding: 5px 7px; border: 1px solid #999; text-align: left; }
@@ -2111,6 +2436,7 @@ table td { padding: 5px 7px; border: 1px solid #999; }
 .meta-grid { font-size: 10pt; margin-bottom: 14px; }
 .meta-grid div { padding: 2px 0; }
 .doc-header { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+.doc-header img { max-height: 60px; }
 .badge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:9pt; font-weight:700; }
 .badge-green { background:#E8F5E9; color:#1B5E20; }
 .badge-red { background:#FFEBEE; color:#B71C1C; }
@@ -2129,6 +2455,9 @@ table td { padding: 5px 7px; border: 1px solid #999; }
 window.addEventListener('load', () => {
   const dEl = $('rep-date');
   if (dEl && !dEl.value) dEl.value = new Date().toISOString().slice(0,10);
+  refreshLogoUI();
+  populateSimRP();
+  renderCustomSectionsList();
 });
 
 // ===================== INIT =====================
