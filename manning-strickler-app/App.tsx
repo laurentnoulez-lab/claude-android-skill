@@ -59,7 +59,8 @@ export default function App() {
     trapHeight: parseNum(trapHeight),
   };
   const K = parseNum(kText);
-  const J = parseNum(slope);
+  const slopePct = parseNum(slope); // pente saisie en %
+  const J = slopePct !== undefined ? slopePct / 100 : undefined; // ratio (m/m) pour le calcul
   const Q_lps = parseNum(flow);
   const Q = Q_lps !== undefined ? Q_lps / 1000 : undefined;
 
@@ -152,11 +153,11 @@ export default function App() {
         <Card title="Paramètres hydrauliques">
           <Field
             label="Pente J"
-            unit="m/m"
+            unit="%"
             value={slope}
             onChangeText={setSlope}
-            placeholder="ex. 0.005"
-            hint="Facultatif pour certaines sorties (ex. pente minimale)."
+            placeholder="ex. 0.5"
+            hint="En pourcentage. Facultatif pour certaines sorties (ex. pente minimale)."
           />
           <Field
             label="Débit Q"
@@ -212,8 +213,8 @@ export default function App() {
           {results.minSlope !== undefined && (
             <Result
               label="Pente minimale (pour le profil indiqué)"
-              value={`${fmt(results.minSlope, 5)} m/m`}
-              sub={`soit ${fmt(results.minSlope * 1000, 2)} ‰ — pour faire passer Q à pleine section`}
+              value={`${fmt(results.minSlope * 100, 3)} %`}
+              sub="pour faire passer Q à pleine section"
             />
           )}
           {results.minSlope === undefined && results.geometry && (

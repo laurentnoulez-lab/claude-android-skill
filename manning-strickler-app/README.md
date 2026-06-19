@@ -13,7 +13,7 @@ hydraulique, `J` la pente, `A` la section mouillée et `P` le périmètre mouill
 ## Fonctionnalités
 
 **Entrées** (toutes facultatives selon la sortie voulue) :
-- Pente `J` (m/m)
+- Pente `J` (%)
 - Dimensions du profil (diamètre, largeur ovoïde, B/H, etc.)
 - Coefficient `K` (choix d'un matériau ou saisie manuelle)
 - Débit `Q` (L/s)
