@@ -53,6 +53,17 @@ npx expo start        # puis scanner le QR code avec Expo Go (Android)
 npm run android       # émulateur / appareil branché
 ```
 
+## Télécharger l'APK prêt à installer (sans Expo)
+
+Un workflow GitHub Actions (`.github/workflows/build-apk.yml`) compile
+automatiquement un **APK autonome installable** (aucun compte Expo requis) :
+
+1. Onglet **Actions** du dépôt → workflow **« Build Android APK »**.
+2. Ouvrir le dernier run (déclenché à chaque push, ou via **Run workflow**).
+3. Section **Artifacts** → télécharger **`manning-strickler-apk`** (zip).
+4. Décompresser → `manning-strickler.apk`, le copier sur le téléphone et
+   l'installer (activer « Installer des applications inconnues »).
+
 ## Publier sur le compte Expo `lano2889`
 
 > Pour des raisons de sécurité, aucun identifiant n'est stocké dans ce dépôt.
