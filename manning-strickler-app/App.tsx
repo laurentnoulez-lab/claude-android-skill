@@ -12,6 +12,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import Field, { parseNum } from './src/components/Field';
 import FlowChart from './src/components/FlowChart';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import { MATERIALS } from './src/hydraulics/materials';
 import { ProfileId, ProfileParams } from './src/hydraulics/profiles';
 import { computeResults } from './src/hydraulics/engine';
@@ -58,10 +59,13 @@ export default function App() {
     trapTop: parseNum(trapTop),
     trapHeight: parseNum(trapHeight),
   };
-  const K = parseNum(kText);
-  const slopePct = parseNum(slope); // pente saisie en %
+  // Only finite, strictly-positive physical inputs are accepted; anything else
+  // (empty, negative, non-numeric) is treated as "not provided" so no NaN can
+  // ever propagate into the calculations or the chart.
+  const K = pos(parseNum(kText));
+  const slopePct = pos(parseNum(slope)); // pente saisie en %
   const J = slopePct !== undefined ? slopePct / 100 : undefined; // ratio (m/m) pour le calcul
-  const Q_lps = parseNum(flow);
+  const Q_lps = pos(parseNum(flow));
   const Q = Q_lps !== undefined ? Q_lps / 1000 : undefined;
 
   const results = useMemo(
@@ -82,18 +86,20 @@ export default function App() {
     ],
   );
 
-  const operatingForChart =
-    results.operating && results.full
-      ? {
-          fill: Math.min(results.operating.fill, 1),
-          vRatio: results.full.V > 0 ? results.operating.V / results.full.V : 0,
-          qRatio: results.full.Q > 0 ? (Q ?? 0) / results.full.Q : 0,
-        }
-      : null;
+  const operatingForChart = (() => {
+    if (!results.operating || !results.full) return null;
+    if (!(results.full.V > 0) || !(results.full.Q > 0)) return null;
+    const fill = Math.min(Math.max(results.operating.fill, 0), 1);
+    const vRatio = results.operating.V / results.full.V;
+    const qRatio = (Q ?? 0) / results.full.Q;
+    if (!Number.isFinite(fill) || !Number.isFinite(vRatio) || !Number.isFinite(qRatio)) return null;
+    return { fill, vRatio, qRatio };
+  })();
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#1f4e79" />
+      <ErrorBoundary>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.title}>Manning–Strickler</Text>
@@ -250,6 +256,7 @@ export default function App() {
           V = K · Rh^(2/3) · J^(1/2) · A.  Qc = débit à remplissage 100 %.
         </Text>
       </ScrollView>
+      </ErrorBoundary>
     </SafeAreaView>
   );
 }
@@ -366,9 +373,26 @@ function Badge({ surcharged }: { surcharged: boolean }) {
 function mm2m(v: number | undefined) {
   return v !== undefined ? v / 1000 : undefined;
 }
+/** Finite, strictly-positive number, else undefined. */
+function pos(x: number | undefined): number | undefined {
+  return x !== undefined && Number.isFinite(x) && x > 0 ? x : undefined;
+}
+/**
+ * Safe French number formatting WITHOUT relying on Intl/toLocaleString, whose
+ * behaviour is inconsistent across React Native (Hermes) builds. Uses a thin
+ * space for thousands and a comma decimal separator.
+ */
 function fmt(n: number, d: number) {
   if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('fr-FR', { maximumFractionDigits: d, minimumFractionDigits: 0 });
+  if (Math.abs(n) >= 1e9) return n.toExponential(2);
+  const fixed = n.toFixed(d);
+  let [intPart, decPart = ''] = fixed.split('.');
+  const neg = intPart.startsWith('-');
+  if (neg) intPart = intPart.slice(1);
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  decPart = decPart.replace(/0+$/, '');
+  const body = decPart ? `${intPart},${decPart}` : intPart;
+  return neg ? `-${body}` : body;
 }
 function minSizeLabel(profile: ProfileId, fallback: string) {
   if (profile === 'circular') return 'Diamètre intérieur';

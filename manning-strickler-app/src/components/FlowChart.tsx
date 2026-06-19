@@ -14,10 +14,14 @@ const V_COLOR = '#e07a3f'; // V/Vc curve
 const Q_COLOR = '#2f7dd1'; // Q/Qc curve
 const POINT_COLOR = '#d12f4f';
 
+const fin = (x: number) => (Number.isFinite(x) ? x : 0);
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, fin(x)));
+
 /**
  * Hydraulic-elements diagram: filling ratio (% on the Y axis) versus the
  * normalised ratios V/Vc and Q/Qc (X axis). Both curves share the same grid.
- * The user's operating point is shown on each curve.
+ * The user's operating point is shown on each curve. All coordinates are kept
+ * finite and clamped so malformed inputs can never feed NaN to the SVG layer.
  */
 export default function FlowChart({ width, curve, operating }: Props) {
   const height = 320;
@@ -25,43 +29,55 @@ export default function FlowChart({ width, curve, operating }: Props) {
   const padR = 16;
   const padT = 16;
   const padB = 40;
-  const plotW = width - padL - padR;
+  const plotW = Math.max(40, width - padL - padR);
   const plotH = height - padT - padB;
 
-  // X axis range from data (round up a bit so curves & point fit).
+  // Keep only finite curve points.
+  const pts = curve
+    .filter((p) => Number.isFinite(p.fill) && Number.isFinite(p.vRatio) && Number.isFinite(p.qRatio))
+    .map((p) => ({
+      fill: clamp(p.fill, 0, 1),
+      vRatio: Math.max(0, fin(p.vRatio)),
+      qRatio: Math.max(0, fin(p.qRatio)),
+    }));
+
+  // X axis range from data, capped so extreme inputs cannot explode the grid.
   let xMaxData = 1;
-  for (const p of curve) xMaxData = Math.max(xMaxData, p.vRatio, p.qRatio);
-  if (operating) xMaxData = Math.max(xMaxData, operating.vRatio, operating.qRatio);
-  const xMax = Math.max(1.2, Math.ceil(xMaxData * 10) / 10);
+  for (const p of pts) xMaxData = Math.max(xMaxData, p.vRatio, p.qRatio);
+  if (operating) xMaxData = Math.max(xMaxData, fin(operating.vRatio), fin(operating.qRatio));
+  const xMax = clamp(Math.ceil(xMaxData / 0.2) * 0.2, 1.2, 2.6);
 
-  const sx = (r: number) => padL + (r / xMax) * plotW;
-  const sy = (fill: number) => padT + (1 - fill) * plotH; // fill 0..1 -> bottom..top
+  const sx = (r: number) => clamp(padL + (fin(r) / xMax) * plotW, padL, padL + plotW);
+  const sy = (fill: number) => clamp(padT + (1 - clamp(fill, 0, 1)) * plotH, padT, padT + plotH);
 
-  const vPts = curve.map((p) => `${sx(p.vRatio)},${sy(p.fill)}`).join(' ');
-  const qPts = curve.map((p) => `${sx(p.qRatio)},${sy(p.fill)}`).join(' ');
+  const vPts = pts.map((p) => `${sx(p.vRatio)},${sy(p.fill)}`).join(' ');
+  const qPts = pts.map((p) => `${sx(p.qRatio)},${sy(p.fill)}`).join(' ');
 
-  // Grid ticks
+  // Bounded tick set (step chosen so there are never more than ~13 ticks).
+  const step = xMax <= 1.4 ? 0.2 : xMax <= 2.0 ? 0.25 : 0.5;
   const xTicks: number[] = [];
-  for (let t = 0; t <= xMax + 1e-9; t += 0.2) xTicks.push(Math.round(t * 100) / 100);
+  for (let t = 0; t <= xMax + 1e-9 && xTicks.length < 20; t += step) {
+    xTicks.push(Math.round(t * 100) / 100);
+  }
   const yTicks = [0, 20, 40, 60, 80, 100];
+
+  // Operating point clamped onto the plot; flag when it lies beyond the axis.
+  const opBeyond = operating ? Math.max(operating.vRatio, operating.qRatio) > xMax + 1e-6 : false;
 
   return (
     <View>
       <Svg width={width} height={height}>
-        {/* plot background */}
         <Rect x={padL} y={padT} width={plotW} height={plotH} fill="#fafafa" stroke="#ddd" />
 
-        {/* vertical grid + x labels */}
         {xTicks.map((t) => (
           <React.Fragment key={`x${t}`}>
             <Line x1={sx(t)} y1={padT} x2={sx(t)} y2={padT + plotH} stroke="#eee" />
             <SvgText x={sx(t)} y={height - padB + 16} fontSize={10} fill="#666" textAnchor="middle">
-              {t.toFixed(1)}
+              {t.toFixed(t < 10 ? 1 : 0)}
             </SvgText>
           </React.Fragment>
         ))}
 
-        {/* horizontal grid + y labels */}
         {yTicks.map((t) => (
           <React.Fragment key={`y${t}`}>
             <Line x1={padL} y1={sy(t / 100)} x2={padL + plotW} y2={sy(t / 100)} stroke="#eee" />
@@ -72,13 +88,13 @@ export default function FlowChart({ width, curve, operating }: Props) {
         ))}
 
         {/* reference line at ratio = 1 */}
-        <Line x1={sx(1)} y1={padT} x2={sx(1)} y2={padT + plotH} stroke="#bbb" strokeDasharray="4 3" />
+        {xMax >= 1 && (
+          <Line x1={sx(1)} y1={padT} x2={sx(1)} y2={padT + plotH} stroke="#bbb" strokeDasharray="4 3" />
+        )}
 
-        {/* curves */}
         {qPts.length > 0 && <Polyline points={qPts} fill="none" stroke={Q_COLOR} strokeWidth={2} />}
         {vPts.length > 0 && <Polyline points={vPts} fill="none" stroke={V_COLOR} strokeWidth={2} />}
 
-        {/* operating point */}
         {operating && (
           <>
             <Line
@@ -95,9 +111,8 @@ export default function FlowChart({ width, curve, operating }: Props) {
           </>
         )}
 
-        {/* axis titles */}
         <SvgText x={padL + plotW / 2} y={height - 4} fontSize={11} fill="#333" textAnchor="middle">
-          V/Vc  et  Q/Qc
+          V/Vc et Q/Qc
         </SvgText>
       </Svg>
 
@@ -107,6 +122,11 @@ export default function FlowChart({ width, curve, operating }: Props) {
         <Legend color={POINT_COLOR} label="Point d'écoulement" />
       </View>
       <Text style={styles.axisNote}>Ordonnée : taux de remplissage (%)</Text>
+      {opBeyond && (
+        <Text style={styles.axisNote}>
+          (point d'écoulement au-delà de l'axe : débit critique largement dépassé)
+        </Text>
+      )}
     </View>
   );
 }

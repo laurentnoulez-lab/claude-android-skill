@@ -53,6 +53,13 @@ export interface EngineResults {
 
 const TWO_THIRDS = 2 / 3;
 
+/** True for a finite, strictly-positive number. */
+function isPos(x: number | undefined): x is number {
+  return x !== undefined && Number.isFinite(x) && x > 0;
+}
+
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
 /** Discharge at a given table row, given K and slope. */
 function rowDischarge(A: number, P: number, K: number, slope: number): number {
   if (A <= 0 || P <= 0) return 0;
@@ -94,37 +101,39 @@ export function computeResults(inputs: EngineInputs): EngineResults {
   }
 
   // --- Full / critical state (needs K + slope) ---
-  if (K && K > 0 && J && J > 0) {
-    const Vc = K * Math.pow(R_f, TWO_THIRDS) * Math.sqrt(J);
-    out.full = { Q: Vc * A_f, V: Vc, A: A_f, P: P_f, R: R_f };
-  }
-
-  // --- Minimum slope to carry Q at full (needs K + flow; slope not required) ---
-  if (K && K > 0 && Q && Q > 0) {
-    const denom = K * A_f * Math.pow(R_f, TWO_THIRDS);
-    if (denom > 0) {
-      const sqrtJ = Q / denom;
-      out.minSlope = sqrtJ * sqrtJ;
+  if (isPos(K) && isPos(J) && A_f > 0 && P_f > 0) {
+    const Vc = K! * Math.pow(R_f, TWO_THIRDS) * Math.sqrt(J!);
+    const Qc = Vc * A_f;
+    if (Number.isFinite(Vc) && Number.isFinite(Qc)) {
+      out.full = { Q: Qc, V: Vc, A: A_f, P: P_f, R: R_f };
     }
   }
 
+  // --- Minimum slope to carry Q at full (needs K + flow; slope not required) ---
+  if (isPos(K) && isPos(Q)) {
+    const denom = K! * A_f * Math.pow(R_f, TWO_THIRDS);
+    const sqrtJ = denom > 0 ? Q! / denom : NaN;
+    const j = sqrtJ * sqrtJ;
+    if (Number.isFinite(j)) out.minSlope = j;
+  }
+
   // --- Operating point + minimum size (needs K + slope + flow) ---
-  if (K && K > 0 && J && J > 0 && Q && Q > 0) {
-    const Qfull = out.full!.Q;
-    const surcharged = Q > Qfull;
+  if (isPos(K) && isPos(J) && isPos(Q) && out.full && out.full.Q > 0) {
+    const Qfull = out.full.Q;
+    const surcharged = Q! > Qfull;
 
     if (surcharged) {
       // Pressurised: water fills the section, velocity from full area.
-      out.operating = { fill: 1, V: Q / A_f, y: geometry.yMax, surcharged: true };
+      out.operating = { fill: 1, V: A_f > 0 ? Q! / A_f : 0, y: geometry.yMax, surcharged: true };
     } else {
       // Find the first (lowest) depth whose discharge reaches Q.
       let yOp = geometry.yMax;
       let prevQ = 0;
       let prevY = 0;
       for (let i = 1; i < rows.length; i++) {
-        const qi = rowDischarge(rows[i].A, rows[i].P, K, J);
-        if (qi >= Q) {
-          const t = qi === prevQ ? 0 : (Q - prevQ) / (qi - prevQ);
+        const qi = rowDischarge(rows[i].A, rows[i].P, K!, J!);
+        if (qi >= Q!) {
+          const t = qi === prevQ ? 0 : (Q! - prevQ) / (qi - prevQ);
           yOp = prevY + t * (rows[i].y - prevY);
           break;
         }
@@ -133,8 +142,8 @@ export function computeResults(inputs: EngineInputs): EngineResults {
       }
       const Aop = areaAtDepth(geometry, yOp);
       out.operating = {
-        fill: yOp / geometry.yMax,
-        V: Aop > 0 ? Q / Aop : 0,
+        fill: clamp01(yOp / geometry.yMax),
+        V: Aop > 0 ? Q! / Aop : 0,
         y: yOp,
         surcharged: false,
       };
@@ -142,12 +151,14 @@ export function computeResults(inputs: EngineInputs): EngineResults {
 
     // Minimum size: scale all linear dimensions by s so the section runs full
     // at exactly Q. Q scales as s^(8/3) → s = (Q / Qfull)^(3/8).
-    const scale = Math.pow(Q / Qfull, 3 / 8);
-    out.minSize = {
-      scale,
-      value: geometry.principalDim * scale,
-      label: geometry.principalLabel,
-    };
+    const scale = Math.pow(Q! / Qfull, 3 / 8);
+    if (Number.isFinite(scale) && scale > 0) {
+      out.minSize = {
+        scale,
+        value: geometry.principalDim * scale,
+        label: geometry.principalLabel,
+      };
+    }
   }
 
   return out;
