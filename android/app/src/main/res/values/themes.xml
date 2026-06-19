@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BassinDispersion" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/sml_black</item>
+        <item name="android:navigationBarColor">@color/sml_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/sml_blue</item>
+        <item name="colorSecondary">@color/sml_blue_light</item>
+    </style>
+</resources>

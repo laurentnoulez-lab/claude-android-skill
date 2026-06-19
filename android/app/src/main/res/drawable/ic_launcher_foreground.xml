@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Goutte d'eau (dispersion / rétention) -->
+    <path
+        android:fillColor="#42A5F5"
+        android:pathData="M54,32 C54,32 38,54 38,66 A16,16 0 1,0 70,66 C70,54 54,32 54,32 Z" />
+    <!-- Reflet -->
+    <path
+        android:fillColor="#90CAF9"
+        android:pathData="M48,60 C45,64 45,70 48,73 C44,72 42,67 43,63 C44,61 46,60 48,60 Z" />
+    <!-- Sol / infiltration -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,84 h40 v3 h-40 z" />
+</vector>
