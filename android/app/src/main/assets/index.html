@@ -645,8 +645,13 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             </div>
             <div class="ctrl-row" id="row-qaj2">
               <label>Q ajutage</label>
+              <input type="number" id="sim-qaj-ha" value="0" min="0" step="0.5" title="Débit spécifique sur la surface totale"> <span class="unit">L/(s·ha)</span>
+            </div>
+            <div class="ctrl-row" id="row-qaj2b">
+              <label style="font-size:11px;">↕ équivaut à</label>
               <input type="number" id="sim-qaj" value="0" min="0" step="0.1"> <span class="unit">L/s</span>
             </div>
+            <div style="font-size:10px;color:var(--text-muted);margin:-2px 0 4px 0;">Les deux cases se complètent automatiquement (L/s = L/(s·ha) × surface totale en ha). Saisissez l'une ou l'autre.</div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
               <a href="#" onclick="prefillFromScenario();return false;" style="color:var(--blue);">📥 Importer depuis le scénario calculé</a>
             </div>
@@ -743,13 +748,13 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
           <div class="col-title">Génération</div>
           <div class="report-actions">
             <button class="btn-pdf" onclick="generatePDF()">📄 Générer PDF (nouvel onglet)</button>
-            <button class="btn-word" onclick="generateWord()">📘 Télécharger Word (.doc)</button>
+            <button class="btn-word" onclick="generateWord()">📘 Télécharger Word (.docx)</button>
             <button class="btn-json" onclick="exportStudyJSON()">💾 Exporter étude (JSON)</button>
             <button class="btn-json" onclick="importStudy()" style="background:var(--green);">📂 Importer étude (JSON)</button>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
             Le PDF s'ouvre dans un nouvel onglet — la boîte de dialogue d'impression apparaît automatiquement (choisissez « Enregistrer au format PDF »). L'application reste ouverte dans l'onglet courant.<br>
-            Le fichier Word (.doc) s'ouvre dans Microsoft Word, LibreOffice, etc. et peut être édité librement.
+            Le fichier Word (.docx) s'ouvre dans Microsoft Word, LibreOffice, etc. et peut être édité librement.
           </div>
         </div>
 
@@ -1332,16 +1337,17 @@ function calcS3() {
   const Vtotal = Vsurp + Vbuf;
   const Tmax_h = Tmax_s / 3600;
 
-  // Statut 3 états par durée — vérification dynamique « second épisode ».
-  // On simule l'épisode (durée → résiduel à t_max), puis on re-vérifie le
-  // dimensionnement avec le volume encore disponible (cf. basinReuseStatus).
+  // Statut + temps de vidange par durée via la SOURCE UNIQUE eventStatus, pour
+  // garantir l'identité de conclusion avec l'onglet Simulation (mêmes paramètres).
   const cfg3 = { scen: 3, Vsurp, Vtotal, Qaj_Ls, Qinfil_Ls, rp };
   rows.forEach(r => {
-    const first = simulateEventGeneric(cfg3, r.d, 0);
-    const residual = first.Vat_tmax;
-    r.V_remaining_after_Tmax = residual;
-    r.V_free_after_Tmax = Math.max(0, Vtotal - residual);
-    r.status = basinReuseStatus(cfg3, r.d, DUR);
+    const st = eventStatus(cfg3, r.d);
+    r.t_drain_buf_h = st.t_buf_h;
+    r.t_drain_surp_h = st.t_surp_h;
+    r.t_total_drain_h = st.t_total_h;
+    r.status = st.status;
+    r.V_remaining_after_Tmax = st.residual;
+    r.V_free_after_Tmax = Math.max(0, Vtotal - st.residual);
   });
 
   const anyNonCompliant = rows.some(r => r.status !== 'OK');
@@ -1634,7 +1640,7 @@ function computeSimData(p) {
       const Vavail_for_infil_m3 = V + Qin * dt / 1000; // ce qu'on a au début + ce qui rentre
       Qinfil = Math.min(p.Qinfil_Ls, Vavail_for_infil_m3 * 1000 / dt);
       // orifice: ne s'écoule que si niveau > V_surp
-      if (p.scen >= 2 && p.Qaj_Ls > 0) {
+      if ((p.scen >= 2 || p.scen === 0) && p.Qaj_Ls > 0) {
         const V_above = V - p.Vsurp; // niveau au-dessus de l'ajutage
         if (V_above > 0) {
           Qorifice = Math.min(p.Qaj_Ls, V_above * 1000 / dt);
@@ -1669,21 +1675,66 @@ function computeSimData(p) {
   return data;
 }
 
-// ===================== SIMULATEUR GÉNÉRIQUE (statut !OK / NOK) =====================
-// Simule un épisode pluvieux (durée `dur`, période `cfg.rp`) en partant d'un
-// volume initial V0 dans le bassin. Retourne le volume au bout de t_max après la
-// pluie, le pic et le volume débordé cumulé.
+// Modèle analytique d'un épisode (cohérent avec la simulation pas-à-pas, mais
+// indépendant de la discrétisation) : remplissage surprofondeur puis tampon, puis
+// vidange (tampon au-dessus de l'ajutage à Qinfil+Qaj, surprofondeur à Qinfil).
 // cfg = { scen, Vsurp, Vtotal, Qaj_Ls, Qinfil_Ls, rp }
+function orificeActive(cfg) { return (cfg.scen === 0 || cfg.scen >= 2) && cfg.Qaj_Ls > 0; }
+
+function analyticDrain(cfg, dur) {
+  const Qrain = rainFlow_Ls(dur, cfg.rp); // L/s
+  const dur_s = dur * 60;
+  const Qinfil = cfg.Qinfil_Ls;
+  const Qaj = orificeActive(cfg) ? cfg.Qaj_Ls : 0;
+  const Vsurp = cfg.Vsurp || 0;
+  let Vsurp_filled = 0, Vabove = 0;
+  if (Qrain > Qinfil + 1e-12) {
+    const net_below = (Qrain - Qinfil) / 1000; // m³/s (surprofondeur, orifice fermé)
+    const t_fill_s = Vsurp > 0 ? (Vsurp / net_below) : 0;
+    if (t_fill_s >= dur_s) {
+      Vsurp_filled = Math.min(Vsurp, net_below * dur_s);
+      Vabove = 0;
+    } else {
+      Vsurp_filled = Vsurp;
+      const net_above = (Qrain - Qinfil - Qaj) / 1000; // m³/s (tampon, orifice ouvert)
+      Vabove = Math.max(0, net_above * (dur_s - t_fill_s));
+    }
+  }
+  const Vend = Vsurp_filled + Vabove;
+  const overflowFirst = cfg.Vtotal > 0 && Vend > cfg.Vtotal + 1e-6;
+  const Qabove_Ls = Qinfil + Qaj;
+  const t_buf_h  = Vabove > 0 ? (Qabove_Ls > 0 ? (Vabove * 1000 / Qabove_Ls) / 3600 : Infinity) : 0;
+  const t_surp_h = Vsurp_filled > 0 ? (Qinfil > 0 ? (Vsurp_filled * 1000 / Qinfil) / 3600 : Infinity) : 0;
+  const t_total_h = t_buf_h + t_surp_h;
+  return { Vsurp_filled, Vabove, Vend, overflowFirst, t_buf_h, t_surp_h, t_total_h };
+}
+
+// Volume résiduel dans le bassin t_after secondes après la fin de la pluie.
+function analyticResidual(cfg, dur, t_after_s) {
+  const a = analyticDrain(cfg, dur);
+  const Qinfil = cfg.Qinfil_Ls;
+  const Qaj = orificeActive(cfg) ? cfg.Qaj_Ls : 0;
+  const Qabove = (Qinfil + Qaj) / 1000, Qbelow = Qinfil / 1000; // m³/s
+  let Vabove = a.Vabove, Vsurp = a.Vsurp_filled, t = t_after_s;
+  if (Vabove > 0) {
+    if (Qabove > 0) {
+      const t1 = Vabove / Qabove;
+      if (t1 >= t) { Vabove = Math.max(0, Vabove - Qabove * t); t = 0; }
+      else { Vabove = 0; t -= t1; }
+    } else { t = 0; }
+  }
+  if (t > 0 && Vsurp > 0 && Qbelow > 0) Vsurp = Math.max(0, Vsurp - Qbelow * t);
+  return Math.max(0, Vabove) + Math.max(0, Vsurp);
+}
+
+// Simulation pas-à-pas en partant d'un volume V0 (utilisée pour le second épisode).
 function simulateEventGeneric(cfg, dur, V0) {
   const dur_s = dur * 60;
   const dt = getSimDt(dur);
   const Tmax_s = getTmax_s();
   const Qrain_Ls = rainFlow_Ls(dur, cfg.rp);
   const maxT = dur_s + Tmax_s + 3 * dt;
-  let V = V0 || 0;
-  let peak = V;
-  let Vover = 0;
-  let Vat_tmax = null;
+  let V = V0 || 0, peak = V, Vover = 0;
   for (let t = 0; t <= maxT; t += dt) {
     const raining = t < dur_s;
     const Qin = raining ? Qrain_Ls : 0;
@@ -1691,7 +1742,7 @@ function simulateEventGeneric(cfg, dur, V0) {
     if (V > 0 || Qin > 0) {
       const Vavail = V + Qin * dt / 1000;
       Qinfil = Math.min(cfg.Qinfil_Ls, Vavail * 1000 / dt);
-      if ((cfg.scen >= 2 || cfg.scen === 0) && cfg.Qaj_Ls > 0) {
+      if (orificeActive(cfg)) {
         const Vabove = V - (cfg.Vsurp || 0);
         if (Vabove > 0) Qorifice = Math.min(cfg.Qaj_Ls, Vabove * 1000 / dt);
       }
@@ -1700,29 +1751,40 @@ function simulateEventGeneric(cfg, dur, V0) {
     if (V < 0) V = 0;
     if (V > peak) peak = V;
     if (cfg.Vtotal > 0 && V > cfg.Vtotal) { Vover += V - cfg.Vtotal; V = cfg.Vtotal; }
-    if (Vat_tmax === null && t >= dur_s + Tmax_s) Vat_tmax = V;
   }
-  if (Vat_tmax === null) Vat_tmax = V;
-  return { peak, Vover, Vat_tmax };
+  return { peak, Vover };
 }
 
-// Statut 3 états pour une configuration de bassin et une durée d'épisode d1 :
-//  - 'OK'      : vidange complète dans t_max (résiduel ≈ 0 à t_max) ;
-//  - 'PARTIAL' (!OK) : pas complètement vidangé, MAIS le volume libre restant
-//                permet d'absorber un second épisode de même période de retour
-//                (quelle que soit sa durée) sans déborder ;
-//  - 'NOK'     : le premier épisode déborde déjà, OU un second épisode déborderait.
-// = nouvelle vérification de dimensionnement avec le volume encore disponible.
-function basinReuseStatus(cfg, d1, durList) {
-  const first = simulateEventGeneric(cfg, d1, 0);
-  if (first.Vover > 1e-6) return 'NOK'; // le bassin déborde déjà sur le 1er épisode
-  const residual = first.Vat_tmax;
-  if (residual < 1e-4) return 'OK';       // vidangé dans t_max
-  // Second épisode (pire durée) en partant du volume résiduel.
-  for (let i = 0; i < durList.length; i++) {
-    if (simulateEventGeneric(cfg, durList[i], residual).Vover > 1e-6) return 'NOK';
+// Statut 3 états (OK / !OK / NOK) — SOURCE UNIQUE partagée par le scénario 3 et la
+// simulation, pour qu'ils donnent toujours la même conclusion à paramètres égaux.
+//  - 'OK'      : vidange complète en ≤ t_max (décision analytique) ;
+//  - 'PARTIAL' (!OK) : pas vidangé en t_max, MAIS le volume encore disponible
+//                permet d'absorber un nouvel épisode de même période (toute durée) ;
+//  - 'NOK'     : 1er épisode déjà en débordement, OU nouvel épisode déborderait.
+function eventStatus(cfg, d1) {
+  const a = analyticDrain(cfg, d1);
+  const Tmax_s = getTmax_s();
+  const Tmax_h = Tmax_s / 3600;
+  let status, residual;
+  if (a.overflowFirst) {
+    status = 'NOK';
+    residual = cfg.Vtotal; // bassin plein (débordement)
+  } else if (a.t_total_h <= Tmax_h + 1e-6) {
+    status = 'OK';
+    residual = 0;
+  } else {
+    residual = analyticResidual(cfg, d1, Tmax_s);
+    let nok = false;
+    for (let i = 0; i < DUR.length; i++) {
+      if (simulateEventGeneric(cfg, DUR[i], residual).Vover > 1e-6) { nok = true; break; }
+    }
+    status = nok ? 'NOK' : 'PARTIAL';
   }
-  return 'PARTIAL';
+  return {
+    status, residual,
+    Vend: a.Vend, overflowFirst: a.overflowFirst,
+    t_buf_h: a.t_buf_h, t_surp_h: a.t_surp_h, t_total_h: a.t_total_h,
+  };
 }
 
 // ---- chart rain-period bands (one per active duration) ----
@@ -1867,31 +1929,16 @@ function showSimStats(runs, base) {
   $('sim-stats').style.display = 'block';
   const Tmax_h = getTmax_s() / 3600;
   const cfg = { scen: base.scen, Vsurp: base.Vsurp, Vtotal: base.Vtotal, Qaj_Ls: base.Qaj_Ls, Qinfil_Ls: base.Qinfil_Ls, rp: base.rp };
-  const hasOrifice = (base.scen === 0 || base.scen >= 2) && base.Qaj_Ls > 0;
-  const Qabove_Ls = base.Qinfil_Ls + (hasOrifice ? base.Qaj_Ls : 0); // vidange du volume au-dessus de l'ajutage
 
   const rows = runs.map(run => {
     const data = run.data;
-    const dur_s = run.dur * 60;
     const Vmax = Math.max(...data.map(d => d.V));
     const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
     const Vover = data[data.length-1].Vover || 0;
-
-    // Volume présent dans le bassin à la fin de la pluie
-    let Vend = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i].t >= dur_s) { Vend = data[i].V; break; }
-      if (i === data.length - 1) Vend = data[i].V;
-    }
-    // Répartition : surprofondeur (sous l'ajutage) / tampon (au-dessus de l'ajutage)
-    const Vsurp_filled = Math.min(Vend, base.Vsurp || 0);
-    const Vabove = Math.max(0, Vend - (base.Vsurp || 0));
-    const t_drain_buf_h  = Vabove > 0 ? (Qabove_Ls > 0 ? (Vabove * 1000 / Qabove_Ls) / 3600 : Infinity) : 0;
-    const t_drain_surp_h = Vsurp_filled > 0 ? (base.Qinfil_Ls > 0 ? (Vsurp_filled * 1000 / base.Qinfil_Ls) / 3600 : Infinity) : 0;
-    const t_total_h = t_drain_buf_h + t_drain_surp_h;
-    const drainOK = isFinite(t_total_h) && t_total_h <= Tmax_h + 1e-6;
-    const status = basinReuseStatus(cfg, run.dur, DUR);
-    return { run, Vmax, overflowed, Vover, t_drain_buf_h, t_drain_surp_h, t_total_h, drainOK, status };
+    const st = eventStatus(cfg, run.dur); // même calcul que le scénario 3
+    return { run, Vmax, overflowed, Vover,
+      t_drain_buf_h: st.t_buf_h, t_drain_surp_h: st.t_surp_h, t_total_h: st.t_total_h,
+      drainOK: isFinite(st.t_total_h) && st.t_total_h <= Tmax_h + 1e-6, status: st.status };
   });
 
   const anyOverflow = rows.some(r => r.overflowed);
@@ -1970,6 +2017,8 @@ function prefillFromScenario() {
     alert('Calculez d\'abord le scénario correspondant (sans erreur).');
     return;
   }
+  $('sim-rp').value = $('inp-rp').value; // aligner la période de retour sur le dimensionnement
+  refreshSimQajHa(); // refléter le L/s prérempli en L/(s·ha)
   if (simChart) {
     simRainBands = [];
     simChart.data.datasets = [];
@@ -1979,12 +2028,30 @@ function prefillFromScenario() {
   updateSimRainInfo();
 }
 
+// Synchronisation des deux unités du débit d'ajutage de la simulation.
+function syncSimQajFromHa() {
+  const sha = getSurfaces().sha_tot;
+  const ha = parseFloat($('sim-qaj-ha').value);
+  if (sha > 0 && !isNaN(ha)) $('sim-qaj').value = (ha * sha).toFixed(3);
+}
+function syncSimQajFromLs() {
+  const sha = getSurfaces().sha_tot;
+  const ls = parseFloat($('sim-qaj').value);
+  if (sha > 0 && !isNaN(ls)) $('sim-qaj-ha').value = (ls / sha).toFixed(2);
+}
+// Quand sim-qaj (L/s) est défini par ailleurs (prefill, import), refléter en L/(s·ha).
+function refreshSimQajHa() { syncSimQajFromLs(); }
+$('sim-qaj-ha').addEventListener('input', syncSimQajFromHa);
+$('sim-qaj').addEventListener('input', syncSimQajFromLs);
+
 $('sim-scen').addEventListener('change', function() {
   const s = parseInt(this.value);
   const rowSdisp = $('row-sdisp'); if (rowSdisp) rowSdisp.style.display = s === 0 ? 'none' : 'flex';
   $('row-vsurp').style.display = s === 3 ? 'flex' : 'none';
   $('row-vtamp').style.display = 'flex';
-  $('row-qaj2').style.display = (s === 0 || s >= 2) ? 'flex' : 'none';
+  const showAj = (s === 0 || s >= 2);
+  $('row-qaj2').style.display = showAj ? 'flex' : 'none';
+  const rowQaj2b = $('row-qaj2b'); if (rowQaj2b) rowQaj2b.style.display = showAj ? 'flex' : 'none';
   if (simChart) {
     simRainBands = [];
     simChart.data.datasets = [];
@@ -2274,7 +2341,7 @@ function applyStudyState(s) {
     if (s.sim.sdisp !== undefined) $('sim-sdisp').value = s.sim.sdisp;
     if (s.sim.vsurp !== undefined) $('sim-vsurp').value = s.sim.vsurp;
     if (s.sim.vtamp !== undefined) $('sim-vtamp').value = s.sim.vtamp;
-    if (s.sim.qaj !== undefined) $('sim-qaj').value = s.sim.qaj;
+    if (s.sim.qaj !== undefined) { $('sim-qaj').value = s.sim.qaj; refreshSimQajHa(); }
     if (Array.isArray(s.sim.selectedDurs)) {
       simSelectedDurs = new Set(s.sim.selectedDurs);
       renderSimDurPills();
@@ -2328,9 +2395,17 @@ function refreshLogoUI() {
 
 function populateSimRP() {
   const sel = $('sim-rp'); if (!sel) return;
-  const current = sel.value || '25';
+  const current = sel.value || String(getRp());
   sel.innerHTML = RP.map(rp => `<option value="${rp}" ${String(rp)===String(current)?'selected':''}>${rp} ans</option>`).join('');
 }
+// La période de retour de la simulation suit par défaut celle du dimensionnement
+// (panneau de gauche), pour éviter toute divergence de conclusion involontaire.
+(function() {
+  const inpRp = $('inp-rp');
+  if (inpRp) inpRp.addEventListener('change', () => {
+    const sim = $('sim-rp'); if (sim) { sim.value = inpRp.value; updateSimRainInfo(); }
+  });
+})();
 
 function exportStudyJSON() {
   const data = captureStudyState();
@@ -2552,24 +2627,15 @@ function renderSimulationForReport() {
 
   const Tmax_h = getTmax_s() / 3600;
   const cfg = { scen: base.scen, Vsurp: base.Vsurp, Vtotal: base.Vtotal, Qaj_Ls: base.Qaj_Ls, Qinfil_Ls: base.Qinfil_Ls, rp: base.rp };
-  const hasOrifice = (base.scen === 0 || base.scen >= 2) && base.Qaj_Ls > 0;
-  const Qabove_Ls = base.Qinfil_Ls + (hasOrifice ? base.Qaj_Ls : 0);
   const rows = runs.map(run => {
     const data = run.data;
-    const dur_s = run.dur * 60;
     const Vmax = Math.max(...data.map(d => d.V));
     const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
     const Vover = data[data.length-1].Vover || 0;
-    let Vend = 0;
-    for (let i = 0; i < data.length; i++) { if (data[i].t >= dur_s) { Vend = data[i].V; break; } if (i === data.length-1) Vend = data[i].V; }
-    const Vsurp_filled = Math.min(Vend, base.Vsurp || 0);
-    const Vabove = Math.max(0, Vend - (base.Vsurp || 0));
-    const t_drain_buf_h  = Vabove > 0 ? (Qabove_Ls > 0 ? (Vabove*1000/Qabove_Ls)/3600 : Infinity) : 0;
-    const t_drain_surp_h = Vsurp_filled > 0 ? (base.Qinfil_Ls > 0 ? (Vsurp_filled*1000/base.Qinfil_Ls)/3600 : Infinity) : 0;
-    const t_total_h = t_drain_buf_h + t_drain_surp_h;
-    const drainOK = isFinite(t_total_h) && t_total_h <= Tmax_h + 1e-6;
-    const status = basinReuseStatus(cfg, run.dur, DUR);
-    return { run, Vmax, overflowed, Vover, t_drain_buf_h, t_drain_surp_h, t_total_h, drainOK, status };
+    const st = eventStatus(cfg, run.dur);
+    return { run, Vmax, overflowed, Vover,
+      t_drain_buf_h: st.t_buf_h, t_drain_surp_h: st.t_surp_h, t_total_h: st.t_total_h,
+      drainOK: isFinite(st.t_total_h) && st.t_total_h <= Tmax_h + 1e-6, status: st.status };
   });
   const anyOver = rows.some(r => r.overflowed);
 
@@ -2610,7 +2676,7 @@ function buildReportHTML() {
     const el = $('sec-'+k); sec[k] = el ? el.checked : false;
   });
   const r = {
-    title: $('rep-title').value || 'Étude de bassin de dispersion',
+    title: $('rep-title').value || 'Étude de bassin de dispersion et/ou de temporisation',
     ref: $('rep-ref').value || '',
     client: $('rep-client').value || '',
     author: $('rep-author').value || '',
@@ -2908,41 +2974,88 @@ ${reportBody}
   w.document.close();
 }
 
+// ===================== EXPORT WORD (.docx r\u00e9el \u2014 OOXML) =====================
+const _CRC_TABLE = (function(){ const t=[]; for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } return t; })();
+function _crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c=_CRC_TABLE[(c^bytes[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function _strBytes(str){ return new TextEncoder().encode(str); }
+function _bytesToBase64(bytes){ let bin=''; const chunk=0x8000; for(let i=0;i<bytes.length;i+=chunk) bin+=String.fromCharCode.apply(null, bytes.subarray(i, i+chunk)); return btoa(bin); }
+function _zipStore(files){
+  const u16=n=>new Uint8Array([n&0xFF,(n>>8)&0xFF]);
+  const u32=n=>new Uint8Array([n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF]);
+  const concat=arrs=>{ let len=0; arrs.forEach(a=>len+=a.length); const out=new Uint8Array(len); let o=0; arrs.forEach(a=>{out.set(a,o);o+=a.length;}); return out; };
+  const locals=[], central=[]; let offset=0;
+  for(const f of files){
+    const nameB=_strBytes(f.name), data=f.data, crc=_crc32(data);
+    const local=concat([u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0),nameB,data]);
+    locals.push(local);
+    central.push(concat([u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),nameB]));
+    offset+=local.length;
+  }
+  const centralBytes=concat(central);
+  const end=concat([u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(centralBytes.length),u32(offset),u16(0)]);
+  return concat([concat(locals),centralBytes,end]);
+}
+function _xmlEsc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _wPara(text, o){ o=o||{}; const t=(text||'').replace(/\s+/g,' ').trim(); if(!t && !o.keepEmpty) return '';
+  const rpr=(o.bold?'<w:b/>':'')+(o.color?`<w:color w:val="${o.color}"/>`:'')+(o.sz?`<w:sz w:val="${o.sz}"/><w:szCs w:val="${o.sz}"/>`:'');
+  const ppr=`<w:spacing w:before="${o.before||0}" w:after="${o.after!=null?o.after:60}"/>`;
+  return `<w:p><w:pPr>${ppr}</w:pPr><w:r><w:rPr>${rpr}</w:rPr><w:t xml:space="preserve">${_xmlEsc(t)}</w:t></w:r></w:p>`;
+}
+const _W_BORDER='<w:top w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:left w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:right w:val="single" w:sz="4" w:space="0" w:color="999999"/>';
+function _wTable(tableEl){
+  let rows='';
+  tableEl.querySelectorAll('tr').forEach(tr=>{
+    let cells='';
+    tr.querySelectorAll('th,td').forEach(td=>{
+      const isTh=td.tagName==='TH';
+      const txt=(td.textContent||'').replace(/\s+/g,' ').trim();
+      cells+=`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr>${isTh?'<w:b/>':''}<w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${_xmlEsc(txt)}</w:t></w:r></w:p></w:tc>`;
+    });
+    if(cells) rows+=`<w:tr>${cells}</w:tr>`;
+  });
+  if(!rows) return '';
+  return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>${_W_BORDER}<w:insideH w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="999999"/></w:tblBorders></w:tblPr>${rows}</w:tbl><w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>`;
+}
+function _walkDocx(node, out){
+  node.childNodes.forEach(ch=>{
+    if(ch.nodeType!==1) return;
+    switch(ch.tagName){
+      case 'H1': out.push(_wPara(ch.textContent,{bold:true,sz:36,before:60,after:160})); break;
+      case 'H2': out.push(_wPara(ch.textContent,{bold:true,sz:30,color:'1565C0',before:240,after:120})); break;
+      case 'H3': out.push(_wPara(ch.textContent,{bold:true,sz:24,color:'1565C0',before:120,after:60})); break;
+      case 'P':  out.push(_wPara(ch.textContent,{sz:20})); break;
+      case 'TABLE': out.push(_wTable(ch)); break;
+      case 'UL': case 'OL': ch.querySelectorAll('li').forEach(li=>out.push(_wPara('\u2022  '+li.textContent,{sz:20,after:20}))); break;
+      case 'HR': break;
+      case 'IMG': case 'SVG': break;
+      case 'BR': break;
+      default: _walkDocx(ch, out); // DIV, SECTION, SPAN conteneurs : on descend
+    }
+  });
+}
 function generateWord() {
   const htmlBody = buildReportHTML();
-  const html = htmlBody;
-  const fullDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>Rapport</title>
-<style>
-body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
-h1 { font-size: 20pt; border-bottom: 3px solid #111; padding-bottom: 6px; }
-h2 { font-size: 13pt; color: #111; border-left: 4px solid #1565C0; padding-left: 10px; margin-top: 14pt; mso-pagination: widow-orphan; page-break-after: avoid; }
-h2.pb { page-break-before: always; }
-h2.pb:first-of-type, .first-section h2.pb { page-break-before: avoid; }
-h3 { font-size: 11pt; color: #1565C0; }
-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }
-table th { background: #f2f2f2; padding: 5px 7px; border: 1px solid #999; text-align: left; }
-table td { padding: 5px 7px; border: 1px solid #999; }
-.meta-grid { font-size: 10pt; margin-bottom: 14px; }
-.meta-grid div { padding: 2px 0; }
-.doc-header { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
-.doc-header img { max-height: 60px; }
-.badge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:9pt; font-weight:700; }
-.badge-green { background:#E8F5E9; color:#1B5E20; }
-.badge-red { background:#FFEBEE; color:#B71C1C; }
-.badge-yellow { background:#FFF59D; color:#E65100; }
-.footer-note { font-size: 9pt; color: #777; text-align: center; border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 18pt; }
-</style></head><body>${html}</body></html>`;
-  const blob = new Blob(['\ufeff', fullDoc], {type: 'application/msword'});
+  const doc = new DOMParser().parseFromString(htmlBody, 'text/html');
+  const rootEl = doc.querySelector('.report-doc') || doc.body;
+  const out = [];
+  _walkDocx(rootEl, out);
+  const sectPr = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${out.join('')}<w:p/>${sectPr}</w:body></w:document>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const zip = _zipStore([
+    { name: '[Content_Types].xml', data: _strBytes(contentTypes) },
+    { name: '_rels/.rels', data: _strBytes(rels) },
+    { name: 'word/document.xml', data: _strBytes(documentXml) },
+  ]);
   const refOrTitle = (($('rep-ref').value || $('rep-title').value || 'rapport-bassin')+'').replace(/[^\w\-]+/g,'_');
-  const filename = refOrTitle + '.doc';
-  // Application Android : enregistrer le fichier dans le dossier T\u00e9l\u00e9chargements.
+  const filename = refOrTitle + '.docx';
+  const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   if (typeof AndroidDownloader !== 'undefined' && AndroidDownloader.saveDataUrl) {
-    const reader = new FileReader();
-    reader.onloadend = () => AndroidDownloader.saveDataUrl(reader.result, filename);
-    reader.readAsDataURL(blob);
+    AndroidDownloader.saveDataUrl('data:' + MIME + ';base64,' + _bytesToBase64(zip), filename);
     return;
   }
+  const blob = new Blob([zip], { type: MIME });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
