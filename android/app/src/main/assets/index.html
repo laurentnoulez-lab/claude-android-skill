@@ -469,15 +469,38 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
 
 <main id="main">
   <div id="tabs">
+    <div class="tab" onclick="showTab('s0')">Sc. 0 — Temporisation</div>
     <div class="tab active" onclick="showTab('s1')">Sc. 1 — Dispersion pure</div>
     <div class="tab" onclick="showTab('s2')">Sc. 2 — Disp. + Ajutage</div>
     <div class="tab" onclick="showTab('s3')">Sc. 3 — Surprofondeur</div>
+    <div class="tab" onclick="showTab('pluies')">Pluies</div>
     <div class="tab" onclick="showTab('sim')">Simulation</div>
     <div class="tab" onclick="showTab('prot')">Matrice protection</div>
     <div class="tab" onclick="showTab('report')">📝 Reporting</div>
   </div>
 
   <div id="tab-content">
+
+    <div id="pane-s0" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Scénario 0 — Temporisation pure (sans dispersion)</strong><br>
+        Bassin étanche : aucune infiltration. L'eau est uniquement <strong>temporisée</strong> puis relâchée par un ajutage de fuite. C'est le Scénario 2 avec une surface de dispersion nulle.<br>
+        <span class="formula">Q_ajutage = taux [L/(s·ha)] × S_totale [ha]</span><br>
+        <span class="formula">V_tampon = max(0, Q_pluie − Q_ajutage) × durée_pluie</span><br>
+        <span class="formula">t_vidange_après_pluie = V_tampon / Q_ajutage</span>
+      </div>
+      <div class="section-card mb-10">
+        <div class="col-title">Paramètres spécifiques</div>
+        <div class="param-row">
+          <label>Débit d'ajutage à régler</label>
+          <input type="number" id="s0-qaj" value="5" min="0" step="0.5"> <span class="unit">L/(s·ha)</span>
+        </div>
+        <button class="btn-small" onclick="calculateAll()">Recalculer</button>
+      </div>
+      <div id="s0-results">
+        <div style="color:var(--text-muted);font-size:12px;">Entrez un débit d'ajutage et cliquez sur « Calculer ».</div>
+      </div>
+    </div>
 
     <div id="pane-s1" class="tab-pane active">
       <div class="info-box" style="margin-bottom:10px;">
@@ -560,6 +583,23 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
       </div>
     </div>
 
+    <div id="pane-pluies" class="tab-pane">
+      <div class="info-box" style="margin-bottom:10px;">
+        <strong>Pluies de référence (IRM — formule de Montana)</strong><br>
+        Pour la commune sélectionnée dans le panneau de gauche, tableau des hauteurs précipitées (mm) et des débits spécifiques (L/(s·ha)) pour chaque durée et période de retour. La colonne de la période de retour de dimensionnement est surlignée.
+      </div>
+      <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--text-muted);">Commune : <strong id="pluies-commune">–</strong></span>
+        <div style="display:flex;gap:4px;margin-left:auto;">
+          <button type="button" id="pluies-btn-mm" class="btn-small" onclick="setPluiesMode('mm')">Hauteur (mm)</button>
+          <button type="button" id="pluies-btn-q" class="btn-small" style="background:var(--gray);" onclick="setPluiesMode('q')">Débit L/(s·ha)</button>
+        </div>
+      </div>
+      <div id="pluies-table-wrap" style="overflow-x:auto;">
+        <div style="color:var(--text-muted);font-size:12px;">Chargement…</div>
+      </div>
+    </div>
+
     <div id="pane-sim" class="tab-pane" style="padding:10px;">
       <div id="sim-layout">
         <div id="sim-controls">
@@ -585,12 +625,13 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             <div class="ctrl-row">
               <label>Type</label>
               <select id="sim-scen">
+                <option value="0">0 – Temporisation pure</option>
                 <option value="1">1 – Dispersion pure</option>
                 <option value="2">2 – Disp. + Ajutage</option>
                 <option value="3" selected>3 – Surprofondeur</option>
               </select>
             </div>
-            <div class="ctrl-row">
+            <div class="ctrl-row" id="row-sdisp">
               <label>Surface dispersion</label>
               <input type="number" id="sim-sdisp" value="0" min="0"> <span class="unit">m²</span>
             </div>
@@ -657,6 +698,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             <label><input type="checkbox" id="sec-rain" checked> Pluies de référence</label>
             <label><input type="checkbox" id="sec-surfaces" checked> Surfaces drainées</label>
             <label><input type="checkbox" id="sec-perm" checked> Perméabilité</label>
+            <label><input type="checkbox" id="sec-s0" checked> Scénario 0 — Temporisation pure</label>
             <label><input type="checkbox" id="sec-s1" checked> Scénario 1 — Dispersion pure</label>
             <label><input type="checkbox" id="sec-s2" checked> Scénario 2 — Dispersion + ajutage</label>
             <label><input type="checkbox" id="sec-s3" checked> Scénario 3 — Surprofondeur</label>
@@ -704,7 +746,6 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
             <button class="btn-word" onclick="generateWord()">📘 Télécharger Word (.doc)</button>
             <button class="btn-json" onclick="exportStudyJSON()">💾 Exporter étude (JSON)</button>
             <button class="btn-json" onclick="importStudy()" style="background:var(--green);">📂 Importer étude (JSON)</button>
-            <button class="btn-demo" onclick="loadDemoProject()">🎯 Charger projet démo</button>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
             Le PDF s'ouvre dans un nouvel onglet — la boîte de dialogue d'impression apparaît automatiquement (choisissez « Enregistrer au format PDF »). L'application reste ouverte dans l'onglet courant.<br>
@@ -727,6 +768,7 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
         <div class="param-row" style="margin:0;">
           <label style="width:auto;margin-right:6px;">Bassin à analyser :</label>
           <select id="prot-scen" style="width:200px;padding:4px;">
+            <option value="0">Sc. 0 — Dimensionnement min.</option>
             <option value="1">Sc. 1 — Dimensionnement min.</option>
             <option value="2">Sc. 2 — Dimensionnement min.</option>
             <option value="3" selected>Sc. 3 — Dimensionnement min.</option>
@@ -770,7 +812,7 @@ const DEFAULT_SURF_TYPES = [
 let surfaceRows = []; // {name, cr, m2, comment}
 
 // ===================== ÉTAT =====================
-let state = { s1: null, s2: null, s3: null, simRuns: [] };
+let state = { s0: null, s1: null, s2: null, s3: null, simRuns: [] };
 let simChart = null;
 
 // ===================== HELPERS =====================
@@ -847,6 +889,8 @@ function updateSummary() {
   const kc = getKcalc();
   $('lbl-kcalc').textContent = kc <= 0 ? '0 m/s (imperméable)' : `${kc.toExponential(3)} m/s`;
   updateSimRainInfo();
+  const pluiesPane = $('pane-pluies');
+  if (pluiesPane && pluiesPane.classList.contains('active')) buildRainTable();
 }
 ['inp-kmes','inp-ks','inp-rp','inp-commune'].forEach(id => {
   const el = $(id); if (el) el.addEventListener('input', updateSummary);
@@ -903,6 +947,86 @@ function updateSimRainInfo() {
       return `<span style="color:${SIM_DUR_COLORS[i]};font-weight:600;">${SIM_DUR_LABELS[i]}</span> : ${mm.toFixed(1)} mm · V=${V.toFixed(2)} m³`;
     }).join('<br>');
   }
+}
+
+// ===================== SCÉNARIO 0 — Temporisation pure (sans dispersion) =====================
+// Identique au Scénario 2 avec S_disp = 0 : pas d'infiltration, vidange par ajutage seul.
+function calcS0() {
+  const rp = getRp();
+  const Tmax_s = getTmax_s();
+  const { seff, stot, sha_tot } = getSurfaces();
+  const qajRate_Lsha = parseFloat($('s0-qaj').value) || 0;
+  if (seff <= 0) return { error: 'no_surface' };
+  if (qajRate_Lsha <= 0) return { error: 'no_drainage', msg: 'Débit d\'ajutage nul. En temporisation pure (sans dispersion), un ajutage de fuite est indispensable pour vidanger le bassin.' };
+
+  const Qinfil_Ls = 0;
+  const Qaj_user_Ls = qajRate_Lsha * sha_tot;
+  let Qaj_min_Ls = 0;
+  const rows = [];
+  for (let i = 0; i < DUR.length; i++) {
+    const d = DUR[i];
+    const Q = rainFlow_Ls(d, rp);
+    const dur_s = d * 60;
+    const V = Q * dur_s / 1000;
+    const t_max = dur_s + Tmax_s;
+    const V_aj = V; // toute l'eau doit ressortir par l'ajutage
+    const Q_aj_d_Ls = t_max > 0 ? V_aj * 1000 / t_max : 0;
+    rows.push({ d, label: DUR_LBL[i], Q, V, V_infil_max: 0, V_aj, Q_aj_d_Ls });
+    if (Q_aj_d_Ls > Qaj_min_Ls) Qaj_min_Ls = Q_aj_d_Ls;
+  }
+  const Qvidange_Ls = Qaj_user_Ls;
+  const Qvidange_m3s = Qvidange_Ls / 1000;
+  let Vbuf = 0, critIdx = 0;
+  rows.forEach((r, i) => {
+    const excess = Math.max(0, r.Q / 1000 - Qvidange_m3s);
+    r.Vbuf = r.d * 60 * excess;
+    if (r.Vbuf > Vbuf) { Vbuf = r.Vbuf; critIdx = i; }
+  });
+  rows.forEach(r => {
+    r.t_drain_after_h = Qvidange_m3s > 0 ? (r.Vbuf / Qvidange_m3s) / 3600 : (r.Vbuf > 0 ? Infinity : 0);
+  });
+  const ajutageOK = Qaj_user_Ls >= Qaj_min_Ls;
+  const Qaj_min_Lsha = sha_tot > 0 ? Qaj_min_Ls / sha_tot : 0;
+  return { Sdisp: 0, Qinfil_Ls, Qaj_min_Ls, Qaj_min_Lsha, Qaj_user_Ls, qajRate_Lsha, ajutageOK, Qvidange_Ls, Vbuf, rows, critIdx, k: 0, seff, stot, rp, Tmax_s };
+}
+
+function renderS0(r) {
+  if (!r || r.error === 'no_surface') { $('s0-results').innerHTML = '<div class="warn-box">Entrez au moins une surface non nulle.</div>'; return; }
+  if (r.error === 'no_drainage') { $('s0-results').innerHTML = `<div class="err-box">⚠ ${r.msg}</div>`; return; }
+  const modeBanner = !r.ajutageOK
+    ? `<div class="err-box">⚠ Débit d'ajutage (${fmt(r.Qaj_user_Ls,3)} L/s = ${fmt(r.qajRate_Lsha,2)} L/(s·ha)) INSUFFISANT. Minimum requis : ${fmt(r.Qaj_min_Ls,3)} L/s = ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha).</div>`
+    : `<div class="info-box">✓ Débit d'ajutage (${fmt(r.qajRate_Lsha,2)} L/(s·ha)) ≥ minimum requis (${fmt(r.Qaj_min_Lsha,2)} L/(s·ha)).</div>`;
+  $('s0-results').innerHTML = `
+  ${modeBanner}
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Débit d'ajutage minimal requis</div>
+      <div class="rc-value">${fmt(r.Qaj_min_Ls,3)} <span class="rc-unit">L/s</span></div>
+      <div class="rc-sub">= ${fmt(r.Qaj_min_Lsha,2)} L/(s·ha) sur surface totale</div>
+    </div>
+    <div class="result-card highlight">
+      <div class="rc-label">Volume de temporisation (tampon)</div>
+      <div class="rc-value">${fmt(r.Vbuf,2)} <span class="rc-unit">m³</span></div>
+      <div class="rc-sub">Q_vidange = ${fmt(r.Qvidange_Ls,3)} L/s · pluie critique : ${r.rows[r.critIdx].label}</div>
+    </div>
+  </div>
+  <div class="col-title">Détail par durée</div>
+  <div style="overflow-x:auto;">
+  <table class="res-table">
+    <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
+    ${r.rows.map((row,i)=>{
+      const Tmax_h = r.Tmax_s/3600;
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
+      const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
+      const rowClass = ok ? '' : ' overflow';
+      return `<tr class="${i===r.critIdx?'critical':''}${rowClass}">
+        <td>${row.label}${i===r.critIdx?' ⭐':''}</td>
+        <td>${fmt(row.Q,3)}</td><td>${fmt(row.V,3)}</td>
+        <td>${fmt(row.Q_aj_d_Ls,3)}</td><td>${fmt(row.Vbuf,3)}</td>
+        <td>${isFinite(row.t_drain_after_h)?fmt(row.t_drain_after_h,2):'∞'}</td>
+        <td>${badge}</td>
+      </tr>`;}).join('')}
+  </table></div>`;
 }
 
 // ===================== SCÉNARIO 1 — Dispersion pure =====================
@@ -1208,54 +1332,16 @@ function calcS3() {
   const Vtotal = Vsurp + Vbuf;
   const Tmax_h = Tmax_s / 3600;
 
-  // For each row, compute residual volume at Tmax_h and determine 3-state status
+  // Statut 3 états par durée — vérification dynamique « second épisode ».
+  // On simule l'épisode (durée → résiduel à t_max), puis on re-vérifie le
+  // dimensionnement avec le volume encore disponible (cf. basinReuseStatus).
+  const cfg3 = { scen: 3, Vsurp, Vtotal, Qaj_Ls, Qinfil_Ls, rp };
   rows.forEach(r => {
-    // Drainage trajectory from end of rain:
-    // Phase A: drain buffer at Qvidange_above_Ls until V_buf_remaining = 0
-    // Phase B: drain surp at Qinfil_Ls until V_fill_surp_remaining = 0
-    const Qbuf_m3s = Qvidange_above_Ls / 1000;
-    const Qsurp_m3s = Qinfil_Ls / 1000;
-    const Tmax_sec = Tmax_h * 3600;
-
-    let Vbuf_rem = r.Vbuf_d;
-    let Vsurp_rem = r.Vfill_surp;
-
-    // Drain buffer first
-    if (Qbuf_m3s > 0 && Vbuf_rem > 0) {
-      const t_to_empty_buf = Vbuf_rem / Qbuf_m3s; // s
-      if (t_to_empty_buf <= Tmax_sec) {
-        Vbuf_rem = 0;
-        const t_remaining = Tmax_sec - t_to_empty_buf;
-        if (Qsurp_m3s > 0 && Vsurp_rem > 0) {
-          Vsurp_rem = Math.max(0, Vsurp_rem - Qsurp_m3s * t_remaining);
-        }
-      } else {
-        Vbuf_rem = Math.max(0, Vbuf_rem - Qbuf_m3s * Tmax_sec);
-      }
-    } else if (Qbuf_m3s <= 0 && Vbuf_rem > 0) {
-      // No drainage of buffer
-    } else if (Vbuf_rem === 0 && Qsurp_m3s > 0 && Vsurp_rem > 0) {
-      Vsurp_rem = Math.max(0, Vsurp_rem - Qsurp_m3s * Tmax_sec);
-    }
-
-    const V_remaining = Vbuf_rem + Vsurp_rem;
-    const V_free = Math.max(0, Vtotal - V_remaining);
-
-    // OK: complete drainage within Tmax
-    // !OK (yellow): not complete BUT V_free ≥ Vbuf (worst-case second event)
-    // NOK (red): not complete AND V_free < Vbuf
-    const completelyDrained = r.t_total_drain_h <= Tmax_h + 1e-6;
-    let status;
-    if (completelyDrained) {
-      status = 'OK';
-    } else if (V_free >= Vbuf - 1e-6) {
-      status = 'PARTIAL'; // !OK yellow
-    } else {
-      status = 'NOK';
-    }
-    r.V_remaining_after_Tmax = V_remaining;
-    r.V_free_after_Tmax = V_free;
-    r.status = status;
+    const first = simulateEventGeneric(cfg3, r.d, 0);
+    const residual = first.Vat_tmax;
+    r.V_remaining_after_Tmax = residual;
+    r.V_free_after_Tmax = Math.max(0, Vtotal - residual);
+    r.status = basinReuseStatus(cfg3, r.d, DUR);
   });
 
   const anyNonCompliant = rows.some(r => r.status !== 'OK');
@@ -1267,9 +1353,11 @@ function calcS3() {
 // ===================== MAIN CALCULATE =====================
 function calculateAll() {
   updateSummary();
+  state.s0 = calcS0();
   state.s1 = calcS1();
   state.s2 = calcS2();
   state.s3 = calcS3();
+  renderS0(state.s0);
   renderS1(state.s1);
   renderS2(state.s2);
   renderS3(state.s3);
@@ -1465,10 +1553,11 @@ function renderS3(r) {
 
 // ===================== TABS =====================
 function showTab(id) {
-  const ids = ['s1','s2','s3','sim','prot','report'];
+  const ids = ['s0','s1','s2','s3','pluies','sim','prot','report'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i]===id));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   $('pane-'+id).classList.add('active');
+  if (id === 'pluies') { buildRainTable(); }
   if (id === 'sim') {
     initSimIfNeeded();
     const vtampNow = parseFloat($('sim-vtamp').value) || 0;
@@ -1495,10 +1584,11 @@ function showTab(id) {
 function getSimParamsBase() {
   const scen = parseInt($('sim-scen').value);
   const rp = parseInt($('sim-rp').value);
-  const Sdisp = parseFloat($('sim-sdisp').value)||0;
+  const SdispRaw = parseFloat($('sim-sdisp').value)||0;
+  const Sdisp = scen === 0 ? 0 : SdispRaw; // temporisation pure = aucune dispersion
   const Vsurp = scen === 3 ? (parseFloat($('sim-vsurp').value)||0) : 0;
-  const Vtamp = scen >= 2 ? (parseFloat($('sim-vtamp').value)||0) : parseFloat($('sim-vtamp').value)||0;
-  const Qaj_Ls = scen >= 2 ? (parseFloat($('sim-qaj').value)||0) : 0;
+  const Vtamp = parseFloat($('sim-vtamp').value)||0;
+  const Qaj_Ls = (scen === 0 || scen >= 2) ? (parseFloat($('sim-qaj').value)||0) : 0;
   const {seff} = getSurfaces();
   const k = getKcalc();
   const Qinfil_Ls = k * Sdisp * 1000;
@@ -1577,6 +1667,62 @@ function computeSimData(p) {
     }
   }
   return data;
+}
+
+// ===================== SIMULATEUR GÉNÉRIQUE (statut !OK / NOK) =====================
+// Simule un épisode pluvieux (durée `dur`, période `cfg.rp`) en partant d'un
+// volume initial V0 dans le bassin. Retourne le volume au bout de t_max après la
+// pluie, le pic et le volume débordé cumulé.
+// cfg = { scen, Vsurp, Vtotal, Qaj_Ls, Qinfil_Ls, rp }
+function simulateEventGeneric(cfg, dur, V0) {
+  const dur_s = dur * 60;
+  const dt = getSimDt(dur);
+  const Tmax_s = getTmax_s();
+  const Qrain_Ls = rainFlow_Ls(dur, cfg.rp);
+  const maxT = dur_s + Tmax_s + 3 * dt;
+  let V = V0 || 0;
+  let peak = V;
+  let Vover = 0;
+  let Vat_tmax = null;
+  for (let t = 0; t <= maxT; t += dt) {
+    const raining = t < dur_s;
+    const Qin = raining ? Qrain_Ls : 0;
+    let Qinfil = 0, Qorifice = 0;
+    if (V > 0 || Qin > 0) {
+      const Vavail = V + Qin * dt / 1000;
+      Qinfil = Math.min(cfg.Qinfil_Ls, Vavail * 1000 / dt);
+      if ((cfg.scen >= 2 || cfg.scen === 0) && cfg.Qaj_Ls > 0) {
+        const Vabove = V - (cfg.Vsurp || 0);
+        if (Vabove > 0) Qorifice = Math.min(cfg.Qaj_Ls, Vabove * 1000 / dt);
+      }
+    }
+    V += (Qin - Qinfil - Qorifice) * dt / 1000;
+    if (V < 0) V = 0;
+    if (V > peak) peak = V;
+    if (cfg.Vtotal > 0 && V > cfg.Vtotal) { Vover += V - cfg.Vtotal; V = cfg.Vtotal; }
+    if (Vat_tmax === null && t >= dur_s + Tmax_s) Vat_tmax = V;
+  }
+  if (Vat_tmax === null) Vat_tmax = V;
+  return { peak, Vover, Vat_tmax };
+}
+
+// Statut 3 états pour une configuration de bassin et une durée d'épisode d1 :
+//  - 'OK'      : vidange complète dans t_max (résiduel ≈ 0 à t_max) ;
+//  - 'PARTIAL' (!OK) : pas complètement vidangé, MAIS le volume libre restant
+//                permet d'absorber un second épisode de même période de retour
+//                (quelle que soit sa durée) sans déborder ;
+//  - 'NOK'     : le premier épisode déborde déjà, OU un second épisode déborderait.
+// = nouvelle vérification de dimensionnement avec le volume encore disponible.
+function basinReuseStatus(cfg, d1, durList) {
+  const first = simulateEventGeneric(cfg, d1, 0);
+  if (first.Vover > 1e-6) return 'NOK'; // le bassin déborde déjà sur le 1er épisode
+  const residual = first.Vat_tmax;
+  if (residual < 1e-4) return 'OK';       // vidangé dans t_max
+  // Second épisode (pire durée) en partant du volume résiduel.
+  for (let i = 0; i < durList.length; i++) {
+    if (simulateEventGeneric(cfg, durList[i], residual).Vover > 1e-6) return 'NOK';
+  }
+  return 'PARTIAL';
 }
 
 // ---- chart rain-period bands (one per active duration) ----
@@ -1719,53 +1865,93 @@ function runSimulation() {
 function showSimStats(runs, base) {
   if (!runs || !runs.length) return;
   $('sim-stats').style.display = 'block';
+  const Tmax_h = getTmax_s() / 3600;
+  const cfg = { scen: base.scen, Vsurp: base.Vsurp, Vtotal: base.Vtotal, Qaj_Ls: base.Qaj_Ls, Qinfil_Ls: base.Qinfil_Ls, rp: base.rp };
+  const hasOrifice = (base.scen === 0 || base.scen >= 2) && base.Qaj_Ls > 0;
+  const Qabove_Ls = base.Qinfil_Ls + (hasOrifice ? base.Qaj_Ls : 0); // vidange du volume au-dessus de l'ajutage
+
   const rows = runs.map(run => {
     const data = run.data;
     const dur_s = run.dur * 60;
     const Vmax = Math.max(...data.map(d => d.V));
     const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
     const Vover = data[data.length-1].Vover || 0;
-    let drainT = null;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i].t > dur_s && data[i].V < 1e-4 && data[i-1].V >= 1e-4) {
-        drainT = data[i].t;
-        break;
-      }
+
+    // Volume présent dans le bassin à la fin de la pluie
+    let Vend = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i].t >= dur_s) { Vend = data[i].V; break; }
+      if (i === data.length - 1) Vend = data[i].V;
     }
-    const drainTime = drainT !== null ? drainT - dur_s : null;
-    const Tmax_s = getTmax_s();
-    const drainOK = drainTime !== null && drainTime <= Tmax_s;
-    return { run, Vmax, overflowed, Vover, drainTime, drainOK };
+    // Répartition : surprofondeur (sous l'ajutage) / tampon (au-dessus de l'ajutage)
+    const Vsurp_filled = Math.min(Vend, base.Vsurp || 0);
+    const Vabove = Math.max(0, Vend - (base.Vsurp || 0));
+    const t_drain_buf_h  = Vabove > 0 ? (Qabove_Ls > 0 ? (Vabove * 1000 / Qabove_Ls) / 3600 : Infinity) : 0;
+    const t_drain_surp_h = Vsurp_filled > 0 ? (base.Qinfil_Ls > 0 ? (Vsurp_filled * 1000 / base.Qinfil_Ls) / 3600 : Infinity) : 0;
+    const t_total_h = t_drain_buf_h + t_drain_surp_h;
+    const drainOK = isFinite(t_total_h) && t_total_h <= Tmax_h + 1e-6;
+    const status = basinReuseStatus(cfg, run.dur, DUR);
+    return { run, Vmax, overflowed, Vover, t_drain_buf_h, t_drain_surp_h, t_total_h, drainOK, status };
   });
+
   const anyOverflow = rows.some(r => r.overflowed);
+  const anyNOK = rows.some(r => r.status === 'NOK');
+  const anyPartial = rows.some(r => r.status === 'PARTIAL');
+  const globalBadge = anyOverflow
+    ? '<span class="badge badge-red">⚠ Débordement sur au moins une durée</span>'
+    : (anyNOK ? '<span class="badge badge-red">NOK — second épisode non absorbé</span>'
+      : (anyPartial ? '<span class="badge" style="background:#FFF59D;color:#F57F17;">!OK — vidange &gt; t_max mais résilient</span>'
+        : '<span class="badge badge-green">✓ OK — vidange complète, pas de débordement</span>'));
+
+  const tcell = (v) => {
+    if (!isFinite(v)) return '<span style="color:var(--red);">∞</span>';
+    const exceed = v > Tmax_h + 1e-6;
+    return `<span style="color:${exceed?'var(--orange)':'inherit'};">${v.toFixed(2)} h${exceed?' <span style="color:var(--red);">⚠&gt;t_max</span>':''}</span>`;
+  };
+  const statusBadge = (s) => s === 'OK' ? '<span class="badge badge-green">OK</span>'
+    : (s === 'PARTIAL' ? '<span class="badge" style="background:#FFF59D;color:#F57F17;">!OK</span>'
+      : '<span class="badge badge-red">NOK</span>');
+
   const html = `
-    <div style="margin-bottom:8px;">
-      <span class="badge ${anyOverflow?'badge-red':'badge-green'}">${anyOverflow?'⚠ Débordement sur au moins une durée':'✓ Pas de débordement'}</span>
-    </div>
-    <table style="width:100%;font-size:10px;border-collapse:collapse;">
+    <div style="margin-bottom:8px;">${globalBadge}</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">t_max imposé après la pluie : <strong>${Tmax_h.toFixed(1)} h</strong>. « t total » = vidange du tampon (au-dessus ajutage) + vidange de la surprofondeur.</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:10px;border-collapse:collapse;min-width:520px;">
       <tr style="background:var(--gray-pale);">
         <th style="padding:3px 4px;text-align:left;">Durée</th>
         <th style="padding:3px 4px;text-align:right;">V max (m³)</th>
         <th style="padding:3px 4px;text-align:right;">%</th>
-        <th style="padding:3px 4px;text-align:right;">Vidange après pluie</th>
+        <th style="padding:3px 4px;text-align:right;">t vid. tampon (h)</th>
+        <th style="padding:3px 4px;text-align:right;">t vid. surprof. (h)</th>
+        <th style="padding:3px 4px;text-align:right;">t total (h)</th>
+        <th style="padding:3px 4px;text-align:center;">Statut</th>
       </tr>
       ${rows.map(r => `
         <tr style="border-bottom:1px solid var(--gray-pale);">
           <td style="padding:3px 4px;color:${r.run.color};font-weight:700;">${r.run.label}</td>
           <td style="padding:3px 4px;text-align:right;">${r.Vmax.toFixed(2)}${r.overflowed?` <span style="color:var(--red);">+${r.Vover.toFixed(2)} déb.</span>`:''}</td>
           <td style="padding:3px 4px;text-align:right;">${base.Vtotal>0?(r.Vmax/base.Vtotal*100).toFixed(0):0}%</td>
-          <td style="padding:3px 4px;text-align:right;color:${r.drainOK===true?'var(--green)':(r.drainTime===null?'var(--red)':'var(--orange)')};">${r.drainTime!==null?fmtTime(r.drainTime):'> fenêtre'}</td>
+          <td style="padding:3px 4px;text-align:right;">${tcell(r.t_drain_buf_h)}</td>
+          <td style="padding:3px 4px;text-align:right;">${tcell(r.t_drain_surp_h)}</td>
+          <td style="padding:3px 4px;text-align:right;font-weight:700;">${tcell(r.t_total_h)}</td>
+          <td style="padding:3px 4px;text-align:center;">${statusBadge(r.status)}</td>
         </tr>`).join('')}
-    </table>`;
+    </table></div>`;
   $('sim-stats-inner').innerHTML = html;
 }
 
 function prefillFromScenario() {
   const scen = parseInt($('sim-scen').value);
+  const s0ok = state.s0 && !state.s0.error;
   const s1ok = state.s1 && !state.s1.error;
   const s2ok = state.s2 && !state.s2.error;
   const s3ok = state.s3 && !state.s3.error;
-  if (scen === 1 && s1ok) {
+  if (scen === 0 && s0ok) {
+    $('sim-sdisp').value = '0';
+    $('sim-vsurp').value = '0';
+    $('sim-vtamp').value = state.s0.Vbuf.toFixed(3);
+    $('sim-qaj').value = state.s0.Qaj_user_Ls.toFixed(3);
+  } else if (scen === 1 && s1ok) {
     $('sim-sdisp').value = state.s1.Seff_used.toFixed(0);
     $('sim-vsurp').value = '0';
     $('sim-vtamp').value = state.s1.Vbuf.toFixed(3);
@@ -1795,9 +1981,10 @@ function prefillFromScenario() {
 
 $('sim-scen').addEventListener('change', function() {
   const s = parseInt(this.value);
+  const rowSdisp = $('row-sdisp'); if (rowSdisp) rowSdisp.style.display = s === 0 ? 'none' : 'flex';
   $('row-vsurp').style.display = s === 3 ? 'flex' : 'none';
   $('row-vtamp').style.display = 'flex';
-  $('row-qaj2').style.display = s >= 2 ? 'flex' : 'none';
+  $('row-qaj2').style.display = (s === 0 || s >= 2) ? 'flex' : 'none';
   if (simChart) {
     simRainBands = [];
     simChart.data.datasets = [];
@@ -1811,12 +1998,15 @@ function buildProtectionMatrix() {
   const which = $('prot-scen').value;
   let Sdisp, Vsurp, Vtamp, Qaj_Ls, scen;
 
+  const s0ok = state.s0 && !state.s0.error;
   const s1ok = state.s1 && !state.s1.error;
   const s2ok = state.s2 && !state.s2.error;
   const s3ok = state.s3 && !state.s3.error;
   if (which === 'sim') {
     const p = getSimParams();
     Sdisp = p.Sdisp; Vsurp = p.Vsurp; Vtamp = p.Vtamp; Qaj_Ls = p.Qaj_Ls; scen = p.scen;
+  } else if (which === '0' && s0ok) {
+    Sdisp = 0; Vsurp = 0; Vtamp = state.s0.Vbuf; Qaj_Ls = state.s0.Qaj_user_Ls; scen = 0;
   } else if (which === '1' && s1ok) {
     Sdisp = state.s1.Seff_used; Vsurp = 0; Vtamp = state.s1.Vbuf; Qaj_Ls = 0; scen = 1;
   } else if (which === '2' && s2ok) {
@@ -1871,8 +2061,8 @@ function buildProtectionMatrix() {
           }
         }
       } else {
-        // scenario 1 or 2: just check buffer fills
-        const Qout = scen >= 2 ? Qinfil_Ls + Qaj_Ls : Qinfil_Ls;
+        // scénario 0, 1 ou 2 : vérifier le remplissage du tampon
+        const Qout = (scen === 0 || scen >= 2) ? Qinfil_Ls + Qaj_Ls : Qinfil_Ls;
         if (Qrain > Qout) {
           const Vneeded = (Qrain - Qout) / 1000 * dur_s;
           overflow = Vneeded > Vtotal + 1e-6;
@@ -1937,6 +2127,40 @@ function populateCommuneDropdown() {
   sel.innerHTML = keys.map(k => `<option value="${escapeHtml(k)}"${k===DEFAULT_COMMUNE?' selected':''}>${escapeHtml(k)}</option>`).join('');
 }
 
+// ===================== ONGLET PLUIES =====================
+let pluiesMode = 'mm'; // 'mm' (hauteur) ou 'q' (débit spécifique L/(s·ha))
+function setPluiesMode(m) {
+  pluiesMode = m;
+  const bMm = $('pluies-btn-mm'), bQ = $('pluies-btn-q');
+  if (bMm) bMm.style.background = m === 'mm' ? 'var(--green)' : 'var(--gray)';
+  if (bQ) bQ.style.background = m === 'q' ? 'var(--green)' : 'var(--gray)';
+  buildRainTable();
+}
+function buildRainTable() {
+  const wrap = $('pluies-table-wrap');
+  if (!wrap) return;
+  const commune = $('inp-commune').value;
+  const cEl = $('pluies-commune'); if (cEl) cEl.textContent = commune || '–';
+  const rp_design = getRp();
+  const isMm = pluiesMode !== 'q';
+  let html = `<table class="res-table" style="min-width:680px;"><tr><th>Durée \\ T. retour</th>`;
+  RP.forEach(rp => html += `<th style="${rp===rp_design?'background:#F9A825;color:#111;':''}">${rp} ans</th>`);
+  html += `</tr>`;
+  DUR.forEach((d, di) => {
+    html += `<tr><td>${DUR_LBL[di]}</td>`;
+    RP.forEach(rp => {
+      const val = isMm ? rainMm(d, rp) : rainIntensity_Lsha(d, rp);
+      html += `<td style="${rp===rp_design?'background:#FFF9C4;':''}">${val.toFixed(1)}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</table>`;
+  html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">${isMm
+    ? 'Valeurs : hauteur de précipitation cumulée (mm) pour la durée et la période de retour.'
+    : 'Valeurs : intensité / débit spécifique L/(s·ha) = hauteur (mm) ÷ durée (s) × 10 000.'} Colonne surlignée = période de retour de dimensionnement (${rp_design} ans).</div>`;
+  wrap.innerHTML = html;
+}
+
 
 
 // ===================== SML LOGO (réutilisable) =====================
@@ -1992,6 +2216,7 @@ function captureStudyState() {
     ks: $('inp-ks').value,
     tmax: $('inp-tmax').value,
     surfaces: surfaceRows.map(r => ({name: r.name, cr: r.cr, m2: r.m2, comment: r.comment || ''})),
+    s0_qaj: $('s0-qaj').value,
     s1_suser: $('s1-suser').value,
     s2_sdisp: $('s2-sdisp').value,
     s2_qaj: $('s2-qaj').value,
@@ -2017,7 +2242,7 @@ function captureStudyState() {
       desc: ($('rep-desc')||{}).value || '',
       hypotheses: ($('rep-hypotheses')||{}).value || '',
       conclusions: ($('rep-conclu')||{}).value || '',
-      sections: ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','simulation','prot','conclu','signature']
+      sections: ['cover','summary','hypotheses','rain','surfaces','perm','s0','s1','s2','s3','simulation','prot','conclu','signature']
         .reduce((a, k) => { const el = $('sec-'+k); if (el) a[k] = el.checked; return a; }, {}),
       customSections: customSections.map(s => ({title: s.title, content: s.content, position: s.position}))
     },
@@ -2036,6 +2261,7 @@ function applyStudyState(s) {
     surfaceRows = s.surfaces.map(r => ({name: r.name||'', cr: r.cr, m2: r.m2, comment: r.comment||''}));
     renderSurfaceTable();
   }
+  if (s.s0_qaj !== undefined) $('s0-qaj').value = s.s0_qaj;
   if (s.s1_suser !== undefined) $('s1-suser').value = s.s1_suser;
   if (s.s2_sdisp !== undefined) $('s2-sdisp').value = s.s2_sdisp;
   if (s.s2_qaj !== undefined) $('s2-qaj').value = s.s2_qaj;
@@ -2104,49 +2330,6 @@ function populateSimRP() {
   const sel = $('sim-rp'); if (!sel) return;
   const current = sel.value || '25';
   sel.innerHTML = RP.map(rp => `<option value="${rp}" ${String(rp)===String(current)?'selected':''}>${rp} ans</option>`).join('');
-}
-
-function loadDemoProject() {
-  const demoState = {
-    version: 5,
-    commune: 'Liège',
-    rp: '25',
-    kmes: '2.5e-6',
-    ks: '1.5',
-    tmax: '24',
-    surfaces: [
-      {name: 'Toitures bâtiment principal', cr: 1.0, m2: 1250, comment: 'Toiture tuile, pente 25%'},
-      {name: 'Voiries asphaltées', cr: 0.95, m2: 680, comment: 'Accès et parking'},
-      {name: 'Parking pavé non-jointif', cr: 0.55, m2: 320, comment: 'Pavés perméables 10cm'},
-      {name: 'Allées gravier', cr: 0.30, m2: 180, comment: 'Cheminements piétons'},
-      {name: 'Espaces verts', cr: 0.15, m2: 920, comment: 'Pelouse, plantations'}
-    ],
-    s1_suser: 50,
-    s2_sdisp: 60,
-    s2_qaj: 2.5,
-    s3_sdisp: 120,
-    s3_vsurp: 25,
-    s3_qaj: 2.0,
-    sim: {scen:'3', rp:'25', sdisp:120, vsurp:25, vtamp:60, qaj:2.0, selectedDurs:[10,30,120,360]},
-    report: {
-      title: 'Projet démo — Étude de bassin de dispersion',
-      ref: 'SML-DEMO-2026-001',
-      client: 'Commune de Liège — Service Travaux',
-      author: 'Ing. Civil — SML Ingénieurs Conseils',
-      location: 'Rue de la Démonstration, 4000 Liège',
-      date: new Date().toISOString().slice(0,10),
-      desc: 'Projet de référence illustrant l\'usage du simulateur. Lotissement résidentiel de 5 lots avec voiries, parking et espaces verts. L\'eau pluviale est gérée intégralement sur la parcelle par un système de dispersion avec surprofondeur.',
-      hypotheses: 'Le sol est constitué de limon sableux de perméabilité modérée (k≈2,5·10⁻⁶ m/s). La nappe se situe à plus de 4 m. Aucune contrainte de servitude n\'est connue. Le dimensionnement applique le coefficient de sécurité standard Cs=1,5.',
-      conclusions: 'Le scénario 3 (surprofondeur) est retenu : il offre la meilleure compacité tout en garantissant un statut OK pour toutes les pluies de référence jusqu\'à T=25 ans. Le volume total à réaliser est d\'environ 30 m³ (tampon) + 15 m³ (surprofondeur). Un ajutage calibré à 1,5 L/s sera placé en aval. La matrice de protection confirme l\'absence de débordement jusqu\'à T=50 ans, marge raisonnable au-delà du dimensionnement.',
-      sections: {cover:true, summary:true, hypotheses:true, rain:true, surfaces:true, perm:true, s1:true, s2:true, s3:true, prot:true, conclu:true, signature:true},
-      customSections: [
-        {title:'Contexte et méthodologie', content:'L\'étude suit la méthodologie hydrologique standard utilisée par SML Ingénieurs Conseils pour les bassins de dispersion en Région wallonne. Les coefficients de Montana proviennent de la base IRM la plus récente. Les surfaces et perméabilités sont issues des relevés de terrain (test d\'infiltration réalisé le ' + new Date().toISOString().slice(0,10) + ').', position:'after-cover'},
-        {title:'Contraintes et données d\'entrée', content:'• Topographie : pente moyenne 2-3% vers le SO\n• Sol : limon sableux compacté en zone de circulation\n• Nappe : profondeur > 4 m (sondage du 12/03/2026)\n• Aucun cours d\'eau récepteur à proximité immédiate', position:'after-hypotheses'}
-      ]
-    }
-  };
-  applyStudyState(demoState);
-  alert('Projet démo chargé. Naviguez dans les onglets pour voir les résultats, puis générez le rapport.');
 }
 
 function exportStudyJSON() {
@@ -2367,42 +2550,52 @@ function renderSimulationForReport() {
     } catch(e) { console.warn('toBase64Image failed:', e); }
   }
 
-  const Tmax_s = getTmax_s();
+  const Tmax_h = getTmax_s() / 3600;
+  const cfg = { scen: base.scen, Vsurp: base.Vsurp, Vtotal: base.Vtotal, Qaj_Ls: base.Qaj_Ls, Qinfil_Ls: base.Qinfil_Ls, rp: base.rp };
+  const hasOrifice = (base.scen === 0 || base.scen >= 2) && base.Qaj_Ls > 0;
+  const Qabove_Ls = base.Qinfil_Ls + (hasOrifice ? base.Qaj_Ls : 0);
   const rows = runs.map(run => {
     const data = run.data;
     const dur_s = run.dur * 60;
     const Vmax = Math.max(...data.map(d => d.V));
     const overflowed = data.some(d => d.overflow) || data[data.length-1].Vover > 0;
     const Vover = data[data.length-1].Vover || 0;
-    let drainT = null;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i].t > dur_s && data[i].V < 1e-4 && data[i-1].V >= 1e-4) { drainT = data[i].t; break; }
-    }
-    const drainTime = drainT !== null ? drainT - dur_s : null;
-    const drainOK = drainTime !== null && drainTime <= Tmax_s;
-    return { run, Vmax, overflowed, Vover, drainTime, drainOK };
+    let Vend = 0;
+    for (let i = 0; i < data.length; i++) { if (data[i].t >= dur_s) { Vend = data[i].V; break; } if (i === data.length-1) Vend = data[i].V; }
+    const Vsurp_filled = Math.min(Vend, base.Vsurp || 0);
+    const Vabove = Math.max(0, Vend - (base.Vsurp || 0));
+    const t_drain_buf_h  = Vabove > 0 ? (Qabove_Ls > 0 ? (Vabove*1000/Qabove_Ls)/3600 : Infinity) : 0;
+    const t_drain_surp_h = Vsurp_filled > 0 ? (base.Qinfil_Ls > 0 ? (Vsurp_filled*1000/base.Qinfil_Ls)/3600 : Infinity) : 0;
+    const t_total_h = t_drain_buf_h + t_drain_surp_h;
+    const drainOK = isFinite(t_total_h) && t_total_h <= Tmax_h + 1e-6;
+    const status = basinReuseStatus(cfg, run.dur, DUR);
+    return { run, Vmax, overflowed, Vover, t_drain_buf_h, t_drain_surp_h, t_total_h, drainOK, status };
   });
   const anyOver = rows.some(r => r.overflowed);
 
   let html = '';
-  const scenLabel = base.scen === 1 ? 'Sc. 1 — dispersion pure'
+  const scenLabel = base.scen === 0 ? 'Sc. 0 — temporisation pure'
+                  : base.scen === 1 ? 'Sc. 1 — dispersion pure'
                   : base.scen === 2 ? 'Sc. 2 — dispersion + ajutage'
                   : 'Sc. 3 — surprofondeur';
   html += `<p><strong>Configuration de la simulation</strong> — ${scenLabel} · S_disp = ${base.Sdisp.toFixed(0)} m² · V_tampon = ${base.Vtamp.toFixed(2)} m³ · V_surprofondeur = ${base.Vsurp.toFixed(2)} m³ · V_total = ${base.Vtotal.toFixed(2)} m³ · Q_ajutage = ${base.Qaj_Ls.toFixed(3)} L/s · Q_infil = ${base.Qinfil_Ls.toFixed(3)} L/s · Période de retour : ${base.rp} ans.</p>`;
   html += `<p style="margin:4px 0;">${anyOver ? '<span class="badge badge-red">⚠ Débordement sur au moins une durée</span>' : '<span class="badge badge-green">✓ Pas de débordement</span>'} — durées simulées : ${rows.map(r=>r.run.label).join(', ')}.</p>`;
   html += imgTag;
+  const tcell = (v) => !isFinite(v) ? '∞ <span style="color:#B71C1C;">(non vidangé)</span>'
+    : `${v.toFixed(2)} h${v > Tmax_h + 1e-6 ? ' <span style="color:#B71C1C;">⚠ &gt; t_max</span>' : ''}`;
   html += `<table style="margin-top:6px;">
-    <tr><th>Durée de pluie</th><th>V max (m³)</th><th>% V_total</th><th>Débordement</th><th>Vidange après pluie</th><th>Statut</th></tr>`;
+    <tr><th>Durée de pluie</th><th>V max (m³)</th><th>% V_total</th><th>t vid. tampon (h)</th><th>t vid. surprof. (h)</th><th>t total (h)</th><th>Statut</th></tr>`;
   rows.forEach(r => {
-    const drainTxt = r.drainTime !== null ? fmtTime(r.drainTime) : '> fenêtre admissible';
-    const drainColor = r.drainOK ? '#1B5E20' : (r.drainTime === null ? '#B71C1C' : '#E65100');
-    const status = r.overflowed ? '<span class="badge badge-red">DÉB.</span>' : (r.drainOK ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-yellow">!VID</span>');
+    const status = r.overflowed ? '<span class="badge badge-red">DÉB.</span>'
+      : (r.status === 'OK' ? '<span class="badge badge-green">OK</span>'
+        : (r.status === 'PARTIAL' ? '<span class="badge badge-yellow">!OK</span>' : '<span class="badge badge-red">NOK</span>'));
     html += `<tr>
       <td><strong>${r.run.label}</strong></td>
-      <td>${r.Vmax.toFixed(2)}</td>
+      <td>${r.Vmax.toFixed(2)}${r.overflowed ? ' (+'+r.Vover.toFixed(2)+' déb.)' : ''}</td>
       <td>${(r.Vmax/base.Vtotal*100).toFixed(0)}%</td>
-      <td>${r.overflowed ? r.Vover.toFixed(2)+' m³' : '–'}</td>
-      <td style="color:${drainColor};">${drainTxt}</td>
+      <td>${tcell(r.t_drain_buf_h)}</td>
+      <td>${tcell(r.t_drain_surp_h)}</td>
+      <td><strong>${tcell(r.t_total_h)}</strong></td>
       <td>${status}</td>
     </tr>`;
   });
@@ -2413,7 +2606,7 @@ function renderSimulationForReport() {
 
 function buildReportHTML() {
   const sec = {};
-  ['cover','summary','hypotheses','rain','surfaces','perm','s1','s2','s3','simulation','prot','conclu','signature'].forEach(k => {
+  ['cover','summary','hypotheses','rain','surfaces','perm','s0','s1','s2','s3','simulation','prot','conclu','signature'].forEach(k => {
     const el = $('sec-'+k); sec[k] = el ? el.checked : false;
   });
   const r = {
@@ -2486,6 +2679,8 @@ function buildReportHTML() {
       <tr><td>Vitesse de calcul (k_calcul)</td><td>${k<=0?'0 (imperméable)':k.toExponential(3)+' m/s'}</td></tr>
       <tr><td>Temps de vidange max après la pluie</td><td>${tmax_h.toFixed(1)} h</td></tr>
     </table>`;
+    if (state.s0 && !state.s0.error)
+      html += `<p style="margin-top:6px;"><strong>Sc. 0 (temporisation pure) :</strong> V_temporisation = ${state.s0.Vbuf.toFixed(2)} m³, Q_ajutage = ${state.s0.Qaj_user_Ls.toFixed(2)} L/s.</p>`;
     if (state.s1 && !state.s1.error)
       html += `<p style="margin-top:6px;"><strong>Sc. 1 (dispersion pure) :</strong> S_min = ${state.s1.Smin.toFixed(1)} m², V_tampon = ${state.s1.Vbuf.toFixed(2)} m³.</p>`;
     if (state.s2 && !state.s2.error)
@@ -2557,6 +2752,18 @@ function buildReportHTML() {
   html += renderCustomAt('after-perm');
 
   // ========== S1 ==========
+  if (sec.s0 && state.s0 && !state.s0.error) {
+    html += `<h2 class="pb">Scénario 0 — Temporisation pure</h2>`;
+    const s = state.s0;
+    html += `<p>Bassin étanche (sans dispersion) — Q_ajutage = ${s.Qaj_user_Ls.toFixed(3)} L/s (${s.qajRate_Lsha.toFixed(2)} L/(s·ha)) — Q_ajutage min. requis = ${s.Qaj_min_Ls.toFixed(3)} L/s — V de temporisation = <strong>${s.Vbuf.toFixed(2)} m³</strong> — Pluie critique : ${s.rows[s.critIdx].label}.</p>`;
+    html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>`;
+    s.rows.forEach((row, i) => {
+      const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
+      html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.Q_aj_d_Ls.toFixed(3)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+
   if (sec.s1 && state.s1 && !state.s1.error) {
     html += `<h2 class="pb">Scénario 1 — Dispersion pure</h2>`;
     const s = state.s1;
@@ -2689,6 +2896,11 @@ ${reportBody}
 <script>window.addEventListener('load', () => setTimeout(() => window.print(), 400));</`+`script>
 </body>
 </html>`;
+  // Application Android : impression directe via le PrintManager (choisir « PDF »).
+  if (typeof AndroidReport !== 'undefined' && AndroidReport.printHtml) {
+    AndroidReport.printHtml(docHtml);
+    return;
+  }
   const w = window.open('', '_blank');
   if (!w) { alert('Le navigateur a bloqué la nouvelle fenêtre. Autorisez les pop-ups pour ce site, puis réessayez.'); return; }
   w.document.open();
@@ -2722,10 +2934,18 @@ table td { padding: 5px 7px; border: 1px solid #999; }
 .footer-note { font-size: 9pt; color: #777; text-align: center; border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 18pt; }
 </style></head><body>${html}</body></html>`;
   const blob = new Blob(['\ufeff', fullDoc], {type: 'application/msword'});
+  const refOrTitle = (($('rep-ref').value || $('rep-title').value || 'rapport-bassin')+'').replace(/[^\w\-]+/g,'_');
+  const filename = refOrTitle + '.doc';
+  // Application Android : enregistrer le fichier dans le dossier T\u00e9l\u00e9chargements.
+  if (typeof AndroidDownloader !== 'undefined' && AndroidDownloader.saveDataUrl) {
+    const reader = new FileReader();
+    reader.onloadend = () => AndroidDownloader.saveDataUrl(reader.result, filename);
+    reader.readAsDataURL(blob);
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const refOrTitle = (($('rep-ref').value || $('rep-title').value || 'rapport-bassin')+'').replace(/[^\w\-]+/g,'_');
-  a.href = url; a.download = refOrTitle + '.doc'; a.click();
+  a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 

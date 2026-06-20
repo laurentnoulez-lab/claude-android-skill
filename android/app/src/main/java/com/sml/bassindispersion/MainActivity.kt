@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
 
         configureWebView(webView, isChild = false)
         webView.addJavascriptInterface(AndroidDownloader(), "AndroidDownloader")
+        webView.addJavascriptInterface(ReportBridge(), "AndroidReport")
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
@@ -319,7 +320,44 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Pont JS pour imprimer / exporter en PDF la fenêtre de rapport. */
+    /**
+     * Pont JS principal pour le rapport PDF : l'app web fournit le HTML complet du
+     * rapport et on l'imprime via le PrintManager (l'utilisateur choisit
+     * « Enregistrer au format PDF »). Évite la voie fragile window.open + window.print.
+     */
+    private inner class ReportBridge {
+        @JavascriptInterface
+        fun printHtml(html: String) {
+            runOnUiThread { printReportHtml(html) }
+        }
+    }
+
+    private fun printReportHtml(html: String) {
+        pdfChild?.let { removeChild(it) }
+        val child = WebView(this)
+        configureWebView(child, isChild = true)
+        child.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        child.visibility = android.view.View.INVISIBLE
+        root.addView(child)
+        pdfChild = child
+        child.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(v: WebView, url: String?) {
+                // Laisser le rendu se stabiliser avant de lancer l'impression.
+                v.postDelayed({
+                    val printManager = getSystemService(PRINT_SERVICE) as PrintManager
+                    val jobName = getString(R.string.app_name) + " — Rapport"
+                    val adapter = v.createPrintDocumentAdapter(jobName)
+                    printManager.print(jobName, adapter, PrintAttributes.Builder().build())
+                }, 350)
+            }
+        }
+        child.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null)
+    }
+
+    /** Pont JS pour imprimer / exporter en PDF la fenêtre de rapport (voie window.open). */
     private inner class PrintBridge(private val target: WebView) {
         @JavascriptInterface
         fun print() {
