@@ -42,8 +42,7 @@ Le code Kotlin (`MainActivity.kt`) ne fait QUE héberger et ponter ce WebView.
         ├── java/com/sml/bassindispersion/
         │   └── MainActivity.kt     ← hôte WebView + ponts natifs
         ├── assets/
-        │   ├── index.html          ← ★ APPLICATION COMPLÈTE (calculs + UI)
-        │   ├── montana.js          ← coefficients Montana GTI (562 communes)
+        │   ├── index.html          ← ★ APPLICATION COMPLÈTE (calculs + UI + données IRM)
         │   └── chart.umd.min.js    ← Chart.js 4.4.0 (embarqué, hors-ligne)
         └── res/
             ├── values/ (strings, colors, themes)  + values-night/
@@ -104,39 +103,42 @@ logique) → petit `<script>` du tiroir mobile.
 - `COMMUNES_DATA` : table IRM (hauteurs de pluie en mm) par commune × 19 durées
   × 12 périodes de retour. `DUR` = 19 durées (min), `DUR_LBL` = libellés,
   `RP` = [2,5,10,15,20,25,30,40,50,75,100,200].
-- `MONTANA_DATA` (fichier `montana.js`) : coefficients de Montana du **tableur
-  GTI** pour 562 communes × 12 périodes : `[a1,b1,a2,b2,a3,b3]`. Cohérents à
-  ~1-2 % avec `COMMUNES_DATA`.
 - `surfaceRows` : surfaces saisies. `state` : résultats `{s0,s1,s2,s3,simRuns}`.
 
 ### Accès à la pluie (point central)
-- `rainMm(dur_min, rp)` : hauteur de pluie (mm). En **mode GTI** → Montana
-  (`montanaDepthMm`) ; sinon → table IRM (avec repli interpolation log-log si
-  durée non tabulée).
-- `rainIntensity_Lsha`, `rainFlow_Ls` en dépendent → tout devient
-  automatiquement « GTI » quand la case est cochée.
+- `rainMm(dur_min, rp)` : hauteur de pluie (mm). Durée tabulée → valeur IRM
+  directe ; durée intermédiaire (mode GTI) → **interpolation/extrapolation
+  log-log** de la table IRM (loi puissance, cohérente avec Montana).
+- `rainIntensity_Lsha`, `rainFlow_Ls` en dépendent → tout suit
+  automatiquement le balayage fin quand le mode GTI est actif.
 
 ## 5. Le mode GTI (sondage continu des pluies)
 
 Reproduit la méthode du tableur Excel GTI fourni par le client.
 
-- **Formule de Montana** : `intensité[mm/h] = a · durée[min]^(−b)`, par
-  segments : `<25 min` (a1,b1), `25–6000 min` (a2,b2), `>6000 min` (a3,b3).
-  Hauteur `Q[mm] = i · durée/60`. → fonction `montanaDepthMm(coeffs, dur)`.
 - **Balayage** : `getProbeDurations()` renvoie, en mode GTI, **10 → 86400 min
   par pas de 5 min** (≈ 17 280 points, identique au tableur), sinon les 19
-  durées IRM.
-- `gtiEnabled()` = case cochée ET commune présente dans `MONTANA_DATA`
-  (sinon repli sur la table IRM, avec note). `montanaCoeffs` gère quelques
-  alias d'apostrophe (`MONTANA_ALIAS`).
+  durées IRM. C'est ce balayage fin qui trouve la vraie durée critique.
+- **Pluie aux durées intermédiaires** : interpolation log-log de la table IRM
+  (`rainMm`). ⚠️ Ne PAS rebundler de coefficients de Montana : dans le classeur
+  GTI, la feuille « Montana » indexe par **code INS** et ses **noms de communes
+  sont décalés** par rapport aux INS (la ligne INS 62063 = vrai code de Liège
+  porte le nom « Herstal »). Indexer par nom donne donc les mauvais
+  coefficients. Comme ces coefficients ne sont qu'un lissage de la table IRM,
+  l'interpolation log-log de la table IRM reproduit le résultat GTI à **~0,1 %**
+  (validé : Liège 25 ans, S_pond 9000 m², S_infil 500 m², K 2e-5, Cs 2 →
+  356,4 m³ à 355 min vs GTI 356,8 m³ à 355 min).
+- `gtiEnabled()` = simplement la case cochée (fonctionne pour toute commune de
+  la table IRM).
+- **Coefficient de sécurité** : le GTI applique **Cs = 2 par défaut** sur la
+  dispersion (k_calcul = k_mesuré / Cs). Dans l'app, Cs est saisi par
+  l'utilisateur (champ « Coefficient de sécurité ») ; pour comparer au GTI,
+  mettre Cs = 2. Q_infil = k_calcul × S_disp.
 - **Affichage** : comme le balayage produit des milliers de lignes,
   `gtiDisplaySubset(rows, critIdx)` n'affiche qu'un sous-ensemble lisible
   (~30 lignes), **incluant toujours la durée critique**. Le dimensionnement
-  (max) utilise lui le balayage complet.
+  (max) utilise le balayage complet.
 - La case est persistée dans l'export/import d'étude (`gti`).
-
-Vérifié : intensité, hauteur, Vin/Vout/Vol et la grille correspondent
-exactement au tableur GTI.
 
 ## 6. Les scénarios de dimensionnement
 
@@ -258,10 +260,15 @@ hors-ligne. Permission `INTERNET` présente (non requise pour le cœur).
 8. Après modification, vérifier la syntaxe JS (`node --check` sur le bloc
    script) puis, si possible, builder l'APK (local ou CI).
 
-## 12. Régénérer les coefficients Montana (`montana.js`)
+## 12. Données de pluie et lien avec le tableur GTI
 
-Extraits du classeur GTI (feuille cachée « Montana ») : colonnes
-`Name`, `Return period`, puis `a1,b1,a2,b2,a3,b3`. Structure du fichier :
-`const MONTANA_DATA = { "Commune": { "25": [a1,b1,a2,b2,a3,b3], ... }, ... };`.
-Si une nouvelle version du classeur arrive, ré-extraire la feuille et
-régénérer ce fichier (562 communes × 12 périodes).
+La source de pluie est la table IRM `COMMUNES_DATA` (dans `index.html`). Le
+tableur GTI calcule ses pluies via des coefficients de Montana, mais ceux-ci
+ne sont qu'un lissage de cette même table IRM ; l'interpolation log-log de
+`COMMUNES_DATA` les reproduit (~0,1 %). Il n'y a donc **pas** de fichier de
+coefficients à maintenir.
+
+Si un jour on veut coller exactement aux coefficients du classeur GTI, il
+faudrait les ré-extraire de la feuille « Montana » en indexant par **code INS**
+(colonne B), pas par nom (colonne C, décalée), et mapper commune → INS via la
+feuille « Listes ». Non nécessaire en pratique.
