@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sml_black">#111111</color>
+    <color name="sml_blue">#1565C0</color>
+    <color name="sml_blue_light">#42A5F5</color>
+    <color name="white">#FFFFFF</color>
+    <color name="ic_background">#1565C0</color>
+</resources>
