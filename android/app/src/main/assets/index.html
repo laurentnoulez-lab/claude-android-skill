@@ -900,12 +900,11 @@ function durLabel(d) {
   if (d < 1440) { const h = d / 60; return (h % 1 === 0 ? h : h.toFixed(1)) + ' h'; }
   const j = d / 1440; return (j % 1 === 0 ? j : j.toFixed(1)) + ' j';
 }
-// Durées sondées : les 19 durées IRM, ou un continuum fin en mode GTI.
+// Durées sondées : les 19 durées IRM, ou le balayage GTI (10 → 86400 min, pas 5 min).
 function getProbeDurations() {
   if (!gtiEnabled()) return DUR.slice();
   const out = [];
-  const push = (a, b, step) => { for (let t = a; t <= b; t += step) out.push(t); };
-  push(1, 60, 1); push(65, 360, 5); push(375, 1440, 15); push(1500, 6000, 60); push(6360, 43200, 360);
+  for (let t = 10; t <= 86400; t += 5) out.push(t);
   return out;
 }
 // Sous-ensemble lisible pour l'affichage (en mode GTI le tableau aurait des centaines de lignes).
@@ -1428,10 +1427,14 @@ function calcS3() {
   const Vtotal = Vsurp + Vbuf;
   const Tmax_h = Tmax_s / 3600;
 
-  // Statut + temps de vidange par durée via la SOURCE UNIQUE eventStatus, pour
-  // garantir l'identité de conclusion avec l'onglet Simulation (mêmes paramètres).
+  // Statut + temps de vidange via la SOURCE UNIQUE eventStatus (identique à la
+  // simulation). En mode GTI le balayage compte des milliers de durées : on
+  // n'évalue le statut (coûteux : second épisode) que sur les lignes affichées,
+  // ce qui inclut toujours la durée critique.
   const cfg3 = { scen: 3, Vsurp, Vtotal, Qaj_Ls, Qinfil_Ls, rp };
-  rows.forEach(r => {
+  const statusIdx = new Set(gtiDisplaySubset(rows, critIdx).map(o => o.i));
+  rows.forEach((r, i) => {
+    if (!statusIdx.has(i)) return; // lignes non affichées : statut non calculé
     const st = eventStatus(cfg3, r.d);
     r.t_drain_buf_h = st.t_buf_h;
     r.t_drain_surp_h = st.t_surp_h;
@@ -1440,9 +1443,9 @@ function calcS3() {
     r.V_remaining_after_Tmax = st.residual;
     r.V_free_after_Tmax = Math.max(0, Vtotal - st.residual);
   });
-
-  const anyNonCompliant = rows.some(r => r.status !== 'OK');
-  const anyNOK = rows.some(r => r.status === 'NOK');
+  const evaluated = [...statusIdx].map(i => rows[i]);
+  const anyNonCompliant = evaluated.some(r => r.status !== 'OK');
+  const anyNOK = evaluated.some(r => r.status === 'NOK');
 
   return { Sdisp, Vsurp, Vtotal, Qinfil_Ls, Qaj_Ls, qajRate_Lsha, Vbuf, rows, critIdx, k, seff, stot, rp, Tmax_s, Tmax_h, anyNonCompliant, anyNOK, noInfil };
 }
