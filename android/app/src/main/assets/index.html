@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#111111">
 <title>SML — Simulateur Bassin de Dispersion v6.0</title>
 <script src="chart.umd.min.js"></script>
+<script src="montana.js"></script>
 <style>
 :root {
   --blue: #1565C0; --blue-light: #42A5F5; --blue-pale: #E3F2FD;
@@ -460,6 +461,15 @@ hr.divider { border: none; border-top: 1px solid var(--gray-pale); margin: 10px 
       <label>Vidange max après la pluie</label>
       <input type="number" id="inp-tmax" value="24" min="1" style="width:70px"> <span class="unit">h</span>
     </div>
+    <div class="s-row" style="align-items:flex-start;">
+      <label style="flex:1;">
+        <input type="checkbox" id="inp-gti" onchange="onGtiToggle()" style="margin-right:4px;vertical-align:middle;">
+        Pluies à sonder comme tableur GTI
+      </label>
+    </div>
+    <div id="gti-note" style="font-size:10px;color:var(--text-muted);margin:-2px 0 4px 2px;">
+      Sonde un continuum de durées (formule de Montana, coefficients GTI) au lieu des durées tabulées.
+    </div>
   </div>
 
   <button id="btn-calc" onclick="calculateAll()">⟳ Calculer les scénarios</button>
@@ -851,13 +861,94 @@ function getSurfaces() {
   return { stot, seff, sha_tot: stot/10000, sha_eff: seff/10000, crmoy: stot>0 ? seff/stot : 0 };
 }
 
+// ===================== MODE GTI (sondage continu via Montana) =====================
+// Quelques communes de la table IRM utilisent une graphie sans apostrophe.
+const MONTANA_ALIAS = {
+  "Braine-l-Alleud": "Braine-l'Alleud",
+  "Fontaine-l-Evêque": "Fontaine-l'Evêque",
+  "Mont-de-l-Enclus": "Mont-de-l'Enclus"
+};
+function montanaKey(commune) {
+  if (typeof MONTANA_DATA === 'undefined' || !MONTANA_DATA) return null;
+  if (MONTANA_DATA[commune]) return commune;
+  if (MONTANA_ALIAS[commune] && MONTANA_DATA[MONTANA_ALIAS[commune]]) return MONTANA_ALIAS[commune];
+  return null;
+}
+function montanaCoeffs(commune, rp) {
+  const k = montanaKey(commune);
+  if (!k) return null;
+  return MONTANA_DATA[k][String(rp)] || null;
+}
+// Intensité Montana [mm/h] puis hauteur [mm]. coeffs = [a1,b1,a2,b2,a3,b3].
+function montanaDepthMm(coeffs, dur_min) {
+  let a, b;
+  if (dur_min < 25) { a = coeffs[0]; b = coeffs[1]; }
+  else if (dur_min <= 6000) { a = coeffs[2]; b = coeffs[3]; }
+  else { a = coeffs[4]; b = coeffs[5]; }
+  const i_mmh = a * Math.pow(dur_min, -b);   // mm/h
+  return i_mmh * (dur_min / 60);             // mm
+}
+// Mode GTI actif uniquement si la case est cochée ET la commune a des coefficients.
+function gtiEnabled() {
+  const el = $('inp-gti');
+  if (!el || !el.checked) return false;
+  return montanaKey($('inp-commune') ? $('inp-commune').value : '') !== null;
+}
+// Étiquette d'une durée en minutes.
+function durLabel(d) {
+  if (d < 60) return d + ' min';
+  if (d < 1440) { const h = d / 60; return (h % 1 === 0 ? h : h.toFixed(1)) + ' h'; }
+  const j = d / 1440; return (j % 1 === 0 ? j : j.toFixed(1)) + ' j';
+}
+// Durées sondées : les 19 durées IRM, ou un continuum fin en mode GTI.
+function getProbeDurations() {
+  if (!gtiEnabled()) return DUR.slice();
+  const out = [];
+  const push = (a, b, step) => { for (let t = a; t <= b; t += step) out.push(t); };
+  push(1, 60, 1); push(65, 360, 5); push(375, 1440, 15); push(1500, 6000, 60); push(6360, 43200, 360);
+  return out;
+}
+// Sous-ensemble lisible pour l'affichage (en mode GTI le tableau aurait des centaines de lignes).
+function gtiDisplaySubset(rows, critIdx) {
+  if (rows.length <= 40) return rows.map((row, i) => ({ row, i }));
+  const keep = new Set();
+  const step = Math.ceil(rows.length / 28);
+  for (let i = 0; i < rows.length; i += step) keep.add(i);
+  keep.add(rows.length - 1);
+  [critIdx - 1, critIdx, critIdx + 1].forEach(i => { if (i >= 0 && i < rows.length) keep.add(i); });
+  return [...keep].sort((a, b) => a - b).map(i => ({ row: rows[i], i }));
+}
+
 // Pluie [mm] pour durée et période de retour (commune sélectionnée)
 function rainMm(dur_min, rp) {
-  const di = DUR.indexOf(dur_min);
+  if (gtiEnabled()) {
+    const c = montanaCoeffs($('inp-commune').value, rp);
+    if (c) return montanaDepthMm(c, dur_min);
+  }
   const rpi = RP.indexOf(rp);
-  if (di<0 || rpi<0) return 0;
+  let di = DUR.indexOf(dur_min);
+  if (rpi < 0) return 0;
   const r = getRain();
-  return r[di][rpi];
+  if (di >= 0) return r[di][rpi];
+  // Durée non tabulée : interpolation log-log (loi puissance de Montana).
+  if (dur_min <= DUR[0]) di = 0; else if (dur_min >= DUR[DUR.length-1]) di = DUR.length-2;
+  else { di = 0; while (di < DUR.length-1 && DUR[di+1] < dur_min) di++; }
+  const d0 = DUR[di], d1 = DUR[di+1], v0 = r[di][rpi], v1 = r[di+1][rpi];
+  if (!(v0 > 0 && v1 > 0)) return v0 || 0;
+  const f = (Math.log(dur_min) - Math.log(d0)) / (Math.log(d1) - Math.log(d0));
+  return Math.exp(Math.log(v0) + f * (Math.log(v1) - Math.log(v0)));
+}
+function onGtiToggle() {
+  const note = $('gti-note');
+  const on = $('inp-gti') && $('inp-gti').checked;
+  const has = montanaKey($('inp-commune') ? $('inp-commune').value : '') !== null;
+  if (note) {
+    if (on && !has) note.innerHTML = '<span style="color:var(--orange);">Commune absente de la base GTI (Montana) — la table IRM standard est utilisée.</span>';
+    else note.textContent = 'Sonde un continuum de durées (formule de Montana, coefficients GTI) au lieu des durées tabulées.';
+  }
+  calculateAll();
+  const pluiesPane = $('pane-pluies');
+  if (pluiesPane && pluiesPane.classList.contains('active')) buildRainTable();
 }
 
 // Intensité [L/(s·m²)] = mm / s
@@ -968,15 +1059,15 @@ function calcS0() {
   const Qaj_user_Ls = qajRate_Lsha * sha_tot;
   let Qaj_min_Ls = 0;
   const rows = [];
-  for (let i = 0; i < DUR.length; i++) {
-    const d = DUR[i];
+  for (let i = 0, _durs = getProbeDurations(); i < _durs.length; i++) {
+    const d = _durs[i];
     const Q = rainFlow_Ls(d, rp);
     const dur_s = d * 60;
     const V = Q * dur_s / 1000;
     const t_max = dur_s + Tmax_s;
     const V_aj = V; // toute l'eau doit ressortir par l'ajutage
     const Q_aj_d_Ls = t_max > 0 ? V_aj * 1000 / t_max : 0;
-    rows.push({ d, label: DUR_LBL[i], Q, V, V_infil_max: 0, V_aj, Q_aj_d_Ls });
+    rows.push({ d, label: durLabel(d), Q, V, V_infil_max: 0, V_aj, Q_aj_d_Ls });
     if (Q_aj_d_Ls > Qaj_min_Ls) Qaj_min_Ls = Q_aj_d_Ls;
   }
   const Qvidange_Ls = Qaj_user_Ls;
@@ -1019,7 +1110,7 @@ function renderS0(r) {
   <div style="overflow-x:auto;">
   <table class="res-table">
     <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
-    ${r.rows.map((row,i)=>{
+    ${gtiDisplaySubset(r.rows, r.critIdx).map(({row,i})=>{
       const Tmax_h = r.Tmax_s/3600;
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
       const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
@@ -1058,14 +1149,14 @@ function calcS1() {
   let Smin = 0;
   const rows = [];
 
-  for (let i=0; i<DUR.length; i++) {
-    const d = DUR[i];
+  for (let i=0, _durs=getProbeDurations(); i<_durs.length; i++) {
+    const d = _durs[i];
     const Q = rainFlow_Ls(d, rp);
     const dur_s = d * 60;
     const V = Q * dur_s / 1000;
     const t_max = dur_s + Tmax_s;
     const Smin_d = V / (k * t_max);
-    rows.push({ d, label: DUR_LBL[i], Q, V, t_max, Smin_d });
+    rows.push({ d, label: durLabel(d), Q, V, t_max, Smin_d });
     if (Smin_d > Smin) Smin = Smin_d;
   }
 
@@ -1139,8 +1230,8 @@ function calcS2() {
     // Compute S_min for reference and warning
     let Smin = 0;
     const rows = [];
-    for (let i=0; i<DUR.length; i++) {
-      const d = DUR[i];
+    for (let i=0, _durs=getProbeDurations(); i<_durs.length; i++) {
+      const d = _durs[i];
       const Q = rainFlow_Ls(d, rp);
       const dur_s = d * 60;
       const V = Q * dur_s / 1000;
@@ -1148,7 +1239,7 @@ function calcS2() {
       const Smin_d = V / (k * t_max);
       const excess_m3s = Math.max(0, Q/1000 - Qinfil_m3s);
       const Vbuf_d = d * 60 * excess_m3s;
-      rows.push({ d, label: DUR_LBL[i], Q, V, Smin_d, V_infil_max: Math.min(k*Sdisp*t_max, V), V_aj: 0, Q_aj_d_Ls: 0, Vbuf: Vbuf_d });
+      rows.push({ d, label: durLabel(d), Q, V, Smin_d, V_infil_max: Math.min(k*Sdisp*t_max, V), V_aj: 0, Q_aj_d_Ls: 0, Vbuf: Vbuf_d });
       if (Smin_d > Smin) Smin = Smin_d;
     }
     let Vbuf = 0, critIdx = 0;
@@ -1174,8 +1265,8 @@ function calcS2() {
 
   let Qaj_min_Ls = 0;
   const rows = [];
-  for (let i=0; i<DUR.length; i++) {
-    const d = DUR[i];
+  for (let i=0, _durs=getProbeDurations(); i<_durs.length; i++) {
+    const d = _durs[i];
     const Q = rainFlow_Ls(d, rp);
     const dur_s = d * 60;
     const V = Q * dur_s / 1000;
@@ -1183,7 +1274,7 @@ function calcS2() {
     const V_infil_max = noInfil ? 0 : Math.min(k * Sdisp * t_max, V);
     const V_aj = V - V_infil_max;
     const Q_aj_d_Ls = t_max > 0 ? V_aj * 1000 / t_max : 0;
-    rows.push({ d, label: DUR_LBL[i], Q, V, V_infil_max, V_aj, Q_aj_d_Ls });
+    rows.push({ d, label: durLabel(d), Q, V, V_infil_max, V_aj, Q_aj_d_Ls });
     if (Q_aj_d_Ls > Qaj_min_Ls) Qaj_min_Ls = Q_aj_d_Ls;
   }
 
@@ -1259,8 +1350,8 @@ function calcS3() {
   let Vbuf = 0, critIdx = 0;
   const rows = [];
 
-  for (let i=0; i<DUR.length; i++) {
-    const d = DUR[i];
+  for (let i=0, _durs=getProbeDurations(); i<_durs.length; i++) {
+    const d = _durs[i];
     const Q = rainFlow_Ls(d, rp); // L/s
     const dur_s = d * 60;
     const dur_min = d;
@@ -1324,7 +1415,7 @@ function calcS3() {
     const Tmax_h = Tmax_s / 3600;
 
     rows.push({
-      d, label: DUR_LBL[i], Q, V,
+      d, label: durLabel(d), Q, V,
       phase1_state, t_fill_surp_min, Vfill_surp,
       t_remaining_min, Vbuf_d, phase2_needed,
       t_drain_buf_h, t_drain_surp_h, t_total_drain_h
@@ -1410,7 +1501,7 @@ function renderS1(r) {
   <div style="overflow-x:auto;">
   <table class="res-table">
     <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>t max infil. (h)</th><th>S_min (m²)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
-    ${r.rows.map((row,i)=>{
+    ${gtiDisplaySubset(r.rows, r.critIdx).map(({row,i})=>{
       const Tmax_h = r.Tmax_s/3600;
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
       const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
@@ -1477,7 +1568,7 @@ function renderS2(r) {
   <div style="overflow-x:auto;">
   <table class="res-table">
     <tr><th>Durée</th><th>Q pluie (L/s)</th><th>V pluie (m³)</th><th>V infil max (m³)</th><th>V à évacuer (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>
-    ${r.rows.map((row,i)=>{
+    ${gtiDisplaySubset(r.rows, r.critIdx).map(({row,i})=>{
       const Tmax_h = r.Tmax_s/3600;
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= Tmax_h + 1e-6;
       const badge = ok ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">NOK</span>';
@@ -1535,7 +1626,7 @@ function renderS3(r) {
   <div style="overflow-x:auto;">
   <table class="res-table">
     <tr><th>Durée</th><th>Q pluie (L/s)</th><th>Surp. remplie?</th><th>t fill (min)</th><th>V tampon (m³)</th><th>t vid. tampon après pluie (h)</th><th>t vid. surprofondeur après pluie (h)</th><th>t total après pluie (h)</th><th>V libre à t_max (m³)</th><th>Statut</th></tr>
-    ${r.rows.map((row,i)=>{
+    ${gtiDisplaySubset(r.rows, r.critIdx).map(({row,i})=>{
       const stateLbl = row.phase1_state === 'OUI' ? '✓ Oui' : (row.phase1_state === 'PARTIEL' ? '~ Partiel' : '– Non');
       let badge, rowClass='';
       if (row.status === 'OK') { badge = '<span class="badge badge-green">OK</span>'; }
@@ -2282,6 +2373,7 @@ function captureStudyState() {
     kmes: $('inp-kmes').value,
     ks: $('inp-ks').value,
     tmax: $('inp-tmax').value,
+    gti: $('inp-gti') ? $('inp-gti').checked : false,
     surfaces: surfaceRows.map(r => ({name: r.name, cr: r.cr, m2: r.m2, comment: r.comment || ''})),
     s0_qaj: $('s0-qaj').value,
     s1_suser: $('s1-suser').value,
@@ -2324,6 +2416,7 @@ function applyStudyState(s) {
   if (s.kmes !== undefined) $('inp-kmes').value = s.kmes;
   if (s.ks !== undefined) $('inp-ks').value = s.ks;
   if (s.tmax !== undefined) $('inp-tmax').value = s.tmax;
+  if (s.gti !== undefined && $('inp-gti')) { $('inp-gti').checked = !!s.gti; onGtiToggle(); }
   if (Array.isArray(s.surfaces) && s.surfaces.length) {
     surfaceRows = s.surfaces.map(r => ({name: r.name||'', cr: r.cr, m2: r.m2, comment: r.comment||''}));
     renderSurfaceTable();
@@ -2823,7 +2916,7 @@ function buildReportHTML() {
     const s = state.s0;
     html += `<p>Bassin étanche (sans dispersion) — Q_ajutage = ${s.Qaj_user_Ls.toFixed(3)} L/s (${s.qajRate_Lsha.toFixed(2)} L/(s·ha)) — Q_ajutage min. requis = ${s.Qaj_min_Ls.toFixed(3)} L/s — V de temporisation = <strong>${s.Vbuf.toFixed(2)} m³</strong> — Pluie critique : ${s.rows[s.critIdx].label}.</p>`;
     html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>Q ajut. min (L/s)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>`;
-    s.rows.forEach((row, i) => {
+    gtiDisplaySubset(s.rows, s.critIdx).forEach(({row, i}) => {
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
       html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.Q_aj_d_Ls.toFixed(3)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
     });
@@ -2835,7 +2928,7 @@ function buildReportHTML() {
     const s = state.s1;
     html += `<p>S_min = <strong>${s.Smin.toFixed(2)} m²</strong> — Surface utilisée = ${s.Seff_used.toFixed(2)} m² — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — V tampon (dim.) = <strong>${s.Vbuf.toFixed(2)} m³</strong> — Pluie critique : ${s.rows[s.critIdx].label}.</p>`;
     html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>S_min (m²)</th><th>V tampon (m³)</th><th>t vidange après pluie (h)</th><th>Statut</th></tr>`;
-    s.rows.forEach((row, i) => {
+    gtiDisplaySubset(s.rows, s.critIdx).forEach(({row, i}) => {
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
       html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.Smin_d.toFixed(1)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
     });
@@ -2849,7 +2942,7 @@ function buildReportHTML() {
     const s = state.s2;
     html += `<p>S_disp = ${s.Sdisp.toFixed(0)} m² — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — Q_ajutage = ${s.Qaj_user_Ls.toFixed(3)} L/s — Q_vidange = ${s.Qvidange_Ls.toFixed(3)} L/s — V tampon = <strong>${s.Vbuf.toFixed(2)} m³</strong>.</p>`;
     html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V pluie (m³)</th><th>V infil max</th><th>V à évacuer</th><th>Q ajut. min (L/s)</th><th>V tampon</th><th>t vidange (h)</th><th>Statut</th></tr>`;
-    s.rows.forEach((row, i) => {
+    gtiDisplaySubset(s.rows, s.critIdx).forEach(({row, i}) => {
       const ok = isFinite(row.t_drain_after_h) && row.t_drain_after_h <= tmax_h + 1e-6;
       html += `<tr${i===s.critIdx?' style="background:#FFF9C4;font-weight:700;"':''}><td>${row.label}${i===s.critIdx?' ★':''}</td><td>${row.Q.toFixed(3)}</td><td>${row.V.toFixed(3)}</td><td>${row.V_infil_max.toFixed(3)}</td><td>${row.V_aj.toFixed(3)}</td><td>${row.Q_aj_d_Ls.toFixed(3)}</td><td>${row.Vbuf.toFixed(3)}</td><td>${isFinite(row.t_drain_after_h)?row.t_drain_after_h.toFixed(2):'∞'}</td><td>${ok?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">NOK</span>'}</td></tr>`;
     });
@@ -2863,7 +2956,7 @@ function buildReportHTML() {
     const s = state.s3;
     html += `<p>S_disp = ${s.Sdisp.toFixed(0)} m² — V_surprofondeur = ${s.Vsurp.toFixed(2)} m³ — V_tampon = <strong>${s.Vbuf.toFixed(2)} m³</strong> — V_total = ${s.Vtotal.toFixed(2)} m³ — Q_infil = ${s.Qinfil_Ls.toFixed(3)} L/s — Q_ajutage = ${s.Qaj_Ls.toFixed(3)} L/s.</p>`;
     html += `<table><tr><th>Durée</th><th>Q (L/s)</th><th>V tampon (m³)</th><th>t vid. tampon (h)</th><th>t vid. surp (h)</th><th>t total (h)</th><th>V libre à t_max</th><th>Statut</th></tr>`;
-    s.rows.forEach((row, i) => {
+    gtiDisplaySubset(s.rows, s.critIdx).forEach(({row, i}) => {
       const badge = row.status === 'OK' ? '<span class="badge badge-green">OK</span>'
                   : row.status === 'PARTIAL' ? '<span class="badge badge-yellow">!OK</span>'
                   : '<span class="badge badge-red">NOK</span>';
