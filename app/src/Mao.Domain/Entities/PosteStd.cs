@@ -36,4 +36,33 @@ public class PosteStd
 
     /// <summary>Supprimé dans la révision RW03 (O_SUP_RW03).</summary>
     public bool SupprimeRw03 { get; set; }
+
+    // --- Colonnes additionnelles du Catalogue des Postes Normalisés (CPN) ---
+
+    /// <summary>Identifiant de l'info-poste (INPO_ID).</summary>
+    public int? InfoPosteId { get; set; }
+
+    /// <summary>Référence au CCT Qualiroutes (L_REF_CCTRW99).</summary>
+    public string? RefCctRw99 { get; set; }
+
+    /// <summary>Référence au cahier spécial des charges (L_REF_CSC).</summary>
+    public string? RefCsc { get; set; }
+
+    /// <summary>Poste de cautionnement (O_CAUTIONNEMENT).</summary>
+    public bool Cautionnement { get; set; }
+
+    /// <summary>Réduction applicable (O_REDUCTION_APPLICABLE).</summary>
+    public bool ReductionApplicable { get; set; }
+
+    /// <summary>Prix unitaire suggéré (M_PRIX_UNITAIRE), s'il existe.</summary>
+    public decimal? PrixUnitaireSuggere { get; set; }
+
+    /// <summary>Code du poste/chapitre parent dans la hiérarchie du catalogue (PARENT).</summary>
+    public string? ParentCode { get; set; }
+
+    /// <summary>Code de modification RW03 (C_NMODIF_RW03).</summary>
+    public string? NbModifRw03 { get; set; }
+
+    /// <summary>Vrai s'il s'agit d'une ligne de structure (chapitre/intitulé) et non d'un poste mesurable.</summary>
+    public bool EstChapitre => Unite == "--" || string.IsNullOrEmpty(Unite);
 }

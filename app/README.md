@@ -90,8 +90,20 @@ L'exécutable autonome est généré sous
 - Utilisateurs, entités, agents, taux de TVA.
 - Paramètres applicatifs centralisés (remplacent les fichiers `.ini` de MAO V8).
 
-Les phases restantes (statistiques/adjudications, exports Excel/JSON, import
-des données V8) sont décrites dans
+**Phase 6 — Adjudications & statistiques** (menu Outils → Adjudications & statistiques)
+- Import du **fichier statistiques natif MAO** (version/portée/adjudications/
+  lignes de prix), parsé fidèlement.
+- Statistiques de prix **min/max par poste**, résolues vers le catalogue via
+  (ChapitreStdId, PosteStdId), avec intitulé.
+- Export CSV.
+
+**Catalogue réel intégré** : le **Catalogue des Postes Normalisés** Qualiroutes
+(CPN, liste QR17 — **9 691 postes**) est embarqué (JSON gzippé) et chargé au
+premier lancement. Le `CatalogueImporter` permet de réimporter une version mise
+à jour.
+
+Les phases restantes (exports Excel/JSON, import des **métrés** utilisateur de
+`MAO.db`) sont décrites dans
 [`../docs/03-plan-migration.md`](../docs/03-plan-migration.md).
 
 ## Importer le catalogue réel depuis `MAO.db`

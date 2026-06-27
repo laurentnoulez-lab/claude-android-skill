@@ -23,6 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Data\stats_mao.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Mao.Domain\Mao.Domain.csproj" />
     <ProjectReference Include="..\..\src\Mao.Data\Mao.Data.csproj" />
     <ProjectReference Include="..\..\src\Mao.App\Mao.App.csproj" />

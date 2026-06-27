@@ -17,7 +17,12 @@ public class CatalogueTests : IDisposable
         var options = new DbContextOptionsBuilder<MaoDbContext>().UseSqlite(_conn).Options;
         _ctx = new MaoDbContext(options);
         _ctx.Database.EnsureCreated();
-        CatalogueSeed.Appliquer(_ctx);
+        // Jeu de données fixe (indépendant du catalogue réel embarqué) pour des tests déterministes.
+        _ctx.PostesStd.AddRange(
+            new PosteStd { Code = "D1000", ListeStandardisee = "QR17", Intitule = "Travaux préparatoires", Unite = "--" },
+            new PosteStd { Code = "F1000", ListeStandardisee = "QR17", Intitule = "Revêtement hydrocarboné", Unite = "t", Description = "Revêtement en enrobé" },
+            new PosteStd { Code = "E2000", ListeStandardisee = "QR17", Intitule = "Fondation en empierrement", Unite = "m3" });
+        _ctx.SaveChanges();
     }
 
     [Fact]
@@ -42,7 +47,7 @@ public class CatalogueTests : IDisposable
     {
         var svc = new CatalogueService(_ctx);
         var r = svc.Rechercher("");
-        Assert.True(r.Count >= 10);
+        Assert.True(r.Count >= 3);
         var codes = r.Select(p => p.Code).ToList();
         Assert.Equal(codes.OrderBy(c => c), codes);
     }

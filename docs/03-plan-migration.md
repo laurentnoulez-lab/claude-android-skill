@@ -53,9 +53,9 @@ Réponses ciblées aux limites du §6 de `01-analyse-mao-v8.md` :
 | **3. Bordereaux & états** | bordereau, métré estimatif, métré récapitulatif, export **PDF** (QuestPDF) et **CSV** (§4.4) | **fait** |
 | 4. Exports | Excel/JSON en plus du PDF/CSV déjà livrés (§4.5) | partiel (CSV+PDF faits) |
 | **5. Révision de prix** | indices salaire/matériaux (CRUD), formules de révision, calcul du coefficient et du prix révisé (§4.3) | **fait** |
-| 6. Adjudications & statistiques | import/export, SIGMA (§4.6) | à venir |
+| **6. Adjudications & statistiques** | import du fichier statistiques natif MAO (adjudications + min/max par poste), résolution via catalogue, export CSV (§4.6) | **fait** |
 | **7. Administration** | utilisateurs, entités, agents, taux de TVA, paramètres applicatifs centralisés (remplace les .ini) (§4.7) | **fait** |
-| 8. Import des données V8 | reprise du contenu de `MAO.db` (§4.8) | à venir |
+| 8. Import des données V8 | reprise du contenu de `MAO.db` (§4.8) | partiel : catalogue CPN/QR17 (9 691 postes) et fichier statistiques intégrés ; reste les métrés utilisateur |
 
 Aucune phase n'est « terminée » tant que les éléments correspondants de la
 check-list §4 ne sont pas couverts par l'application **et** par des tests.

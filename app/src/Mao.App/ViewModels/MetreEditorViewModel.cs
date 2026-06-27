@@ -141,7 +141,7 @@ public partial class MetreEditorViewModel : ObservableObject
             TypePrix = std.TypePrix,
             EstNormalise = true,
             QuantitePresumee = 0m,
-            PrixUnitaire = 0m,
+            PrixUnitaire = std.PrixUnitaireSuggere ?? 0m,
         };
         chap.Postes.Add(poste);
         AjouterLigne(poste, chap, div);

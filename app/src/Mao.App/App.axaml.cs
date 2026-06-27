@@ -22,9 +22,10 @@ public partial class App : Application
             var catalogue = new CatalogueService(ctx);
             var admin = new AdminService(ctx);
             var revision = new RevisionService(ctx);
+            var statistiques = new StatistiquesService(ctx);
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(service, catalogue, admin, revision),
+                DataContext = new MainWindowViewModel(service, catalogue, admin, revision, statistiques),
             };
             desktop.Exit += (_, _) => ctx.Dispose();
         }

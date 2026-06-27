@@ -11,6 +11,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Catalogue des Postes Normalisés Qualiroutes (CPN, QR17), gzippé -->
+    <EmbeddedResource Include="Resources\catalogue_qr.json.gz" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mao.Domain\Mao.Domain.csproj" />
   </ItemGroup>
 

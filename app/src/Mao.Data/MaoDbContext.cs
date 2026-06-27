@@ -27,6 +27,10 @@ public class MaoDbContext : DbContext
     public DbSet<AgentAdmin> Agents => Set<AgentAdmin>();
     public DbSet<Parametre> Parametres => Set<Parametre>();
 
+    // Adjudications & statistiques
+    public DbSet<Adjudication> Adjudications => Set<Adjudication>();
+    public DbSet<StatistiquePrix> StatistiquesPrix => Set<StatistiquePrix>();
+
     public MaoDbContext(DbContextOptions<MaoDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -107,5 +111,21 @@ public class MaoDbContext : DbContext
         });
         b.Entity<AgentAdmin>(e => e.HasKey(x => x.Id));
         b.Entity<Parametre>(e => e.HasKey(x => x.Cle));
+
+        b.Entity<Adjudication>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Montant).HasColumnType("decimal(18,4)");
+        });
+
+        b.Entity<StatistiquePrix>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Quantite).HasColumnType("decimal(18,4)");
+            e.Property(x => x.PrixMin).HasColumnType("decimal(18,4)");
+            e.Property(x => x.PrixMax).HasColumnType("decimal(18,4)");
+            e.HasIndex(x => new { x.ChapitreStdId, x.PosteStdId });
+            e.HasIndex(x => x.CodePosteStd);
+        });
     }
 }

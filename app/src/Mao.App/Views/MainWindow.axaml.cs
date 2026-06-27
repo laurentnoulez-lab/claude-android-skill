@@ -109,4 +109,10 @@ public partial class MainWindow : Window
         if (_vm is null) return;
         new RevisionWindow { DataContext = new RevisionViewModel(_vm.Revision) }.ShowDialog(this);
     }
+
+    private void OnOuvrirStatistiques(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        new AdjudicationWindow { DataContext = new AdjudicationViewModel(_vm.Statistiques) }.ShowDialog(this);
+    }
 }

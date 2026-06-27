@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Mao.App.ViewModels"
+        x:Class="Mao.App.Views.AdjudicationWindow"
+        x:DataType="vm:AdjudicationViewModel"
+        Width="900" Height="640"
+        WindowStartupLocation="CenterOwner"
+        Title="Adjudications &amp; statistiques de prix">
+
+  <DockPanel Margin="10">
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+      <Button Content="Importer fichier statistiques MAO…" Command="{Binding ImporterCommand}"/>
+      <Button Content="Exporter statistiques (CSV)…" Command="{Binding ExporterCommand}"/>
+      <Button Content="Vider" Command="{Binding ViderCommand}"/>
+      <TextBlock Text="{Binding Message}" VerticalAlignment="Center" Foreground="#555"/>
+    </StackPanel>
+
+    <TabControl>
+      <TabItem Header="Statistiques de prix par poste">
+        <DataGrid ItemsSource="{Binding Statistiques}" AutoGenerateColumns="False" IsReadOnly="True"
+                  GridLinesVisibility="All" HeadersVisibility="Column">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Code" Width="90" Binding="{Binding Code}"/>
+            <DataGridTextColumn Header="Intitulé" Width="*" Binding="{Binding Intitule}"/>
+            <DataGridTextColumn Header="Chap." Width="60" Binding="{Binding ChapitreStdId}"/>
+            <DataGridTextColumn Header="Poste" Width="60" Binding="{Binding PosteStdId}"/>
+            <DataGridTextColumn Header="Nb cas" Width="70" Binding="{Binding Nombre}"/>
+            <DataGridTextColumn Header="Prix min (€)" Width="110" Binding="{Binding PrixMin, StringFormat='{}{0:N2}'}"/>
+            <DataGridTextColumn Header="Prix max (€)" Width="110" Binding="{Binding PrixMax, StringFormat='{}{0:N2}'}"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </TabItem>
+
+      <TabItem Header="Adjudications">
+        <DataGrid ItemsSource="{Binding Adjudications}" AutoGenerateColumns="False" IsReadOnly="True"
+                  GridLinesVisibility="All" HeadersVisibility="Column">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="N°" Width="50" Binding="{Binding Numero}"/>
+            <DataGridTextColumn Header="Référence" Width="120" Binding="{Binding Reference}"/>
+            <DataGridTextColumn Header="Intitulé" Width="*" Binding="{Binding Intitule}"/>
+            <DataGridTextColumn Header="Date" Width="110" Binding="{Binding DateAdjudication, StringFormat='{}{0:yyyy-MM-dd}'}"/>
+            <DataGridTextColumn Header="Montant (€)" Width="130" Binding="{Binding Montant, StringFormat='{}{0:N2}'}"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>

@@ -17,6 +17,7 @@
     <MenuItem Header="_Outils">
       <MenuItem Header="Administration…" Click="OnOuvrirAdmin"/>
       <MenuItem Header="Révision de prix (indices &amp; formules)…" Click="OnOuvrirRevision"/>
+      <MenuItem Header="Adjudications &amp; statistiques…" Click="OnOuvrirStatistiques"/>
     </MenuItem>
   </Menu>
 

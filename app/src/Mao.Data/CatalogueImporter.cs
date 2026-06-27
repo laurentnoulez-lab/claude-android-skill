@@ -31,17 +31,20 @@ public class CatalogueImporter
 
     public int Upsert(IEnumerable<PosteStd> postes)
     {
+        // Codes déjà présents chargés en une seule requête (import initial rapide).
+        var existants = _ctx.PostesStd.Select(p => p.Code).ToHashSet();
         int n = 0;
         foreach (var p in postes)
         {
             if (string.IsNullOrWhiteSpace(p.Code)) continue;
-            var existant = _ctx.PostesStd.Find(p.Code);
-            if (existant is null)
+            if (!existants.Contains(p.Code))
             {
                 _ctx.PostesStd.Add(p);
+                existants.Add(p.Code);
             }
             else
             {
+                var existant = _ctx.PostesStd.Find(p.Code)!;
                 existant.ListeStandardisee = p.ListeStandardisee;
                 existant.ChapitreStdId = p.ChapitreStdId;
                 existant.PosteStdId = p.PosteStdId;
@@ -56,6 +59,14 @@ public class CatalogueImporter
                 existant.CoefConvPropose = p.CoefConvPropose;
                 existant.TypeDechetId = p.TypeDechetId;
                 existant.SupprimeRw03 = p.SupprimeRw03;
+                existant.InfoPosteId = p.InfoPosteId;
+                existant.RefCctRw99 = p.RefCctRw99;
+                existant.RefCsc = p.RefCsc;
+                existant.Cautionnement = p.Cautionnement;
+                existant.ReductionApplicable = p.ReductionApplicable;
+                existant.PrixUnitaireSuggere = p.PrixUnitaireSuggere;
+                existant.ParentCode = p.ParentCode;
+                existant.NbModifRw03 = p.NbModifRw03;
             }
             n++;
         }
