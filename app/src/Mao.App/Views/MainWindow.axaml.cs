@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Mao.App.ViewModels;
 using Mao.Domain.Entities;
@@ -95,5 +96,17 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && vm.OuvrirCommand.CanExecute(null))
             vm.OuvrirCommand.Execute(null);
+    }
+
+    private void OnOuvrirAdmin(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        new AdminWindow { DataContext = new AdminViewModel(_vm.Admin) }.ShowDialog(this);
+    }
+
+    private void OnOuvrirRevision(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        new RevisionWindow { DataContext = new RevisionViewModel(_vm.Revision) }.ShowDialog(this);
     }
 }

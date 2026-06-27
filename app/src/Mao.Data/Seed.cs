@@ -15,5 +15,23 @@ public static class Seed
                 new Tva { Code = "0", Taux = 0m, Libelle = "Exonéré / 0 %" });
             ctx.SaveChanges();
         }
+
+        if (!ctx.Utilisateurs.Any())
+        {
+            ctx.Utilisateurs.Add(new Utilisateur { Code = "MAO", Nom = "Administrateur", Role = "Administrateur" });
+            ctx.SaveChanges();
+        }
+
+        if (!ctx.Parametres.Any())
+        {
+            // Paramètres repris de la section [PARAM] du mao.ini d'origine.
+            ctx.Parametres.AddRange(
+                new Parametre { Cle = "Liste_Norm", Valeur = "RW99", Description = "Liste normalisée active" },
+                new Parametre { Cle = "nbrprix", Valeur = "5", Description = "Nombre de prix affichés" },
+                new Parametre { Cle = "nbrterme", Valeur = "5", Description = "Nombre de termes d'une formule de révision" },
+                new Parametre { Cle = "Intranet", Valeur = "http://routes.wallonie.be/", Description = "URL Intranet SPW" },
+                new Parametre { Cle = "CCTRW99", Valeur = "http://qc.spw.wallonie.be/fr/qualiroutes/", Description = "URL du CCT Qualiroutes" });
+            ctx.SaveChanges();
+        }
     }
 }

@@ -16,6 +16,17 @@ public class MaoDbContext : DbContext
     public DbSet<Tva> TauxTva => Set<Tva>();
     public DbSet<PosteStd> PostesStd => Set<PosteStd>();
 
+    // Révision de prix
+    public DbSet<Indice> Indices => Set<Indice>();
+    public DbSet<FormuleReference> FormulesReference => Set<FormuleReference>();
+    public DbSet<FormuleTerme> FormuleTermes => Set<FormuleTerme>();
+
+    // Administration
+    public DbSet<Utilisateur> Utilisateurs => Set<Utilisateur>();
+    public DbSet<EntiteAdmin> Entites => Set<EntiteAdmin>();
+    public DbSet<AgentAdmin> Agents => Set<AgentAdmin>();
+    public DbSet<Parametre> Parametres => Set<Parametre>();
+
     public MaoDbContext(DbContextOptions<MaoDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -63,5 +74,38 @@ public class MaoDbContext : DbContext
             e.Property(x => x.CoefConvMax).HasColumnType("decimal(18,4)");
             e.Property(x => x.CoefConvPropose).HasColumnType("decimal(18,4)");
         });
+
+        b.Entity<Indice>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Valeur).HasColumnType("decimal(18,4)");
+            e.HasIndex(x => new { x.Type, x.Code, x.Periode }).IsUnique();
+        });
+
+        b.Entity<FormuleReference>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Ignore(x => x.SommeCoefficients);
+            e.Ignore(x => x.EstCoherente);
+            e.Property(x => x.PartFixe).HasColumnType("decimal(8,5)");
+            e.HasMany(x => x.Termes).WithOne(t => t.FormuleReference!)
+                .HasForeignKey(t => t.FormuleRefId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<FormuleTerme>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Coefficient).HasColumnType("decimal(8,5)");
+        });
+
+        b.Entity<Utilisateur>(e => e.HasKey(x => x.Id));
+        b.Entity<EntiteAdmin>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasMany(x => x.Agents).WithOne(a => a.Entite!)
+                .HasForeignKey(a => a.EntiteId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<AgentAdmin>(e => e.HasKey(x => x.Id));
+        b.Entity<Parametre>(e => e.HasKey(x => x.Cle));
     }
 }

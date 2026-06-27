@@ -81,8 +81,17 @@ L'exécutable autonome est généré sous
   **métré récapitulatif**.
 - Export **PDF** (QuestPDF) et **CSV** (compatible Excel FR).
 
-Les phases suivantes (révision de prix, statistiques/adjudications,
-administration, import des données V8) sont décrites dans
+**Phase 5 — Révision de prix** (menu Outils → Révision de prix)
+- Gestion des indices salaire et matériaux (CRUD, par période mensuelle).
+- Formules de révision : `p = p0 × (part fixe + Σ coef × indice_courant / indice_base)`.
+- Calcul du coefficient de révision et du prix révisé entre deux périodes.
+
+**Phase 7 — Administration** (menu Outils → Administration)
+- Utilisateurs, entités, agents, taux de TVA.
+- Paramètres applicatifs centralisés (remplacent les fichiers `.ini` de MAO V8).
+
+Les phases restantes (statistiques/adjudications, exports Excel/JSON, import
+des données V8) sont décrites dans
 [`../docs/03-plan-migration.md`](../docs/03-plan-migration.md).
 
 ## Importer le catalogue réel depuis `MAO.db`

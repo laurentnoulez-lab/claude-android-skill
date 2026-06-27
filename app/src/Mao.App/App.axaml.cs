@@ -20,9 +20,11 @@ public partial class App : Application
             var ctx = MaoDbContextFactory.Create(CheminBaseParDefaut());
             var service = new MetreService(ctx);
             var catalogue = new CatalogueService(ctx);
+            var admin = new AdminService(ctx);
+            var revision = new RevisionService(ctx);
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(service, catalogue),
+                DataContext = new MainWindowViewModel(service, catalogue, admin, revision),
             };
             desktop.Exit += (_, _) => ctx.Dispose();
         }

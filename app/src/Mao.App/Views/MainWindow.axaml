@@ -10,6 +10,16 @@
         Width="1100" Height="700"
         Title="MAO Moderne — Métré Assisté par Ordinateur">
 
+  <DockPanel>
+
+  <!-- Barre de menu -->
+  <Menu DockPanel.Dock="Top">
+    <MenuItem Header="_Outils">
+      <MenuItem Header="Administration…" Click="OnOuvrirAdmin"/>
+      <MenuItem Header="Révision de prix (indices &amp; formules)…" Click="OnOuvrirRevision"/>
+    </MenuItem>
+  </Menu>
+
   <Grid ColumnDefinitions="320,*" Margin="8">
 
     <!-- Panneau gauche : liste des métrés -->
@@ -122,4 +132,5 @@
     </Border>
 
   </Grid>
+  </DockPanel>
 </Window>
