@@ -14,6 +14,7 @@ public static class MaoDbContextFactory
         var ctx = new MaoDbContext(options);
         ctx.Database.EnsureCreated();
         Seed.Appliquer(ctx);
+        CatalogueSeed.Appliquer(ctx);
         return ctx;
     }
 }

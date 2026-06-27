@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Mao.Data;
 using Mao.Domain.Entities;
 using Mao.Domain.Services;
+using Mao.Reports;
 
 namespace Mao.App.ViewModels;
 
@@ -22,6 +23,12 @@ public partial class MetreEditorViewModel : ObservableObject
     [ObservableProperty] private decimal _totalHtva;
     [ObservableProperty] private decimal _totalTva;
     [ObservableProperty] private decimal _totalTtc;
+
+    /// <summary>Demandé par « + Poste normalisé » : la vue ouvre le sélecteur de catalogue.</summary>
+    public event Action? CatalogueDemande;
+
+    /// <summary>Demande d'export : (type de document, format « pdf » ou « csv »). La vue choisit le fichier.</summary>
+    public event Action<TypeDocument, string>? ExportDemande;
 
     public MetreEditorViewModel(MetreService service, Metre metre)
     {
@@ -109,6 +116,39 @@ public partial class MetreEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AjouterPosteNormalise() => CatalogueDemande?.Invoke();
+
+    /// <summary>Insère un poste issu du catalogue normalisé dans le chapitre actif.</summary>
+    public void InsererPosteNormalise(PosteStd std)
+    {
+        var chap = ChapitreActif;
+        if (chap is null)
+        {
+            AjouterDivision();
+            chap = ChapitreActif;
+            if (chap is null) return;
+        }
+        var div = DivisionActive!;
+        var numero = (chap.Postes.Count == 0 ? 0 : chap.Postes.Max(p => p.Numero)) + 1;
+        var poste = new Poste
+        {
+            ChapitreId = chap.Id,
+            Numero = numero,
+            CodePosteStd = std.Code,
+            Intitule = std.Intitule,
+            Description = std.Description,
+            Unite = std.Unite,
+            TypePrix = std.TypePrix,
+            EstNormalise = true,
+            QuantitePresumee = 0m,
+            PrixUnitaire = 0m,
+        };
+        chap.Postes.Add(poste);
+        AjouterLigne(poste, chap, div);
+        Recalculer();
+    }
+
+    [RelayCommand]
     private void SupprimerPoste()
     {
         var ligne = LigneSelectionnee;
@@ -121,6 +161,15 @@ public partial class MetreEditorViewModel : ObservableObject
 
     [RelayCommand]
     private void Enregistrer() => _service.Enregistrer(Metre);
+
+    [RelayCommand] private void ExporterBordereauPdf() => ExportDemande?.Invoke(TypeDocument.Bordereau, "pdf");
+    [RelayCommand] private void ExporterEstimatifPdf() => ExportDemande?.Invoke(TypeDocument.Estimatif, "pdf");
+    [RelayCommand] private void ExporterRecapitulatifPdf() => ExportDemande?.Invoke(TypeDocument.Recapitulatif, "pdf");
+    [RelayCommand] private void ExporterBordereauCsv() => ExportDemande?.Invoke(TypeDocument.Bordereau, "csv");
+
+    /// <summary>Construit le document d'état demandé à partir de l'état courant du métré.</summary>
+    public DocumentMetre GenererDocument(TypeDocument type) =>
+        new ReportBuilder(_calc).Construire(Metre, type);
 
     public void Recalculer()
     {

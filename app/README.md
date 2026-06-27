@@ -59,14 +59,41 @@ L'exécutable autonome est généré sous
 (aucune installation de runtime requise sur le poste cible). Un installeur
 `.exe` peut ensuite être produit avec Inno Setup.
 
-## Périmètre actuel (Phase 1 — Gestion des métrés)
+## Périmètre actuel (Phases 1 à 3)
 
+**Phase 1 — Gestion des métrés**
 - Création / ouverture / suppression de métrés.
 - Édition de la hiérarchie Division → Chapitre → Poste.
 - Saisie quantité / prix unitaire, calcul temps réel des totaux
   **HTVA / TVA / TTC**.
 - Persistance SQLite.
 
-Les phases suivantes (catalogue normalisé, bordereaux & états, exports,
-révision de prix, statistiques, administration, import des données V8) sont
-décrites dans [`../docs/03-plan-migration.md`](../docs/03-plan-migration.md).
+**Phase 2 — Catalogue normalisé (RW99/Qualiroutes)**
+- Recherche par mot-clé / code dans le catalogue des postes standardisés.
+- Insertion d'un poste normalisé dans le métré (« + Poste normalisé »).
+- Importeur du catalogue complet via JSON (`CatalogueImporter`), pour charger
+  les données réelles issues de `MAO.db` sans `.exe` de mise à jour.
+- Le catalogue est pré-chargé avec un échantillon RW99 représentatif, à
+  remplacer par l'import des données réelles.
+
+**Phase 3 — Bordereaux & états**
+- Génération du **bordereau**, du **métré estimatif** et du
+  **métré récapitulatif**.
+- Export **PDF** (QuestPDF) et **CSV** (compatible Excel FR).
+
+Les phases suivantes (révision de prix, statistiques/adjudications,
+administration, import des données V8) sont décrites dans
+[`../docs/03-plan-migration.md`](../docs/03-plan-migration.md).
+
+## Importer le catalogue réel depuis `MAO.db`
+
+`MAO.db` est une base **Sybase SQL Anywhere 6** : sa lecture nécessite les
+outils Sybase fournis dans le package d'origine (Windows). Procédure :
+
+1. Sur un PC Windows où MAO V8 est installé, exporter la table `POSTE_STD` au
+   format texte avec `dbunload` (fourni dans le package), ou via une requête
+   ODBC vers du CSV/JSON.
+2. Convertir au format JSON attendu par `CatalogueImporter` (liste d'objets
+   `PosteStd` ; voir `docs/02-modele-donnees.md`).
+3. Importer dans l'application (le même mécanisme servira pour la reprise
+   complète des métrés en phase 8).

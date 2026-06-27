@@ -67,8 +67,14 @@
                   <Button Content="+ Division" Command="{Binding AjouterDivisionCommand}"/>
                   <Button Content="+ Chapitre" Command="{Binding AjouterChapitreCommand}"/>
                   <Button Content="+ Poste" Command="{Binding AjouterPosteCommand}"/>
+                  <Button Content="+ Poste normalisé" Command="{Binding AjouterPosteNormaliseCommand}"/>
                   <Button Content="Supprimer poste" Command="{Binding SupprimerPosteCommand}"/>
                   <Button Content="Enregistrer" Command="{Binding EnregistrerCommand}"/>
+                  <Border Width="1" Background="#DDD" Margin="4,2"/>
+                  <Button Content="Bordereau PDF" Command="{Binding ExporterBordereauPdfCommand}"/>
+                  <Button Content="Estimatif PDF" Command="{Binding ExporterEstimatifPdfCommand}"/>
+                  <Button Content="Récapitulatif PDF" Command="{Binding ExporterRecapitulatifPdfCommand}"/>
+                  <Button Content="Export CSV" Command="{Binding ExporterBordereauCsvCommand}"/>
                 </StackPanel>
 
                 <!-- Totaux -->

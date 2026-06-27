@@ -10,6 +10,9 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly MetreService _service;
 
+    /// <summary>Exposé pour que la vue construise le sélecteur de catalogue.</summary>
+    public CatalogueService Catalogue { get; }
+
     public ObservableCollection<Metre> Metres { get; } = new();
 
     [ObservableProperty]
@@ -22,9 +25,10 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>Intitulé saisi pour la création d'un nouveau métré.</summary>
     [ObservableProperty] private string _nouvelIntitule = string.Empty;
 
-    public MainWindowViewModel(MetreService service)
+    public MainWindowViewModel(MetreService service, CatalogueService catalogue)
     {
         _service = service;
+        Catalogue = catalogue;
         Rafraichir();
     }
 

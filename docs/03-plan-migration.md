@@ -48,10 +48,10 @@ Réponses ciblées aux limites du §6 de `01-analyse-mao-v8.md` :
 
 | Phase | Périmètre (réf. §4 de l'analyse) | État |
 |---|---|---|
-| **1. Socle + Gestion des métrés** | structure projet, modèle données cœur (Metre/Division/Chapitre/Poste/PosteStd/Tva), CRUD métrés, éditeur hiérarchique, calculs HTVA/TVA/TTC, tests | **en cours** |
-| 2. Catalogue normalisé | sélection poste std, recherche par mot-clé, tableau des prix, import catalogue (§4.2) | à venir |
-| 3. Bordereaux & états | bordereau, estimatif, récapitulatif, métré de travail, aperçu/impression, options (§4.4) | à venir |
-| 4. Exports | Excel/CSV/JSON/PDF (§4.5) | à venir |
+| **1. Socle + Gestion des métrés** | structure projet, modèle données cœur (Metre/Division/Chapitre/Poste/PosteStd/Tva), CRUD métrés, éditeur hiérarchique, calculs HTVA/TVA/TTC, tests | **fait** |
+| **2. Catalogue normalisé** | recherche par mot-clé/code, sélection et insertion d'un poste std dans le métré, importeur JSON (catalogue complet), seed RW99 (§4.2) | **fait** |
+| **3. Bordereaux & états** | bordereau, métré estimatif, métré récapitulatif, export **PDF** (QuestPDF) et **CSV** (§4.4) | **fait** |
+| 4. Exports | Excel/JSON en plus du PDF/CSV déjà livrés (§4.5) | partiel (CSV+PDF faits) |
 | 5. Révision de prix | indices, formules, valeurs TP (§4.3) | à venir |
 | 6. Adjudications & statistiques | import/export, SIGMA (§4.6) | à venir |
 | 7. Administration | utilisateurs, entités, agents, TVA, paramètres (§4.7) | à venir |
