@@ -55,21 +55,17 @@ public partial class MainWindow : Window
     {
         if (_editeurSuivi is null) return;
 
-        var estPdf = format == "pdf";
-        var ext = estPdf ? "pdf" : "csv";
-        var nomDefaut = $"{_editeurSuivi.Metre.Intitule}_{type}".Replace(' ', '_') + "." + ext;
+        var libelleType = format switch { "pdf" => "Document PDF", "xlsx" => "Classeur Excel", _ => "Fichier CSV" };
+        var nomDefaut = $"{_editeurSuivi.Metre.Intitule}_{type}".Replace(' ', '_') + "." + format;
 
         var fichier = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Enregistrer l'état",
             SuggestedFileName = nomDefaut,
-            DefaultExtension = ext,
+            DefaultExtension = format,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType(estPdf ? "Document PDF" : "Fichier CSV")
-                {
-                    Patterns = new[] { "*." + ext },
-                },
+                new FilePickerFileType(libelleType) { Patterns = new[] { "*." + format } },
             },
         });
         if (fichier is null) return;
@@ -78,8 +74,12 @@ public partial class MainWindow : Window
         var doc = _editeurSuivi.GenererDocument(type);
         await Task.Run(() =>
         {
-            if (estPdf) PdfExporter.Exporter(doc, chemin);
-            else CsvExporter.Exporter(doc, chemin);
+            switch (format)
+            {
+                case "pdf": PdfExporter.Exporter(doc, chemin); break;
+                case "xlsx": ExcelExporter.Exporter(doc, chemin); break;
+                default: CsvExporter.Exporter(doc, chemin); break;
+            }
         });
     }
 

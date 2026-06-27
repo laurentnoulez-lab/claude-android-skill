@@ -92,6 +92,7 @@
                   <Button Content="Bordereau PDF" Command="{Binding ExporterBordereauPdfCommand}"/>
                   <Button Content="Estimatif PDF" Command="{Binding ExporterEstimatifPdfCommand}"/>
                   <Button Content="Récapitulatif PDF" Command="{Binding ExporterRecapitulatifPdfCommand}"/>
+                  <Button Content="Estimatif Excel" Command="{Binding ExporterEstimatifExcelCommand}"/>
                   <Button Content="Export CSV" Command="{Binding ExporterBordereauCsvCommand}"/>
                 </StackPanel>
 

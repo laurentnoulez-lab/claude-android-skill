@@ -166,6 +166,7 @@ public partial class MetreEditorViewModel : ObservableObject
     [RelayCommand] private void ExporterEstimatifPdf() => ExportDemande?.Invoke(TypeDocument.Estimatif, "pdf");
     [RelayCommand] private void ExporterRecapitulatifPdf() => ExportDemande?.Invoke(TypeDocument.Recapitulatif, "pdf");
     [RelayCommand] private void ExporterBordereauCsv() => ExportDemande?.Invoke(TypeDocument.Bordereau, "csv");
+    [RelayCommand] private void ExporterEstimatifExcel() => ExportDemande?.Invoke(TypeDocument.Estimatif, "xlsx");
 
     /// <summary>Construit le document d'état demandé à partir de l'état courant du métré.</summary>
     public DocumentMetre GenererDocument(TypeDocument type) =>

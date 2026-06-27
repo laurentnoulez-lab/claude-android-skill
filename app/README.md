@@ -79,7 +79,14 @@ L'exécutable autonome est généré sous
 **Phase 3 — Bordereaux & états**
 - Génération du **bordereau**, du **métré estimatif** et du
   **métré récapitulatif**.
-- Export **PDF** (QuestPDF) et **CSV** (compatible Excel FR).
+- Export **PDF** (QuestPDF), **Excel .xlsx** (ClosedXML) et **CSV** (Excel FR).
+
+**Données réelles préchargées**
+- Le **catalogue** Qualiroutes QR17 (9 691 postes) **et les 701 métrés**
+  repris de la base `MAO.db` d'origine (78 742 postes) sont **embarqués** et
+  chargés au premier lancement (avec les taux de TVA réels). Le premier
+  démarrage prend une vingtaine de secondes (insertion initiale), puis
+  l'application démarre instantanément.
 
 **Phase 5 — Révision de prix** (menu Outils → Révision de prix)
 - Gestion des indices salaire et matériaux (CRUD, par période mensuelle).

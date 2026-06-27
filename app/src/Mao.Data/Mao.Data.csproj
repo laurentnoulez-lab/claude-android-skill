@@ -14,6 +14,8 @@
   <ItemGroup>
     <!-- Catalogue des Postes Normalisés Qualiroutes (CPN, QR17), gzippé -->
     <EmbeddedResource Include="Resources\catalogue_qr.json.gz" />
+    <!-- Données utilisateur reprises de MAO.db (métrés + TVA), gzippées -->
+    <EmbeddedResource Include="Resources\donnees_mao.json.gz" />
   </ItemGroup>
 
   <ItemGroup>
