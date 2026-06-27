@@ -14,6 +14,13 @@
 
   <!-- Barre de menu -->
   <Menu DockPanel.Dock="Top">
+    <MenuItem Header="_Données">
+      <MenuItem Header="Importer un fichier MAO (.db Sybase)…" Click="OnImporterMaoDb"/>
+      <MenuItem Header="Importer le catalogue (JSON)…" Click="OnImporterCatalogue"/>
+      <Separator/>
+      <MenuItem Header="Exporter une sauvegarde (JSON)…" Click="OnExporterSauvegarde"/>
+      <MenuItem Header="Importer une sauvegarde (JSON)…" Click="OnImporterSauvegarde"/>
+    </MenuItem>
     <MenuItem Header="_Outils">
       <MenuItem Header="Administration…" Click="OnOuvrirAdmin"/>
       <MenuItem Header="Révision de prix (indices &amp; formules)…" Click="OnOuvrirRevision"/>

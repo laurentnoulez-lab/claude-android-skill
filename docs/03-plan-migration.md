@@ -55,7 +55,7 @@ Réponses ciblées aux limites du §6 de `01-analyse-mao-v8.md` :
 | **5. Révision de prix** | indices salaire/matériaux (CRUD), formules de révision, calcul du coefficient et du prix révisé (§4.3) | **fait** |
 | **6. Adjudications & statistiques** | import du fichier statistiques natif MAO (adjudications + min/max par poste), résolution via catalogue, export CSV (§4.6) | **fait** |
 | **7. Administration** | utilisateurs, entités, agents, taux de TVA, paramètres applicatifs centralisés (remplace les .ini) (§4.7) | **fait** |
-| 8. Import des données V8 | reprise du contenu de `MAO.db` (§4.8) | partiel : catalogue CPN/QR17 (9 691 postes) et fichier statistiques intégrés ; reste les métrés utilisateur |
+| **8. Import / export des données** | menu Données : import direct `MAO.db` (Sybase ODBC), import catalogue JSON, sauvegarde/restauration JSON complète ; catalogue CPN/QR17 + statistiques intégrés | **fait** (import `.db` à valider sur poste avec pilote SQL Anywhere) |
 
 Aucune phase n'est « terminée » tant que les éléments correspondants de la
 check-list §4 ne sont pas couverts par l'application **et** par des tests.

@@ -23,9 +23,10 @@ public partial class App : Application
             var admin = new AdminService(ctx);
             var revision = new RevisionService(ctx);
             var statistiques = new StatistiquesService(ctx);
+            var donnees = new DonneesService(ctx);
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(service, catalogue, admin, revision, statistiques),
+                DataContext = new MainWindowViewModel(service, catalogue, admin, revision, statistiques, donnees),
             };
             desktop.Exit += (_, _) => ctx.Dispose();
         }

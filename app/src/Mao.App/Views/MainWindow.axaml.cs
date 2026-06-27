@@ -115,4 +115,67 @@ public partial class MainWindow : Window
         if (_vm is null) return;
         new AdjudicationWindow { DataContext = new AdjudicationViewModel(_vm.Statistiques) }.ShowDialog(this);
     }
+
+    // --- Menu Données ---
+
+    private async void OnImporterMaoDb(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        var chemin = await ChoisirOuverture("Importer un fichier MAO (.db)", "Base MAO (Sybase)", "*.db");
+        if (chemin is null) return;
+        var rapport = await Task.Run(() => _vm.Donnees.ImporterMaoDb(chemin));
+        if (rapport.Succes) _vm.RafraichirApresImport();
+        await Dialogs.Info(this, "Import MAO.db", rapport.Message);
+    }
+
+    private async void OnImporterCatalogue(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        var chemin = await ChoisirOuverture("Importer le catalogue (JSON)", "Catalogue JSON", "*.json");
+        if (chemin is null) return;
+        var n = await Task.Run(() => _vm.Donnees.ImporterCatalogueJson(chemin));
+        await Dialogs.Info(this, "Import catalogue", $"{n} poste(s) importé(s) / mis à jour.");
+    }
+
+    private async void OnExporterSauvegarde(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Exporter une sauvegarde",
+            SuggestedFileName = "sauvegarde_mao.json",
+            DefaultExtension = "json",
+            FileTypeChoices = new[] { new FilePickerFileType("Sauvegarde JSON") { Patterns = new[] { "*.json" } } },
+        });
+        if (f is null) return;
+        var chemin = f.TryGetLocalPath() ?? f.Path.LocalPath;
+        await Task.Run(() => _vm.Donnees.ExporterSauvegarde(chemin));
+        await Dialogs.Info(this, "Sauvegarde", "Export terminé : " + chemin);
+    }
+
+    private async void OnImporterSauvegarde(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        var chemin = await ChoisirOuverture("Importer une sauvegarde (JSON)", "Sauvegarde JSON", "*.json");
+        if (chemin is null) return;
+        await Task.Run(() => _vm.Donnees.ImporterSauvegarde(chemin));
+        _vm.RafraichirApresImport();
+        await Dialogs.Info(this, "Sauvegarde", "Import terminé.");
+    }
+
+    private async Task<string?> ChoisirOuverture(string titre, string nomType, string motif)
+    {
+        var fichiers = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = titre,
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType(nomType) { Patterns = new[] { motif } },
+                new FilePickerFileType("Tous les fichiers") { Patterns = new[] { "*.*" } },
+            },
+        });
+        if (fichiers.Count == 0) return null;
+        return fichiers[0].TryGetLocalPath() ?? fichiers[0].Path.LocalPath;
+    }
 }

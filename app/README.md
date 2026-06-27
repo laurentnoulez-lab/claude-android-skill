@@ -102,8 +102,21 @@ L'exécutable autonome est généré sous
 premier lancement. Le `CatalogueImporter` permet de réimporter une version mise
 à jour.
 
-Les phases restantes (exports Excel/JSON, import des **métrés** utilisateur de
-`MAO.db`) sont décrites dans
+**Menu Données — import / export**
+- **Importer un fichier MAO (.db Sybase)** : connexion ODBC directe à un
+  `MAO.db` (nécessite le pilote *SQL Anywhere* installé — présent sur le poste
+  où MAO V8 tourne). Importe le catalogue `POSTE_STD` et les métrés.
+- **Importer le catalogue (JSON)** : met à jour le catalogue normalisé.
+- **Exporter / Importer une sauvegarde (JSON)** : sauvegarde portable complète
+  (métrés, catalogue, indices, formules, TVA, statistiques, administration) et
+  restauration sur n'importe quel poste.
+
+> Si le pilote Sybase n'est pas disponible, l'app le signale et invite à fournir
+> un export `dbunload` (.sql) ou une sauvegarde JSON. La conversion des **métrés**
+> depuis `MAO.db` est en *best-effort* (lecture défensive des colonnes) et sera
+> ajustée sur des données réelles.
+
+Les exports Excel/JSON additionnels restent décrits dans
 [`../docs/03-plan-migration.md`](../docs/03-plan-migration.md).
 
 ## Importer le catalogue réel depuis `MAO.db`

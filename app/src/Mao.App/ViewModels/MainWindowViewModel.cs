@@ -17,6 +17,7 @@ public partial class MainWindowViewModel : ObservableObject
     public AdminService Admin { get; }
     public RevisionService Revision { get; }
     public StatistiquesService Statistiques { get; }
+    public DonneesService Donnees { get; }
 
     public ObservableCollection<Metre> Metres { get; } = new();
 
@@ -32,13 +33,21 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel(MetreService service, CatalogueService catalogue,
                                AdminService admin, RevisionService revision,
-                               StatistiquesService statistiques)
+                               StatistiquesService statistiques, DonneesService donnees)
     {
         _service = service;
         Catalogue = catalogue;
         Admin = admin;
         Revision = revision;
         Statistiques = statistiques;
+        Donnees = donnees;
+        Rafraichir();
+    }
+
+    /// <summary>Recharge la liste des métrés et ferme l'éditeur (après un import remplaçant).</summary>
+    public void RafraichirApresImport()
+    {
+        Editeur = null;
         Rafraichir();
     }
 
