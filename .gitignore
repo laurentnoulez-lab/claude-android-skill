@@ -1,1 +1,13 @@
 .DS_Store
+
+# .NET build artifacts
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+.vs/
+
+# Base SQLite locale générée
+*.db-shm
+*.db-wal

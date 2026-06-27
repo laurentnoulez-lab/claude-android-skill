@@ -1,0 +1,119 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Mao.App.ViewModels"
+        xmlns:entities="using:Mao.Domain.Entities"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Mao.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1100" Height="700"
+        Title="MAO Moderne — Métré Assisté par Ordinateur">
+
+  <Grid ColumnDefinitions="320,*" Margin="8">
+
+    <!-- Panneau gauche : liste des métrés -->
+    <DockPanel Grid.Column="0" Margin="0,0,8,0">
+      <TextBlock DockPanel.Dock="Top" Text="Métrés" FontSize="18" FontWeight="Bold" Margin="0,0,0,8"/>
+
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <TextBox Grid.Column="0" Watermark="Intitulé du nouveau métré…"
+                 Text="{Binding NouvelIntitule}"/>
+        <Button Grid.Column="1" Content="Créer" Margin="4,0,0,0"
+                Command="{Binding CreerCommand}"/>
+      </Grid>
+
+      <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0" Spacing="4">
+        <Button Content="Ouvrir" Command="{Binding OuvrirCommand}"/>
+        <Button Content="Supprimer" Command="{Binding SupprimerCommand}"/>
+      </StackPanel>
+
+      <ListBox ItemsSource="{Binding Metres}"
+               SelectedItem="{Binding MetreSelectionne}"
+               DoubleTapped="OnMetreDoubleTapped">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="entities:Metre">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{Binding Intitule}" FontWeight="SemiBold"/>
+              <TextBlock Text="{Binding ListeNormalisee}" FontSize="11" Foreground="#888"/>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Panneau droit : éditeur -->
+    <Border Grid.Column="1" BorderBrush="#DDD" BorderThickness="1" CornerRadius="4" Padding="8">
+      <Panel>
+        <TextBlock Text="Sélectionnez ou créez un métré, puis cliquez sur « Ouvrir »."
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#888"
+                   IsVisible="{Binding Editeur, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+        <ContentControl Content="{Binding Editeur}"
+                        IsVisible="{Binding Editeur, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:MetreEditorViewModel">
+              <DockPanel>
+
+                <!-- En-tête -->
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                  <TextBlock Grid.Column="0" Text="Intitulé : " VerticalAlignment="Center" FontWeight="Bold"/>
+                  <TextBox Grid.Column="1" Text="{Binding Intitule}"/>
+                </Grid>
+
+                <!-- Barre d'outils -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,8">
+                  <Button Content="+ Division" Command="{Binding AjouterDivisionCommand}"/>
+                  <Button Content="+ Chapitre" Command="{Binding AjouterChapitreCommand}"/>
+                  <Button Content="+ Poste" Command="{Binding AjouterPosteCommand}"/>
+                  <Button Content="Supprimer poste" Command="{Binding SupprimerPosteCommand}"/>
+                  <Button Content="Enregistrer" Command="{Binding EnregistrerCommand}"/>
+                </StackPanel>
+
+                <!-- Totaux -->
+                <Border DockPanel.Dock="Bottom" Background="#F4F6F8" CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="24">
+                    <TextBlock Text="{Binding TotalHtva, StringFormat='Total HTVA : {0:N2} €'}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding TotalTva, StringFormat='TVA : {0:N2} €'}"/>
+                    <TextBlock Text="{Binding TotalTtc, StringFormat='Total TTC : {0:N2} €'}" FontWeight="Bold" FontSize="15"/>
+                  </StackPanel>
+                </Border>
+
+                <!-- Grille des postes -->
+                <DataGrid ItemsSource="{Binding Lignes}"
+                          SelectedItem="{Binding LigneSelectionnee}"
+                          AutoGenerateColumns="False"
+                          CanUserReorderColumns="True"
+                          CanUserResizeColumns="True"
+                          GridLinesVisibility="All"
+                          HeadersVisibility="Column">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="Division" Width="140" IsReadOnly="True"
+                                        Binding="{Binding DivisionIntitule}"/>
+                    <DataGridTextColumn Header="Chapitre" Width="140" IsReadOnly="True"
+                                        Binding="{Binding ChapitreIntitule}"/>
+                    <DataGridTextColumn Header="Code" Width="80"
+                                        Binding="{Binding Code}"/>
+                    <DataGridTextColumn Header="Intitulé" Width="*"
+                                        Binding="{Binding Intitule}"/>
+                    <DataGridTextColumn Header="Unité" Width="70"
+                                        Binding="{Binding Unite}"/>
+                    <DataGridTextColumn Header="Quantité" Width="100"
+                                        Binding="{Binding QuantitePresumee, StringFormat='{}{0:N2}'}"/>
+                    <DataGridTextColumn Header="P.U. (€)" Width="100"
+                                        Binding="{Binding PrixUnitaire, StringFormat='{}{0:N2}'}"/>
+                    <DataGridTextColumn Header="Montant HTVA (€)" Width="140" IsReadOnly="True"
+                                        Binding="{Binding MontantHtva, StringFormat='{}{0:N2}'}"/>
+                  </DataGrid.Columns>
+                </DataGrid>
+
+              </DockPanel>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Panel>
+    </Border>
+
+  </Grid>
+</Window>

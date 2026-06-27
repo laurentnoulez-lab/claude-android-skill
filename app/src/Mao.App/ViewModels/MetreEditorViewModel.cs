@@ -1,0 +1,132 @@
+using System.Collections.ObjectModel;
+using System.Linq;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Mao.Data;
+using Mao.Domain.Entities;
+using Mao.Domain.Services;
+
+namespace Mao.App.ViewModels;
+
+/// <summary>Éditeur d'un métré : hiérarchie aplatie en grille + totaux temps réel.</summary>
+public partial class MetreEditorViewModel : ObservableObject
+{
+    private readonly MetreService _service;
+    private readonly MetreCalculator _calc;
+    public Metre Metre { get; }
+
+    public ObservableCollection<PosteRowViewModel> Lignes { get; } = new();
+
+    [ObservableProperty] private PosteRowViewModel? _ligneSelectionnee;
+
+    [ObservableProperty] private decimal _totalHtva;
+    [ObservableProperty] private decimal _totalTva;
+    [ObservableProperty] private decimal _totalTtc;
+
+    public MetreEditorViewModel(MetreService service, Metre metre)
+    {
+        _service = service;
+        _calc = service.CreerCalculateur();
+        Metre = metre;
+
+        foreach (var div in metre.Divisions.OrderBy(d => d.Numero))
+            foreach (var chap in div.Chapitres.OrderBy(c => c.Numero))
+                foreach (var poste in chap.Postes.OrderBy(p => p.Numero))
+                    AjouterLigne(poste, chap, div);
+
+        Recalculer();
+    }
+
+    public string Intitule
+    {
+        get => Metre.Intitule;
+        set { Metre.Intitule = value; OnPropertyChanged(); }
+    }
+
+    private void AjouterLigne(Poste poste, Chapitre chap, Division div)
+    {
+        var ligne = new PosteRowViewModel(poste, chap, div);
+        ligne.Modifie += Recalculer;
+        Lignes.Add(ligne);
+    }
+
+    /// <summary>Division active = celle de la ligne sélectionnée, sinon la dernière.</summary>
+    private Division? DivisionActive =>
+        LigneSelectionnee?.Division ?? Metre.Divisions.OrderBy(d => d.Numero).LastOrDefault();
+
+    private Chapitre? ChapitreActif =>
+        LigneSelectionnee?.Chapitre
+        ?? DivisionActive?.Chapitres.OrderBy(c => c.Numero).LastOrDefault();
+
+    [RelayCommand]
+    private void AjouterDivision()
+    {
+        var numero = (Metre.Divisions.Count == 0 ? 0 : Metre.Divisions.Max(d => d.Numero)) + 1;
+        var div = new Division { MetreId = Metre.Id, Numero = numero, Intitule = $"Division {numero}" };
+        Metre.Divisions.Add(div);
+        AjouterChapitreDans(div);
+    }
+
+    [RelayCommand]
+    private void AjouterChapitre()
+    {
+        var div = DivisionActive;
+        if (div is null) { AjouterDivision(); return; }
+        AjouterChapitreDans(div);
+    }
+
+    private void AjouterChapitreDans(Division div)
+    {
+        var numero = (div.Chapitres.Count == 0 ? 0 : div.Chapitres.Max(c => c.Numero)) + 1;
+        var chap = new Chapitre { DivisionId = div.Id, Numero = numero, Intitule = $"Chapitre {numero}" };
+        div.Chapitres.Add(chap);
+    }
+
+    [RelayCommand]
+    private void AjouterPoste()
+    {
+        var chap = ChapitreActif;
+        if (chap is null)
+        {
+            AjouterDivision();
+            chap = ChapitreActif;
+            if (chap is null) return;
+        }
+        var div = DivisionActive!;
+        var numero = (chap.Postes.Count == 0 ? 0 : chap.Postes.Max(p => p.Numero)) + 1;
+        var poste = new Poste
+        {
+            ChapitreId = chap.Id,
+            Numero = numero,
+            Intitule = "Nouveau poste",
+            Unite = "u",
+            QuantitePresumee = 0m,
+            PrixUnitaire = 0m,
+        };
+        chap.Postes.Add(poste);
+        AjouterLigne(poste, chap, div);
+        Recalculer();
+    }
+
+    [RelayCommand]
+    private void SupprimerPoste()
+    {
+        var ligne = LigneSelectionnee;
+        if (ligne is null) return;
+        ligne.Chapitre.Postes.Remove(ligne.Poste);
+        ligne.Modifie -= Recalculer;
+        Lignes.Remove(ligne);
+        Recalculer();
+    }
+
+    [RelayCommand]
+    private void Enregistrer() => _service.Enregistrer(Metre);
+
+    public void Recalculer()
+    {
+        var t = _calc.Calculer(Metre);
+        TotalHtva = t.Htva;
+        TotalTva = t.Tva;
+        TotalTtc = t.Ttc;
+    }
+}

@@ -1,0 +1,69 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Mao.Data;
+using Mao.Domain.Entities;
+
+namespace Mao.App.ViewModels;
+
+public partial class MainWindowViewModel : ObservableObject
+{
+    private readonly MetreService _service;
+
+    public ObservableCollection<Metre> Metres { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(OuvrirCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SupprimerCommand))]
+    private Metre? _metreSelectionne;
+
+    [ObservableProperty] private MetreEditorViewModel? _editeur;
+
+    /// <summary>Intitulé saisi pour la création d'un nouveau métré.</summary>
+    [ObservableProperty] private string _nouvelIntitule = string.Empty;
+
+    public MainWindowViewModel(MetreService service)
+    {
+        _service = service;
+        Rafraichir();
+    }
+
+    private void Rafraichir()
+    {
+        Metres.Clear();
+        foreach (var m in _service.ListerMetres())
+            Metres.Add(m);
+    }
+
+    [RelayCommand]
+    private void Creer()
+    {
+        var intitule = string.IsNullOrWhiteSpace(NouvelIntitule) ? "Nouveau métré" : NouvelIntitule.Trim();
+        var metre = _service.CreerMetre(intitule);
+        NouvelIntitule = string.Empty;
+        Rafraichir();
+        MetreSelectionne = metre;
+        Ouvrir();
+    }
+
+    private bool PeutAgir() => MetreSelectionne is not null;
+
+    [RelayCommand(CanExecute = nameof(PeutAgir))]
+    private void Ouvrir()
+    {
+        if (MetreSelectionne is null) return;
+        var complet = _service.ChargerComplet(MetreSelectionne.Id);
+        if (complet is null) return;
+        Editeur = new MetreEditorViewModel(_service, complet);
+    }
+
+    [RelayCommand(CanExecute = nameof(PeutAgir))]
+    private void Supprimer()
+    {
+        if (MetreSelectionne is null) return;
+        var id = MetreSelectionne.Id;
+        _service.SupprimerMetre(id);
+        if (Editeur?.Metre.Id == id) Editeur = null;
+        Rafraichir();
+    }
+}
