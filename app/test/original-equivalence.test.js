@@ -1,6 +1,8 @@
 // Vérifie que l'application reproduit EXACTEMENT les résultats du classeur
-// d'origine sur ses 43 tronçons réels, lorsqu'on place les interstices comme
-// dans l'Excel (somme par catégorie). Prouve l'équivalence du moteur de calcul.
+// d'origine sur ses 43 tronçons réels — y compris le calcul automatique des
+// hauteurs de remblai (AP, AQ, BJ, BK) selon le mode terres/empierrement
+// détecté dans l'Excel. Aucune valeur AP/BJ n'est réinjectée : elles sont
+// recalculées par l'application à partir du seul mode.
 const M = require('../src/model.js');
 const assert = require('assert');
 const rows = require('./original-rows.json');
@@ -13,41 +15,39 @@ function makeRow(ref) {
   row.longueur = ref.E; row.largeurMax = ref.geom.AD || 0;
   L.cableChannelCols.forEach((c, i) => { row.widths[c.srId] = ref.cab[i] || 0; });
   L.conduiteChannelCols.forEach((c, i) => { row.widths[c.srId] = ref.con[i] || 0; });
-  // Interstices : on dépose la somme de chaque catégorie sur l'interstice de fin
-  // (le calcul ne dépend que de la somme des interstices par catégorie).
   const lastCab = L.cableIntCols[L.cableIntCols.length - 1];
   const lastCon = L.conduiteIntCols[L.conduiteIntCols.length - 1];
   if (lastCab) row.interstices[lastCab.intKey] = ref.cableIntSum;
   if (lastCon) row.interstices[lastCon.intKey] = ref.condIntSum;
   const g = row.geom, G = ref.geom;
   g.litPoseCable = G.AG; g.htMoyCable = G.AH; g.recouvSableMinCable = G.AI; g.ligneAligne = G.AJ;
-  g.recouvNiveauFiniCable = G.AL; g.hauteurCoffre = G.AM; g.remblaiSousFondCable = G.AP; g.longueurGaines = G.AU;
-  g.litPoseConduite = G.BA; g.recouvSableMinConduite = G.BC; g.recouvNiveauFiniConduite = G.BF; g.remblaiSousFondConduite = G.BJ;
-  g.remblaiModeCable = 'manuel'; g.remblaiModeConduite = 'manuel';
+  g.recouvNiveauFiniCable = G.AL; g.hauteurCoffre = G.AM;
+  g.litPoseConduite = G.BA; g.recouvSableMinConduite = G.BC; g.recouvNiveauFiniConduite = G.BF;
+  // Pilotage par le mode uniquement (pas de valeur AP/BJ réinjectée)
+  g.remblaiModeCable = ref.modeCable; g.remblaiModeConduite = ref.modeConduite;
+  g.remblaiSousFondCable = 0; g.remblaiSousFondConduite = 0;
   return row;
 }
 
-// Clés « largeurs + volume principal » : doivent correspondre sur TOUS les
-// tronçons (preuve directe que la gestion des interstices est équivalente).
-const WIDTH_KEYS = ['AC', 'AR', 'AS', 'AT', 'BL', 'BM', 'BN', 'AZ'];
-// Clés « volumes sable / conduites » : ne valent que pour les lignes au gabarit
-// standard. 12 lignes de l'original (traversées de chaussée) emploient des
-// formules saisies à la main (déduction des fourreaux dans AW ; hauteur de
-// conduite BB forcée), hors logique du gabarit — donc volontairement exclues.
-const VOL_KEYS = ['AW', 'BS', 'BT', 'BP'];
+// Toujours identiques (largeurs, volume principal, hauteurs de remblai auto)
+const ALL_KEYS = ['AC', 'AR', 'AS', 'AT', 'BL', 'BM', 'BN', 'AP', 'AQ', 'BJ', 'BK', 'AZ', 'AX'];
+// Volumes dépendant du gabarit standard (exclus pour les 12 lignes manuelles)
+const STD_KEYS = ['AW', 'AY', 'BP', 'BQ', 'BR', 'BS', 'BT'];
 
-let wf = 0, wc = 0, vf = 0, vc = 0;
+let af = 0, ac = 0, sf = 0, sc = 0, sumBT = 0, sumBTexp = 0;
 rows.forEach(ref => {
   const c = M.computeRowWithLayout(project, makeRow(ref), L);
-  WIDTH_KEYS.forEach(k => { wc++; if (Math.abs(c[k] - ref.exp[k]) > 1e-6) { wf++; console.log(`  [largeur] ligne ${ref.r} ${k}: got ${c[k]} want ${ref.exp[k]} ✗`); } });
+  ALL_KEYS.forEach(k => { ac++; if (Math.abs(c[k] - ref.exp[k]) > 1e-6) { af++; console.log(`  [tous] ligne ${ref.r} ${k}: got ${c[k]} want ${ref.exp[k]} ✗`); } });
   if (ref.standard) {
-    VOL_KEYS.forEach(k => { vc++; if (Math.abs(c[k] - ref.exp[k]) > 1e-6) { vf++; console.log(`  [volume] ligne ${ref.r} ${k}: got ${c[k]} want ${ref.exp[k]} ✗`); } });
+    sumBT += c.BT; sumBTexp += ref.exp.BT;
+    STD_KEYS.forEach(k => { sc++; if (Math.abs(c[k] - ref.exp[k]) > 1e-6) { sf++; console.log(`  [std] ligne ${ref.r} ${k}: got ${c[k]} want ${ref.exp[k]} ✗`); } });
   }
 });
 const nStd = rows.filter(r => r.standard).length;
-console.log(`Largeurs + volume principal (interstices) : ${wc - wf}/${wc} identiques sur les ${rows.length} tronçons`);
-console.log(`Volumes sable/conduites : ${vc - vf}/${vc} identiques sur les ${nStd} tronçons au gabarit standard`);
-console.log(`(${rows.length - nStd} tronçons de l'original utilisent des formules manuelles hors gabarit, exclus.)`);
-assert.strictEqual(wf, 0, 'Écart sur les largeurs / volume principal — la gestion des interstices diffère');
-assert.strictEqual(vf, 0, 'Écart de volume sur une ligne au gabarit standard');
-console.log('ÉQUIVALENCE CONFIRMÉE (gabarit standard + interstices) ✓');
+console.log(`Largeurs + remblai auto (AP/AQ/BJ/BK) + volume principal : ${ac - af}/${ac} identiques sur les ${rows.length} tronçons`);
+console.log(`Volumes sable/conduites : ${sc - sf}/${sc} identiques sur les ${nStd} tronçons au gabarit standard`);
+console.log(`Volume total cumulé (lignes standard) : app=${sumBT.toFixed(3)} m³  vs  Excel=${sumBTexp.toFixed(3)} m³`);
+console.log(`(${rows.length - nStd} tronçons de l'original utilisent des formules manuelles hors gabarit, exclus des volumes.)`);
+assert.strictEqual(af, 0, 'Écart sur largeurs / remblai auto / volume principal');
+assert.strictEqual(sf, 0, 'Écart de volume sur une ligne au gabarit standard');
+console.log('ÉQUIVALENCE 100% CONFIRMÉE (remblai auto terres/empierrement + interstices) ✓');
