@@ -158,22 +158,28 @@
     var cableChannelCols = [], conduiteChannelCols = [];
     var cableIntCols = [], conduiteIntCols = [];
 
+    // Un interstice précède CHAQUE sous-réseau, plus un interstice de fin de
+    // catégorie. K sous-réseaux => K+1 interstices. Aucune colonne d'interstice
+    // si la catégorie ne contient aucun sous-réseau.
     ['cable', 'conduite'].forEach(function (cat) {
-      var concs = project.concessionnaires.filter(function (c) { return c.category === cat; });
-      concs.forEach(function (c) {
-        var ic = push({ field: 'int', intKey: intersticePreKey(c.id), kind: 'input', dtype: 'number',
-                        category: cat, h3: String.fromCharCode(97 + (intersticeLetter++)), h4: '(m)', isInterstice: true });
-        (cat === 'cable' ? cableIntCols : conduiteIntCols).push(ic);
-        c.sousReseaux.forEach(function (sr) {
-          var ch = push({ field: 'ch', srId: sr.id, concId: c.id, kind: 'input', dtype: 'number',
-                          category: cat, h3: c.name + '\n' + sr.label, h4: '(m)', isChannel: true });
-          (cat === 'cable' ? cableChannelCols : conduiteChannelCols).push(ch);
-        });
+      var chans = channelsOf(project, cat); // [{conc, sr}]
+      if (!chans.length) return;
+      var intCols = (cat === 'cable' ? cableIntCols : conduiteIntCols);
+      var chCols = (cat === 'cable' ? cableChannelCols : conduiteChannelCols);
+      chans.forEach(function (d) {
+        var ic = push({ field: 'int', intKey: intersticePreKey(d.sr.id), kind: 'input', dtype: 'number',
+                        category: cat, h3: String.fromCharCode(97 + (intersticeLetter++)), h4: '(m)', isInterstice: true,
+                        intBefore: d.conc.name + ' ' + d.sr.label });
+        intCols.push(ic);
+        var ch = push({ field: 'ch', srId: d.sr.id, concId: d.conc.id, kind: 'input', dtype: 'number',
+                        category: cat, h3: d.conc.name + '\n' + d.sr.label, h4: '(m)', isChannel: true });
+        chCols.push(ch);
       });
       // interstice de fin de catégorie
       var post = push({ field: 'int', intKey: intersticePostKey(cat), kind: 'input', dtype: 'number',
-                        category: cat, h3: String.fromCharCode(97 + (intersticeLetter++)), h4: '(m)', isInterstice: true });
-      (cat === 'cable' ? cableIntCols : conduiteIntCols).push(post);
+                       category: cat, h3: String.fromCharCode(97 + (intersticeLetter++)), h4: '(m)', isInterstice: true,
+                       intBefore: '(fin ' + (cat === 'cable' ? 'câbles' : 'conduites') + ')' });
+      intCols.push(post);
     });
     var widthEnd = cols.length;
     var widthFirstLetter = colLetter(widthStart);
@@ -329,6 +335,37 @@
     };
   }
 
+  // Répartition par sous-réseau (miroir des colonnes BV..FG de l'Excel).
+  // Le volume des interstices est réparti au prorata de la largeur occupée :
+  // partCat = largeur du sous-réseau / largeur occupée de la catégorie ; ce ratio
+  // s'applique au volume TOTAL de la partie (AZ câbles / BS conduites), lequel
+  // inclut déjà les interstices.
+  function computeRepartition(project, row, L) {
+    L = L || buildLayout(project);
+    var c = computeRowWithLayout(project, row, L);
+    var widthOf = function (col) { return num(row.widths[col.srId], 0); };
+    var res = [];
+    var add = function (col, cat) {
+      var w = widthOf(col);
+      var occ = cat === 'cable' ? c.AR : c.BL;
+      var volPart = cat === 'cable' ? c.AZ : c.BS;
+      var partCat = occ > 0 ? w / occ : 0;
+      var partTot = c.BT > 0 ? partCat * volPart / c.BT : 0;
+      res.push({
+        srId: col.srId, concId: col.concId, label: col.h3.replace('\n', ' '), category: cat,
+        width: w, partCat: partCat, partTot: partTot,
+        longueur: partTot * c.AF,
+        volTranchee: partCat * volPart,
+        volSable: partCat * (cat === 'cable' ? c.AW : c.BP),
+        volRemblai: partCat * (cat === 'cable' ? c.AX : c.BQ),
+        volDeblais: partCat * (cat === 'cable' ? c.AY : c.BR)
+      });
+    };
+    L.cableChannelCols.forEach(function (col) { add(col, 'cable'); });
+    L.conduiteChannelCols.forEach(function (col) { add(col, 'conduite'); });
+    return { row: c, channels: res };
+  }
+
   function projectTotals(project) {
     var L = buildLayout(project);
     var t = { longueur: 0, volSableCable: 0, volSableConduite: 0, volRemblai: 0, volDeblais: 0, volTotal: 0, nok: 0 };
@@ -386,8 +423,10 @@
     mergeSafe('A1', 'D1');
 
     // Bandeau ligne 1
-    styleHeaderCell(ws.getCell(L.widthFirstLetter + '1'), 'Largeur tranchée');
-    mergeSafe(L.widthFirstLetter + '1', L.widthLastLetter + '1');
+    if (L.widthEnd >= L.widthStart) {
+      styleHeaderCell(ws.getCell(L.widthFirstLetter + '1'), 'Largeur tranchée');
+      mergeSafe(L.widthFirstLetter + '1', L.widthLastLetter + '1');
+    }
     styleHeaderCell(ws.getCell(lt('AF') + '1'), 'Longueurs et volumes');
     mergeSafe(lt('AF') + '1', lt('BT') + '1');
     if (L.repartGroups.length) {
@@ -499,7 +538,7 @@
     var pi = L.conduiteIntCols.map(function (c) { return c.letter + R; });
     var sumList = function (a) { return a.length ? 'SUM(' + a.join(',') + ')' : '0'; };
     var f = {
-      AC: 'SUM(' + L.widthFirstLetter + R + ':' + L.widthLastLetter + R + ')',
+      AC: lt('AT') + R + '+' + lt('BN') + R, // = somme de toutes les largeurs (câbles + conduites)
       AE: 'IF(AND(' + lt('AD') + R + '>0,' + lt('AC') + R + '>' + lt('AD') + R + '),"NOK","")',
       AF: 'E' + R,
       AK: 'IF(AND(' + lt('AJ') + R + '="OUI",' + lt('BN') + R + '>0),MAX(' + lt('AI') + R + ',' + lt('AL') + R + '-(' + lt('BF') + R + '-' + lt('BC') + R + ')),' + lt('AI') + R + ')',
@@ -568,6 +607,7 @@
     defaultProject: defaultProject, defaultGeometry: defaultGeometry, newRow: newRow,
     buildLayout: buildLayout,
     computeRow: computeRow, computeRowWithLayout: computeRowWithLayout, projectTotals: projectTotals,
+    computeRepartition: computeRepartition,
     buildWorkbook: buildWorkbook,
     channelsOf: channelsOf,
     intersticePreKey: intersticePreKey, intersticePostKey: intersticePostKey,

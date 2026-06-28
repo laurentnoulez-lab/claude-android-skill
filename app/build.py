@@ -19,14 +19,20 @@ def read(p):
 def main():
     tpl = read("index.template.html")
     exceljs = (HERE / "vendor" / "exceljs.min.js").read_text(encoding="utf-8")
+    docx = (HERE / "vendor" / "docx.iife.js").read_text(encoding="utf-8")
     styles = read("styles.css")
     model = read("model.js")
+    coupe = read("coupe.js")
+    docxgen = read("docx-export.js")
     ui = read("ui.js")
 
     out = (
         tpl.replace("/*__STYLES__*/", styles)
         .replace("/*__EXCELJS__*/", exceljs)
+        .replace("/*__DOCX__*/", docx)
         .replace("/*__MODEL__*/", model)
+        .replace("/*__COUPE__*/", coupe)
+        .replace("/*__DOCXGEN__*/", docxgen)
         .replace("/*__UI__*/", ui)
     )
     OUT.write_text(out, encoding="utf-8")

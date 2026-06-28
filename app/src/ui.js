@@ -8,7 +8,7 @@
   var STORAGE_KEY = 'gabarit-tranchees-impetrants:project';
 
   var project = loadProject();
-  var ui = { expandedRowId: null, collapsed: { conc: false, defaults: true } };
+  var ui = { expandedRowId: null, collapsed: { conc: false, defaults: true }, coupeVisible: {} };
 
   // --------------------------------------------------------------------- utils
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -25,6 +25,7 @@
     return e;
   }
   function fmt(n, d) { if (n == null || isNaN(n)) return '–'; return Number(n).toLocaleString('fr-FR', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
+  function fmtPct(n) { if (n == null || isNaN(n)) return '–'; return (n * 100).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %'; }
   function num(v) { return M.num(v, 0); }
 
   function loadProject() {
@@ -274,7 +275,8 @@
       var g = el('div', { class: 'width-grid' });
       widthCols.forEach(function (col) {
         if (col.isInterstice) {
-          g.appendChild(wfield('Interstice (' + col.h3 + ')', true, num(r.interstices[col.intKey]), function (v) { r.interstices[col.intKey] = v; upd(); }));
+          var lbl = 'Interstice ' + (col.h3 ? col.h3 + ' ' : '') + '· ' + (col.intBefore || '');
+          g.appendChild(wfield(lbl.trim(), true, num(r.interstices[col.intKey]), function (v) { r.interstices[col.intKey] = v; upd(); }));
         } else {
           g.appendChild(wfield(col.h3.replace('\n', ' '), false, num(r.widths[col.srId]), function (v) { r.widths[col.srId] = v; upd(); }));
         }
@@ -304,7 +306,56 @@
     inner.appendChild(pv);
     fillPreview(pv, M.computeRowWithLayout(project, r, L));
 
+    // Coupe de tranchée (à l'échelle)
+    inner.appendChild(el('h3', { text: 'Coupe de tranchée (à l\'échelle)' }));
+    var coupeBtn = el('button', { class: 'tiny', text: ui.coupeVisible[r.id] ? 'Masquer la coupe' : 'Afficher la coupe', onclick: function () {
+      ui.coupeVisible[r.id] = !ui.coupeVisible[r.id];
+      coupeBtn.textContent = ui.coupeVisible[r.id] ? 'Masquer la coupe' : 'Afficher la coupe';
+      renderCoupeInto(r);
+    } });
+    inner.appendChild(coupeBtn);
+    inner.appendChild(el('div', { class: 'coupe-box', id: 'coupe-' + r.id }));
+
+    // Parts de volume par sous-réseau
+    inner.appendChild(el('h3', { text: 'Parts de volume par sous-réseau' }));
+    inner.appendChild(el('p', { class: 'hint', text: NOTE_INTERSTICE }));
+    inner.appendChild(el('div', { id: 'rep-' + r.id }));
+
+    setTimeout(function () { renderCoupeInto(r); fillRepartition(r, L); }, 0);
     return el('div', { class: 'editor' }, [inner]);
+  }
+
+  var NOTE_INTERSTICE = 'Répartition des interstices : les interstices ne sont attribués à aucun sous-réseau. La part d\'un sous-réseau est calculée sur la largeur occupée (part = largeur ÷ largeur occupée AR/BL), puis appliquée au volume TOTAL de la partie (AZ/BS), lequel inclut déjà les interstices (largeur totale AT/BN). Le volume des interstices est donc réparti au prorata de la largeur occupée : un sous-réseau plus large en absorbe une part plus grande.';
+
+  function renderCoupeInto(r) {
+    var box = document.getElementById('coupe-' + r.id);
+    if (!box) return;
+    box.innerHTML = '';
+    if (!ui.coupeVisible[r.id]) return;
+    try { box.appendChild(window.TICoupe.render(project, r, M)); }
+    catch (e) { box.textContent = 'Coupe indisponible : ' + e.message; }
+  }
+
+  function fillRepartition(r, L) {
+    var box = document.getElementById('rep-' + r.id);
+    if (!box) return;
+    var rep = M.computeRepartition(project, r, L);
+    box.innerHTML = '';
+    if (!rep.channels.length) { box.appendChild(el('div', { class: 'hint', text: 'Aucun sous-réseau.' })); return; }
+    var t = el('table', { class: 'rows rep' });
+    t.appendChild(el('thead', {}, [el('tr', {}, [
+      th('Sous-réseau'), th('Catégorie'), th('Largeur (m)', 'num'), th('Part catégorie', 'num'),
+      th('Part totale', 'num'), th('Vol. attribué (m³)', 'num')
+    ])]));
+    var tb = el('tbody');
+    rep.channels.forEach(function (ch) {
+      tb.appendChild(el('tr', {}, [
+        td(ch.label), td(ch.category === 'cable' ? 'Câbles' : 'Conduites'),
+        td(fmt(ch.width), 'num'), td(fmtPct(ch.partCat), 'num'), td(fmtPct(ch.partTot), 'num'), td(fmt(ch.volTranchee), 'num')
+      ]));
+    });
+    t.appendChild(tb);
+    box.appendChild(t);
   }
 
   function fillPreview(pv, c) {
@@ -325,6 +376,8 @@
     var bg = document.getElementById('badge-' + r.id);
     if (bg) { bg.className = 'badge ' + (c.AE === 'NOK' ? 'nok' : 'ok'); bg.textContent = c.AE === 'NOK' ? 'NOK (trop large)' : 'OK'; }
     var pv = document.getElementById('preview-' + r.id); if (pv) fillPreview(pv, c);
+    renderCoupeInto(r);
+    fillRepartition(r, L);
     var tot = $('#totals-area'); if (tot) { tot.innerHTML = ''; tot.appendChild(totalsInner()); }
     save();
   }
@@ -388,6 +441,16 @@
       });
     } catch (e) { alert('Erreur lors de la génération : ' + e.message); console.error(e); }
   }
+  function generateWord() {
+    project.name = $('#pname').value || 'projet';
+    toast('Génération du document Word…');
+    try {
+      window.TIDocx.generate(project, M).then(function (blob) {
+        downloadBlob(blob, sanitize(project.name) + '.docx');
+        toast('Document Word généré.');
+      }).catch(function (e) { alert('Erreur Word : ' + e.message); console.error(e); });
+    } catch (e) { alert('Erreur Word : ' + e.message); console.error(e); }
+  }
   function downloadBlob(blob, name) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
@@ -400,6 +463,7 @@
     document.getElementById('btn-new').addEventListener('click', newProject);
     document.getElementById('btn-export').addEventListener('click', exportJSON);
     document.getElementById('btn-excel').addEventListener('click', generateExcel);
+    document.getElementById('btn-word').addEventListener('click', generateWord);
     var fi = document.getElementById('file-import');
     document.getElementById('btn-import').addEventListener('click', function () { fi.click(); });
     fi.addEventListener('change', function (e) { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ''; });

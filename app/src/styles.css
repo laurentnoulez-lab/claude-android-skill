@@ -98,6 +98,12 @@ table.rows tr.editing { background: #eef4ff; }
 .preview .pv b { display: block; font-size: 16px; font-weight: 600; }
 .preview .pv span { color: var(--muted); }
 
+.coupe-box { margin-top: 8px; overflow-x: auto; }
+.coupe-svg { background: #fbfcfe; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; }
+table.rows.rep { margin-top: 6px; }
+table.rows.rep th { position: static; }
+table.rows.rep td, table.rows.rep th { padding: 4px 8px; font-size: 12px; }
+
 .totals { display: flex; flex-wrap: wrap; gap: 22px; padding: 14px 18px; background: #11233f; color: #fff; border-radius: var(--radius); }
 .totals .t b { display: block; font-size: 18px; }
 .totals .t span { font-size: 12px; opacity: .8; }
