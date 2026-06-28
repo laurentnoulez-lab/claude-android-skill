@@ -43,6 +43,7 @@ function makeRow(project, ref) {
   g.litPoseCable = r.AG; g.htMoyCable = r.AH; g.recouvSableMinCable = r.AI; g.ligneAligne = r.AJ;
   g.recouvNiveauFiniCable = r.AL; g.hauteurCoffre = r.AM; g.remblaiSousFondCable = r.AP; g.longueurGaines = r.AU;
   g.litPoseConduite = r.BA; g.recouvSableMinConduite = r.BC; g.recouvNiveauFiniConduite = r.BF; g.remblaiSousFondConduite = r.BJ;
+  g.remblaiModeCable = 'manuel'; g.remblaiModeConduite = 'manuel';
   return row;
 }
 

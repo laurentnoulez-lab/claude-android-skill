@@ -140,13 +140,12 @@
     ['ligneAligne', 'Ligne recouvrement alignée', 'OUI/NON'],
     ['recouvNiveauFiniCable', 'Recouvr. min. / niveau fini (câbles)', 'm'],
     ['hauteurCoffre', 'Hauteur coffre (travaux SPI)', 'm'],
-    ['remblaiSousFondCable', 'Remblai sous-fondation câbles', 'm'],
     ['longueurGaines', 'Longueur gaines rigides', 'm'],
     ['litPoseConduite', 'Lit de pose min. conduites', 'm'],
     ['recouvSableMinConduite', 'Recouvrement sable min. conduites', 'm'],
-    ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini (conduites)', 'm'],
-    ['remblaiSousFondConduite', 'Remblai sous-fondation conduites', 'm']
+    ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini (conduites)', 'm']
   ];
+  var REMBLAI_KEYS = ['remblaiModeCable', 'remblaiSousFondCable', 'remblaiModeConduite', 'remblaiSousFondConduite'];
 
   function geomField(obj, key, labelTxt, unit, onUpdate) {
     var input;
@@ -170,12 +169,15 @@
     grid.appendChild(el('div', { class: 'fld' }, [el('label', { html: 'Largeur max disponible <small>(m)</small>' }),
       el('input', { class: 'in', type: 'number', step: '0.01', value: d.largeurMax || 0, oninput: function (e) { d.largeurMax = num(e.target.value); save(); } })]));
     GEOM_FIELDS.forEach(function (f) { grid.appendChild(geomField(d, f[0], f[1], f[2], save)); });
+    remblaiControl(d, 'remblaiModeCable', 'remblaiSousFondCable', save).forEach(function (fld) { grid.appendChild(fld); });
+    remblaiControl(d, 'remblaiModeConduite', 'remblaiSousFondConduite', save).forEach(function (fld) { grid.appendChild(fld); });
 
     var apply = el('button', { class: 'tiny', text: 'Appliquer ces paramètres à tous les tronçons existants', onclick: function () {
       if (!project.rows.length) { toast('Aucun tronçon.'); return; }
       if (!confirm('Écraser les paramètres géométriques de tous les tronçons avec ces valeurs ?')) return;
       project.rows.forEach(function (r) {
         GEOM_FIELDS.forEach(function (f) { r.geom[f[0]] = d[f[0]]; });
+        REMBLAI_KEYS.forEach(function (k) { r.geom[k] = d[k]; });
         r.type = r.type || d.type; r.largeurMax = d.largeurMax;
       });
       render(); toast('Paramètres appliqués.');
@@ -289,16 +291,18 @@
     var gc = el('div', { class: 'grid-params' });
     [['litPoseCable', 'Lit de pose min.', 'm'], ['htMoyCable', 'Ht moyenne câbles', 'm'], ['recouvSableMinCable', 'Recouvrement sable min.', 'm'],
      ['ligneAligne', 'Ligne recouvrement alignée', 'OUI/NON'], ['recouvNiveauFiniCable', 'Recouvr. min. / niveau fini', 'm'],
-     ['hauteurCoffre', 'Hauteur coffre (SPI)', 'm'], ['remblaiSousFondCable', 'Remblai sous-fondation', 'm'], ['longueurGaines', 'Longueur gaines rigides', 'm']]
+     ['hauteurCoffre', 'Hauteur coffre (SPI)', 'm'], ['longueurGaines', 'Longueur gaines rigides', 'm']]
       .forEach(function (f) { gc.appendChild(geomField(r.geom, f[0], f[1], f[2], upd)); });
+    remblaiControl(r.geom, 'remblaiModeCable', 'remblaiSousFondCable', upd).forEach(function (fld) { gc.appendChild(fld); });
     inner.appendChild(gc);
 
     // Paramètres conduites
     inner.appendChild(el('h3', { text: 'Paramètres — Conduites' }));
     var gp = el('div', { class: 'grid-params' });
     [['litPoseConduite', 'Lit de pose min.', 'm'], ['recouvSableMinConduite', 'Recouvrement sable min.', 'm'],
-     ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini', 'm'], ['remblaiSousFondConduite', 'Remblai sous-fondation', 'm']]
+     ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini', 'm']]
       .forEach(function (f) { gp.appendChild(geomField(r.geom, f[0], f[1], f[2], upd)); });
+    remblaiControl(r.geom, 'remblaiModeConduite', 'remblaiSousFondConduite', upd).forEach(function (fld) { gp.appendChild(fld); });
     inner.appendChild(gp);
 
     // Aperçu calculé
@@ -390,6 +394,25 @@
     return el('div', { class: 'fld' }, [el('label', { html: label + ' <small>(' + unit + ')</small>' }),
       el('input', { class: 'in', type: 'number', step: '0.01', value: val != null ? val : 0, oninput: function (e) { on(num(e.target.value)); } })]);
   }
+  // Choix du remblai entre le haut du sable et le fond de coffre :
+  // terres décaissées (réutilisation) / empierrement de sous-fondation / hauteur manuelle.
+  function remblaiControl(geom, modeKey, valKey, on) {
+    var numInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom[valKey] != null ? geom[valKey] : 0,
+      oninput: function (e) { geom[valKey] = num(e.target.value); on(); } });
+    var sync = function () { numInput.disabled = (geom[modeKey] || 'terres') !== 'manuel'; };
+    var sel = el('select', { onchange: function (e) { geom[modeKey] = e.target.value; sync(); on(); } }, [
+      el('option', { value: 'terres', text: 'Terres décaissées' }),
+      el('option', { value: 'empierrement', text: 'Empierrement sous-fond.' }),
+      el('option', { value: 'manuel', text: 'Manuel (hauteur)' })
+    ]);
+    sel.value = geom[modeKey] || 'terres';
+    sync();
+    return [
+      el('div', { class: 'fld' }, [el('label', { html: 'Remblai (sable → fond de coffre)' }), sel]),
+      el('div', { class: 'fld' }, [el('label', { html: 'Hauteur empierrement <small>(m, si manuel)</small>' }), numInput])
+    ];
+  }
+
   function wfield(label, interstice, val, on) {
     return el('div', { class: 'wfld' + (interstice ? ' interstice' : '') }, [el('label', { text: label }),
       el('input', { class: 'in', type: 'number', step: '0.01', value: val != null ? val : 0, oninput: function (e) { on(num(e.target.value)); } })]);

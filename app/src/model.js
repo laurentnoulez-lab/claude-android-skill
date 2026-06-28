@@ -57,13 +57,19 @@
       ligneAligne: 'OUI',           // AJ (OUI/NON)
       recouvNiveauFiniCable: 0.8,   // AL
       hauteurCoffre: 0.3,           // AM
-      remblaiSousFondCable: 0,      // AP
+      // Remblai entre le haut du sable d'enrobage et le fond de coffre :
+      //  'terres'       -> terres décaissées réutilisées (AP = 0)
+      //  'empierrement' -> matériaux de sous-fondation sur toute la zone (AP = AN-AO)
+      //  'manuel'       -> hauteur AP saisie librement
+      remblaiModeCable: 'terres',   // AP (mode)
+      remblaiSousFondCable: 0,      // AP (valeur si mode manuel)
       longueurGaines: 0,            // AU
       // partie conduites
       litPoseConduite: 0.1,         // BA
       recouvSableMinConduite: 0.2,  // BC
       recouvNiveauFiniConduite: 1,  // BF
-      remblaiSousFondConduite: 0    // BJ
+      remblaiModeConduite: 'terres',// BJ (mode)
+      remblaiSousFondConduite: 0    // BJ (valeur si mode manuel)
     };
   }
 
@@ -110,11 +116,13 @@
         ligneAligne: d.ligneAligne || 'OUI',
         recouvNiveauFiniCable: num(d.recouvNiveauFiniCable, 0.8),
         hauteurCoffre: num(d.hauteurCoffre, 0.3),
+        remblaiModeCable: d.remblaiModeCable || 'terres',
         remblaiSousFondCable: num(d.remblaiSousFondCable, 0),
         longueurGaines: num(d.longueurGaines, 0),
         litPoseConduite: num(d.litPoseConduite, 0.1),
         recouvSableMinConduite: num(d.recouvSableMinConduite, 0.2),
         recouvNiveauFiniConduite: num(d.recouvNiveauFiniConduite, 1),
+        remblaiModeConduite: d.remblaiModeConduite || 'terres',
         remblaiSousFondConduite: num(d.remblaiSousFondConduite, 0)
       }
     };
@@ -302,21 +310,23 @@
     var AF = E;
     var AG = num(g.litPoseCable, 0), AH = num(g.htMoyCable, 0), AI = num(g.recouvSableMinCable, 0);
     var AJ = (g.ligneAligne || 'OUI');
-    var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0), AP = num(g.remblaiSousFondCable, 0);
+    var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0);
     var AR = sum(wc), AS = sum(ic), AT = AR + AS;
     var BA = num(g.litPoseConduite, 0), BC = num(g.recouvSableMinConduite, 0), BF = num(g.recouvNiveauFiniConduite, 0);
-    var BJ = num(g.remblaiSousFondConduite, 0);
     var BB = wp.length ? Math.max.apply(null, wp) : 0;
     var BL = sum(wp), BM = sum(ip), BN = BL + BM;
     var BD = AJ, BG = AM;
     var AK = (AJ === 'OUI' && BN > 0) ? Math.max(AI, AL - (BF - BC)) : AI;
     var AN = AG + AH + AL - AM;
     var AO = AG + AH + AK;
+    // AP (remblai sous-fondation/empierrement câbles) selon le mode choisi
+    var AP = remblaiEff(g.remblaiModeCable, AN - AO, num(g.remblaiSousFondCable, 0));
     var AQ = AN - AO - AP;
     var AV = AF * AO * AT, AW = AV, AX = AF * AP * AT, AY = AV + AX, AZ = AF * AN * AT;
     var BE = (BD === 'OUI' && AT > 0) ? Math.max(BC, BF - (AL - AI)) : BC;
     var BH = BA + BB + BF - BG;
     var BI = BA + BB + BE;
+    var BJ = remblaiEff(g.remblaiModeConduite, BH - BI, num(g.remblaiSousFondConduite, 0));
     var BK = BH - BI - BJ;
     var BO = AF * BI * BN;
     var sumSq = wp.reduce(function (s, d) { return s + Math.pow(d / 2, 2); }, 0);
@@ -329,10 +339,17 @@
     var AE = (num(row.largeurMax, 0) > 0 && AC > num(row.largeurMax, 0)) ? 'NOK' : '';
 
     return {
-      AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AQ: AQ,
-      AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BK: BK,
+      AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AP: AP, AQ: AQ,
+      AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
       BL: BL, BM: BM, BN: BN, BO: BO, BP: BP, BQ: BQ, BR: BR, BS: BS, BT: BT
     };
+  }
+
+  // Hauteur effective de remblai sous-fondation selon le mode.
+  function remblaiEff(mode, zoneHeight, manualValue) {
+    if (mode === 'empierrement') return zoneHeight;     // toute la zone en empierrement
+    if (mode === 'manuel') return manualValue;
+    return 0;                                            // 'terres' : aucune sous-fondation
   }
 
   // Répartition par sous-réseau (miroir des colonnes BV..FG de l'Excel).
@@ -503,12 +520,29 @@
 
   // Renvoie {value} pour une saisie, {formula} pour une cellule calculée.
   function formulaFor(col, R, L, lt, row) {
+    // AP / BJ : terres (0), empierrement (=AN-AO / =BH-BI) ou valeur manuelle
+    if (col.role === 'AP' || col.role === 'BJ') return remblaiCell(col.role, R, lt, row);
     if (col.kind === 'input') {
       return { value: inputValue(col, row) };
     }
     if (col.field === 'calc') return { formula: calcFormula(col.role, R, L, lt) };
-    if (col.field === 'rep') return { formula: repartFormula(col, R, L, lt) };
+    // SI.ERREUR(...;0) : protège la répartition contre les #DIV/0! (volume nul)
+    if (col.field === 'rep') return { formula: 'IFERROR(' + repartFormula(col, R, L, lt) + ',0)' };
     return { value: null };
+  }
+
+  function remblaiCell(role, R, lt, row) {
+    var g = row.geom || {};
+    if (role === 'AP') {
+      var mc = g.remblaiModeCable || 'terres';
+      if (mc === 'empierrement') return { formula: lt('AN') + R + '-' + lt('AO') + R };
+      if (mc === 'manuel') return { value: num(g.remblaiSousFondCable, 0) };
+      return { value: 0 };
+    }
+    var mp = g.remblaiModeConduite || 'terres';
+    if (mp === 'empierrement') return { formula: lt('BH') + R + '-' + lt('BI') + R };
+    if (mp === 'manuel') return { value: num(g.remblaiSousFondConduite, 0) };
+    return { value: 0 };
   }
 
   function inputValue(col, row) {

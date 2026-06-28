@@ -90,6 +90,8 @@
     formula('Volume déblais excédentaires (AY)', 'AV + AX');
     formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT');
     p([new TextRun({ text: 'AF', font: 'Consolas' }), new TextRun(' est la longueur du tronçon. Tous les volumes « câbles » utilisent la largeur totale AT (interstices compris).')]);
+    p([new TextRun({ text: 'Remblai entre le sable et le fond de coffre : ', bold: true }),
+       new TextRun('la zone de hauteur AN−AO se répartit entre l\'empierrement de sous-fondation (AP) et les terres décaissées réutilisées (AQ = AN−AO−AP). Trois choix par tronçon : « Terres décaissées » (AP = 0), « Empierrement » (AP = AN−AO, soit AQ = 0) ou « Manuel » (AP saisi). La même logique s\'applique aux conduites avec BJ et BK = BH−BI−BJ.')]);
 
     // -------------------------------------------------- 5. Volumes conduites
     h1('5. Géométrie et volumes — partie conduites');
@@ -159,6 +161,7 @@
     // ----------------------------------------------------- 8. Excel
     h1('8. Génération du classeur Excel');
     p('Le bouton « Générer Excel » produit un fichier .xlsx reproduisant l\'onglet du gabarit : en-têtes, cellules de saisie (en jaune) et toutes les formules ci-dessus (largeurs, volumes et répartition par sous-réseau). Les colonnes s\'adaptent automatiquement aux impétrants et sous-réseaux définis.');
+    p('Les formules de répartition sont encadrées par SI.ERREUR(… ; 0) : si un volume est nul, le résultat affiché est 0 au lieu d\'une erreur #DIV/0!.');
 
     var doc = new Document({
       creator: 'Gabarit tranchées impétrants',
