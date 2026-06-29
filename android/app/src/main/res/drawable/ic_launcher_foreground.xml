@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Corps de tranchée (sable) -->
+    <path android:fillColor="#F3E6A8" android:pathData="M34,38 h40 v36 h-40 z" />
+    <!-- Coffre (bandeau supérieur) -->
+    <path android:fillColor="#FFFFFF" android:pathData="M34,34 h40 v6 h-40 z" />
+    <!-- Câbles (rectangles colorés) -->
+    <path android:fillColor="#2F6FED" android:pathData="M38,52 h5 v8 h-5 z" />
+    <path android:fillColor="#E0533D" android:pathData="M45,52 h5 v8 h-5 z" />
+    <path android:fillColor="#0E9F6E" android:pathData="M52,52 h5 v8 h-5 z" />
+    <!-- Conduites (cercles) -->
+    <path android:fillColor="#FFFFFF" android:strokeColor="#0E7C5A" android:strokeWidth="1.5"
+        android:pathData="M63,64 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path android:fillColor="#FFFFFF" android:strokeColor="#C026D3" android:strokeWidth="1.5"
+        android:pathData="M71,64 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+</vector>

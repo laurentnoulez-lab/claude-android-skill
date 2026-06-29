@@ -475,6 +475,19 @@
     } catch (e) { alert('Erreur Word : ' + e.message); console.error(e); }
   }
   function downloadBlob(blob, name) {
+    // Dans l'app Android (WebView), les téléchargements blob: ne fonctionnent pas :
+    // on transmet le fichier au pont natif qui l'enregistre dans « Téléchargements ».
+    if (window.TIAndroid && typeof window.TIAndroid.saveBase64 === 'function') {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var b64 = String(reader.result).split(',')[1] || '';
+        try { window.TIAndroid.saveBase64(name, blob.type || 'application/octet-stream', b64); }
+        catch (e) { alert('Enregistrement impossible : ' + e.message); }
+      };
+      reader.onerror = function () { alert('Lecture du fichier impossible.'); };
+      reader.readAsDataURL(blob);
+      return;
+    }
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
   }

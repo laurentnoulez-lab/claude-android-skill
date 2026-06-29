@@ -1,3 +1,11 @@
 .DS_Store
 node_modules/
 out.xlsx
+
+# Android build
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+*.iml
