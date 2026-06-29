@@ -68,18 +68,26 @@
       return wrap;
     }
 
-    // Canaux non nuls (pour les cartouches au-dessus)
-    var channels = [];
+    // Canaux et interstices non nuls (pour les cartouches et les cotes)
+    var channels = [], interstices = [];
     var cursorC = 0;
     L.cols.filter(function (col) { return col.category === 'cable' && (col.isInterstice || col.isChannel); }).forEach(function (col) {
-      if (col.isInterstice) { cursorC += n(row.interstices[col.intKey], 0); return; }
+      if (col.isInterstice) {
+        var iw = n(row.interstices[col.intKey], 0);
+        if (iw > 1e-9) interstices.push({ x0: cursorC, w: iw, center: cursorC + iw / 2 });
+        cursorC += iw; return;
+      }
       var w = n(row.widths[col.srId], 0);
       if (w > 0) channels.push({ col: col, cat: 'cable', x0: cursorC, w: w, center: cursorC + w / 2 });
       cursorC += w;
     });
     cursorC = AT;
     L.cols.filter(function (col) { return col.category === 'conduite' && (col.isInterstice || col.isChannel); }).forEach(function (col) {
-      if (col.isInterstice) { cursorC += n(row.interstices[col.intKey], 0); return; }
+      if (col.isInterstice) {
+        var iw2 = n(row.interstices[col.intKey], 0);
+        if (iw2 > 1e-9) interstices.push({ x0: cursorC, w: iw2, center: cursorC + iw2 / 2 });
+        cursorC += iw2; return;
+      }
       var d = n(row.widths[col.srId], 0);
       if (d > 0) channels.push({ col: col, cat: 'conduite', x0: cursorC, w: d, center: cursorC + d / 2 });
       cursorC += d;
@@ -89,7 +97,7 @@
     var trenchW = 520, trenchH = 300;
     var scale = Math.min(trenchW / AC, trenchH / totalDepth);
     var W = AC * scale, H = totalDepth * scale;
-    var padTop = 138, padBottom = 64, padLeft = 152, padRight = 212;
+    var padTop = 138, padBottom = 84, padLeft = 152, padRight = 212;
     var x0 = padLeft, y0 = padTop;
     var X = function (m) { return x0 + m * scale; };
     var Y = function (m) { return y0 + m * scale; };
@@ -103,7 +111,7 @@
     }
     // Coffre (toute la largeur)
     layerRect(0, AC, 0, AM, COL.coffre);
-    svg.appendChild(txt(X(AC / 2), Y(AM / 2) + 3, 'Coffre (SPI)', { fill: '#fff', 'text-anchor': 'middle', 'font-size': 9 }));
+    svg.appendChild(txt(X(AC / 2), Y(AM / 2) + 3, 'Coffre', { fill: '#fff', 'text-anchor': 'middle', 'font-size': 9 }));
     // Zone câbles
     if (AT > 0) {
       var d = AM;
@@ -204,18 +212,38 @@
     // ---- Cote de profondeur totale (extrême gauche) ----
     dimV(svg, Y(0), Y(totalDepth), 24, fnum(totalDepth) + ' m');
 
+    // ---- Cotes des interstices non nuls (sous la fouille) ----
+    var yIB = y0 + H;
+    if (interstices.length) {
+      var centersI = interstices.map(function (it) { return X(it.center); });
+      var placedI = spread(centersI, 26);
+      var hiI = x0 + W + 90;
+      var lastI = placedI[placedI.length - 1];
+      if (lastI > hiI) { var shI = hiI - lastI; placedI = placedI.map(function (p) { return Math.max(x0 - 6, p + shI); }); }
+      var yILabel = yIB + 16;
+      svg.appendChild(txt(42, yILabel, 'interst. (m)', { 'font-size': 8, 'text-anchor': 'start', fill: '#8a6d1a' }));
+      interstices.forEach(function (it, i) {
+        var cx = X(it.center), lx = placedI[i];
+        svg.appendChild(E('line', { x1: X(it.x0), y1: yIB, x2: X(it.x0), y2: yIB + 4, stroke: COL.dim, 'stroke-width': 0.6 }));
+        svg.appendChild(E('line', { x1: X(it.x0 + it.w), y1: yIB, x2: X(it.x0 + it.w), y2: yIB + 4, stroke: COL.dim, 'stroke-width': 0.6 }));
+        svg.appendChild(E('line', { x1: X(it.x0), y1: yIB + 4, x2: X(it.x0 + it.w), y2: yIB + 4, stroke: '#c9a24a', 'stroke-width': 1 }));
+        svg.appendChild(E('line', { x1: cx, y1: yIB + 4, x2: lx, y2: yILabel - 7, stroke: COL.leader, 'stroke-width': 0.5 }));
+        svg.appendChild(txt(lx, yILabel, fnum(it.w), { 'text-anchor': 'middle', 'font-size': 8, fill: '#8a6d1a' }));
+      });
+    }
+
     // ---- Cotes de largeur (bas) ----
-    var yDim = y0 + H + 30;
+    var yDim = y0 + H + 34;
     dimH(svg, X(0), X(AC), yDim, fnum(AC) + ' m');
     if (AT > 0 && BN > 0) {
       svg.appendChild(E('line', { x1: X(AT), y1: Y(0), x2: X(AT), y2: yDim - 12, stroke: COL.leader, 'stroke-dasharray': '2 2', 'stroke-width': 0.8 }));
-      svg.appendChild(txt(X(AT / 2), yDim + 16, 'câbles ' + fnum(AT) + ' m', { 'text-anchor': 'middle', 'font-size': 9 }));
-      svg.appendChild(txt(X(AT + BN / 2), yDim + 16, 'conduites ' + fnum(BN) + ' m', { 'text-anchor': 'middle', 'font-size': 9 }));
+      svg.appendChild(txt(X(AT / 2), yDim + 15, 'câbles ' + fnum(AT) + ' m', { 'text-anchor': 'middle', 'font-size': 9 }));
+      svg.appendChild(txt(X(AT + BN / 2), yDim + 15, 'conduites ' + fnum(BN) + ' m', { 'text-anchor': 'middle', 'font-size': 9 }));
     }
 
     // ---- Légende (matières + impétrants) ----
     var lg = x0 + W + 116, ly = y0 + 2;
-    [['Coffre (SPI)', COL.coffre], ['Remblai terres', COL.terres], ['Remblai sous-fond.', COL.sousfond],
+    [['Coffre', COL.coffre], ['Remblai terres', COL.terres], ['Remblai sous-fond.', COL.sousfond],
      ['Sable', COL.sable], ['Conduite', COL.conduiteFill]].forEach(function (it) {
       legendItem(svg, lg, ly, it[1], it[0]); ly += 16;
     });

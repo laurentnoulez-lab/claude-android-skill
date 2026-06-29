@@ -100,7 +100,8 @@ table.rows tr.editing { background: #eef4ff; }
 
 .coupe-box { margin-top: 8px; overflow-x: auto; }
 .coupe-svg { background: #fbfcfe; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; }
-table.rows.rep { margin-top: 6px; }
+.rep-wrap { overflow-x: auto; margin-top: 6px; }
+table.rows.rep { margin-top: 0; min-width: 720px; }
 table.rows.rep th { position: static; }
 table.rows.rep td, table.rows.rep th { padding: 4px 8px; font-size: 12px; }
 

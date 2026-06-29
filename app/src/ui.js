@@ -349,17 +349,19 @@
     var t = el('table', { class: 'rows rep' });
     t.appendChild(el('thead', {}, [el('tr', {}, [
       th('Sous-réseau'), th('Catégorie'), th('Largeur (m)', 'num'), th('Part catégorie', 'num'),
-      th('Part totale', 'num'), th('Vol. attribué (m³)', 'num')
+      th('Part totale', 'num'), th('Vol. attribué tranchée câbles (m³)', 'num'),
+      th('Vol. attribué tranchée conduites (m³)', 'num'), th('Vol. de tranchée totale attribué (m³)', 'num')
     ])]));
     var tb = el('tbody');
     rep.channels.forEach(function (ch) {
       tb.appendChild(el('tr', {}, [
         td(ch.label), td(ch.category === 'cable' ? 'Câbles' : 'Conduites'),
-        td(fmt(ch.width), 'num'), td(fmtPct(ch.partCat), 'num'), td(fmtPct(ch.partTot), 'num'), td(fmt(ch.volTranchee), 'num')
+        td(fmt(ch.width), 'num'), td(fmtPct(ch.partCat), 'num'), td(fmtPct(ch.partTot), 'num'),
+        td(fmt(ch.volCable), 'num'), td(fmt(ch.volConduite), 'num'), td(fmt(ch.volTranchee), 'num')
       ]));
     });
     t.appendChild(tb);
-    box.appendChild(t);
+    box.appendChild(el('div', { class: 'rep-wrap' }, [t]));
   }
 
   function fillPreview(pv, c) {

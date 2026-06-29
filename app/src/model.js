@@ -372,6 +372,10 @@
         srId: col.srId, concId: col.concId, label: col.h3.replace('\n', ' '), category: cat,
         width: w, partCat: partCat, partTot: partTot,
         longueur: partTot * c.AF,
+        // volume attribué dans la tranchée câbles / conduites (0 pour l'autre catégorie)
+        volCable: cat === 'cable' ? partCat * c.AZ : 0,
+        volConduite: cat === 'conduite' ? partCat * c.BS : 0,
+        // volume de tranchée totale attribué (= volCable + volConduite)
         volTranchee: partCat * volPart,
         volSable: partCat * (cat === 'cable' ? c.AW : c.BP),
         volRemblai: partCat * (cat === 'cable' ? c.AX : c.BQ),

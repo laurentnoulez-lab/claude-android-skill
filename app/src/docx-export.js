@@ -145,17 +145,18 @@
         var rep = M.computeRepartition(project, r, L);
         rep.channels.forEach(function (ch) {
           var k = ch.srId;
-          if (!agg[k]) agg[k] = { label: ch.label, category: ch.category, vol: 0, sable: 0, remblai: 0, deblais: 0 };
+          if (!agg[k]) agg[k] = { label: ch.label, category: ch.category, volCable: 0, volConduite: 0, vol: 0, sable: 0, remblai: 0, deblais: 0 };
+          agg[k].volCable += ch.volCable; agg[k].volConduite += ch.volConduite;
           agg[k].vol += ch.volTranchee; agg[k].sable += ch.volSable; agg[k].remblai += ch.volRemblai; agg[k].deblais += ch.volDeblais;
         });
       });
       var totVol = Object.keys(agg).reduce(function (s, k) { return s + agg[k].vol; }, 0);
       var aggRows = Object.keys(agg).map(function (k) {
         var a = agg[k];
-        return [a.label, a.category === 'cable' ? 'Câbles' : 'Conduites', f2(a.vol), pct(totVol > 0 ? a.vol / totVol : 0), f2(a.sable), f2(a.remblai), f2(a.deblais)];
+        return [a.label, a.category === 'cable' ? 'Câbles' : 'Conduites', f2(a.volCable), f2(a.volConduite), f2(a.vol), pct(totVol > 0 ? a.vol / totVol : 0)];
       });
-      if (aggRows.length) table(['Sous-réseau', 'Catégorie', 'Vol. tranchée (m³)', 'Part', 'Sable (m³)', 'Remblai (m³)', 'Déblais (m³)'], aggRows,
-        [22, 13, 16, 9, 13, 13, 14]);
+      if (aggRows.length) table(['Sous-réseau', 'Catégorie', 'Vol. attribué câbles (m³)', 'Vol. attribué conduites (m³)', 'Vol. de tranchée totale attribué (m³)', 'Part'], aggRows,
+        [22, 13, 17, 17, 19, 12]);
     }
 
     // ----------------------------------------------------- 8. Excel
