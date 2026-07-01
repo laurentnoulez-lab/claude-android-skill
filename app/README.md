@@ -39,10 +39,14 @@ ExcelJS).
 - **Exporter / Importer** — sauvegarder un projet au format `.json` et le
   recharger plus tard. Le projet en cours est aussi conservé automatiquement
   dans le navigateur (localStorage).
-- **Générer Excel** — produit un `.xlsx` reproduisant l'onglet gabarit avec ses
-  en-têtes, ses cellules de saisie (jaunes) et **toutes les formules** :
-  largeurs (AC, AR, AS, AT…), volumes câbles/conduites (AV…BT), et la
-  répartition par impétrant (clé = part du volume total).
+- **Générer Excel** — produit un `.xlsx` à deux onglets :
+  - *Gabarits tranchées communes* : le gabarit complet avec en-têtes teintés
+    (câbles en bleu, conduites en vert), cellules de saisie (jaunes), **toutes
+    les formules** (largeurs, volumes, répartition en %), et une ligne TOTAL ;
+  - *Synthèse* : quantités globales pour le métré, longueurs/volumes par type
+    de tranchée (COUNTIF/SUMIFS), et **clé de répartition par sous-réseau**
+    (SUMPRODUCT pondéré par les volumes) avec contrôle « somme = 100 % » —
+    le tout en formules vivantes qui se recalculent dans Excel.
 
 ## Périmètre
 

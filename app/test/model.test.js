@@ -97,5 +97,20 @@ wb.xlsx.writeFile(outPath).then(async () => {
   assert.strictEqual(ws.getCell('E5').value, 165, 'E5 longueur');
   console.log(`Formules Excel : ${fp} OK, ${ff} KO`);
   assert.strictEqual(ff, 0);
+
+  // Ligne TOTAL du gabarit (2 lignes de données -> TOTAL ligne 7)
+  assert.strictEqual(ws.getCell('A7').value, 'TOTAL', 'ligne TOTAL');
+  assert.strictEqual(get('E7'), 'SUM(E5:E6)', 'somme des longueurs');
+
+  // Onglet Synthèse : présent, avec clé de répartition en SUMPRODUCT
+  const sy = wb2.getWorksheet('Synthèse');
+  assert.ok(sy, 'onglet Synthèse');
+  let foundKey = false;
+  sy.eachRow(row => row.eachCell(cell => {
+    const f = cell.formula || (cell.value && cell.value.formula);
+    if (f && /^IFERROR\(SUMPRODUCT\('Gabarits tranchées communes'!/.test(f)) foundKey = true;
+  }));
+  assert.ok(foundKey, 'clé de répartition (SUMPRODUCT) dans la Synthèse');
+  console.log('Synthèse : onglet + clé de répartition OK');
   console.log('TOUS LES TESTS PASSENT ✓');
 }).catch(e => { console.error(e); process.exit(1); });

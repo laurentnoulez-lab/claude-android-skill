@@ -22,10 +22,11 @@ body {
   background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.4;
 }
 h1, h2, h3 { margin: 0; font-weight: 600; }
-button { font-family: inherit; font-size: 13px; cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: #fff; padding: 6px 12px; color: var(--ink); }
-button:hover { background: #f0f3f7; }
+button { font-family: inherit; font-size: 13px; cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: #fff; padding: 6px 12px; color: var(--ink); transition: background .12s, box-shadow .12s, transform .06s; }
+button:hover { background: #f0f3f7; box-shadow: 0 1px 4px rgba(20,40,80,.12); }
+button:active { transform: translateY(1px); }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.primary:hover { background: var(--accent-dark); }
+button.primary:hover { background: var(--accent-dark); box-shadow: 0 2px 8px rgba(37,99,235,.4); }
 button.danger { color: var(--danger); border-color: #f0c5c5; }
 button.danger:hover { background: #fdecec; }
 button.tiny { padding: 2px 7px; font-size: 12px; }
@@ -35,10 +36,11 @@ input.in { background: var(--input); border-color: var(--input-border); }
 label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
 
 header.app {
-  background: linear-gradient(90deg, #1e3a8a, #2563eb);
-  color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  position: sticky; top: 0; z-index: 30; box-shadow: 0 1px 6px rgba(0,0,0,.15);
+  background: linear-gradient(100deg, #172d63 0%, #1e3a8a 45%, #2563eb 100%);
+  color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 30; box-shadow: 0 2px 10px rgba(15,30,70,.35);
 }
+header.app .logo { flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
 header.app h1 { font-size: 17px; }
 header.app .sub { font-size: 12px; opacity: .85; }
 header.app .spacer { flex: 1; }
@@ -48,7 +50,8 @@ header.app input::placeholder { color: rgba(255,255,255,.7); }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
 
 main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 60px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; box-shadow: 0 1px 3px rgba(20,40,80,.06); transition: box-shadow .15s; }
+.panel:hover { box-shadow: 0 3px 12px rgba(20,40,80,.10); }
 .panel > .head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: #fafbfc; cursor: pointer; }
 .panel > .head h2 { font-size: 15px; }
 .panel > .head .count { color: var(--muted); font-size: 12px; font-weight: 400; }
@@ -105,9 +108,16 @@ table.rows.rep { margin-top: 0; min-width: 720px; }
 table.rows.rep th { position: static; }
 table.rows.rep td, table.rows.rep th { padding: 4px 8px; font-size: 12px; }
 
-.totals { display: flex; flex-wrap: wrap; gap: 22px; padding: 14px 18px; background: #11233f; color: #fff; border-radius: var(--radius); }
-.totals .t b { display: block; font-size: 18px; }
+#totals-area { position: sticky; bottom: 12px; z-index: 20; }
+.totals { display: flex; flex-wrap: wrap; gap: 22px; padding: 14px 18px; background: linear-gradient(100deg, #0d1b33, #11233f 60%, #14305c); color: #fff; border-radius: var(--radius); box-shadow: 0 6px 22px rgba(10,20,45,.45); border: 1px solid rgba(255,255,255,.08); }
+.totals .t b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
 .totals .t span { font-size: 12px; opacity: .8; }
+
+/* Mini-barre de proportion dans la table de répartition */
+.minibar { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+.minibar .track { width: 64px; height: 7px; background: #e6ebf2; border-radius: 4px; overflow: hidden; flex: none; }
+.minibar .fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
+.minibar.conduite .fill { background: linear-gradient(90deg, #34d399, #0e9f6e); }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
 .hint { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #11233f; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; transition: opacity .2s; z-index: 50; box-shadow: 0 4px 14px rgba(0,0,0,.25); }

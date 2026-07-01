@@ -429,11 +429,28 @@
     var hdrFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };         // bleu clair
     var hdrFont = { bold: true, size: 9 };
 
-    function styleHeaderCell(cell, text) {
+    // Teintes d'en-tête par section : câbles en bleu, conduites en vert
+    var cableHdrFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
+    var conduiteHdrFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+    var bandFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };   // bandeau ligne 1
+    function fillForCategory(cat) {
+      if (cat === 'cable') return cableHdrFill;
+      if (cat === 'conduite') return conduiteHdrFill;
+      return hdrFill;
+    }
+    function styleHeaderCell(cell, text, fill) {
       cell.value = text;
       cell.font = hdrFont;
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.fill = hdrFill;
+      cell.fill = fill || hdrFill;
+      cell.border = border;
+    }
+    // Bandeau de section (ligne 1) : fond bleu nuit, texte blanc
+    function styleBandCell(cell, text) {
+      cell.value = text;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.fill = bandFill;
       cell.border = border;
     }
     function mergeSafe(a, b) { try { ws.mergeCells(a + ':' + b); } catch (e) {} }
@@ -443,50 +460,53 @@
     ws.getCell('A1').fill = inputFill;
     mergeSafe('A1', 'D1');
 
-    // Bandeau ligne 1
+    // Bandeau ligne 1 (bleu nuit, texte blanc)
     if (L.widthEnd >= L.widthStart) {
-      styleHeaderCell(ws.getCell(L.widthFirstLetter + '1'), 'Largeur tranchée');
+      styleBandCell(ws.getCell(L.widthFirstLetter + '1'), 'Largeur tranchée');
       mergeSafe(L.widthFirstLetter + '1', L.widthLastLetter + '1');
     }
-    styleHeaderCell(ws.getCell(lt('AF') + '1'), 'Longueurs et volumes');
+    styleBandCell(ws.getCell(lt('AF') + '1'), 'Longueurs et volumes');
     mergeSafe(lt('AF') + '1', lt('BT') + '1');
     if (L.repartGroups.length) {
-      styleHeaderCell(ws.getCell(colLetter(L.repStart) + '1'), 'Répartition');
+      styleBandCell(ws.getCell(colLetter(L.repStart) + '1'), 'Répartition des volumes par sous-réseau');
       mergeSafe(colLetter(L.repStart) + '1', colLetter(L.repEnd) + '1');
     }
 
     // Bandeau ligne 2 : Câbles / Conduites (largeurs), théorique, max, parties, répartition
     var cableW = cols.filter(function (c) { return (c.isChannel || c.isInterstice) && c.category === 'cable'; });
     var conduiteW = cols.filter(function (c) { return (c.isChannel || c.isInterstice) && c.category === 'conduite'; });
-    if (cableW.length) { styleHeaderCell(ws.getCell(cableW[0].letter + '2'), 'Câbles'); mergeSafe(cableW[0].letter + '2', cableW[cableW.length - 1].letter + '2'); }
-    if (conduiteW.length) { styleHeaderCell(ws.getCell(conduiteW[0].letter + '2'), 'Conduites'); mergeSafe(conduiteW[0].letter + '2', conduiteW[conduiteW.length - 1].letter + '2'); }
+    if (cableW.length) { styleHeaderCell(ws.getCell(cableW[0].letter + '2'), 'Câbles', cableHdrFill); mergeSafe(cableW[0].letter + '2', cableW[cableW.length - 1].letter + '2'); }
+    if (conduiteW.length) { styleHeaderCell(ws.getCell(conduiteW[0].letter + '2'), 'Conduites', conduiteHdrFill); mergeSafe(conduiteW[0].letter + '2', conduiteW[conduiteW.length - 1].letter + '2'); }
     styleHeaderCell(ws.getCell(lt('AC') + '2'), 'Largeur tranchée\nthéorique'); mergeSafe(lt('AC') + '2', lt('AC') + '4');
     styleHeaderCell(ws.getCell(lt('AD') + '2'), 'Largeur max disponible\n(limite domaine public)'); mergeSafe(lt('AD') + '2', lt('AD') + '4');
-    styleHeaderCell(ws.getCell(lt('AG') + '2'), 'Partie câbles'); mergeSafe(lt('AG') + '2', lt('AZ') + '2');
-    styleHeaderCell(ws.getCell(lt('BA') + '2'), 'Partie Conduites'); mergeSafe(lt('BA') + '2', lt('BS') + '2');
+    styleHeaderCell(ws.getCell(lt('AG') + '2'), 'Partie câbles', cableHdrFill); mergeSafe(lt('AG') + '2', lt('AZ') + '2');
+    styleHeaderCell(ws.getCell(lt('BA') + '2'), 'Partie Conduites', conduiteHdrFill); mergeSafe(lt('BA') + '2', lt('BS') + '2');
     // bandeau répartition ligne 2 : Câbles / Conduites
     var repCable = L.repartGroups.filter(function (g) { return g.channel.category === 'cable'; });
     var repConduite = L.repartGroups.filter(function (g) { return g.channel.category === 'conduite'; });
-    if (repCable.length) { styleHeaderCell(ws.getCell(repCable[0].cols[0].letter + '2'), 'Câbles'); mergeSafe(repCable[0].cols[0].letter + '2', repCable[repCable.length - 1].cols[5].letter + '2'); }
-    if (repConduite.length) { styleHeaderCell(ws.getCell(repConduite[0].cols[0].letter + '2'), 'Conduites'); mergeSafe(repConduite[0].cols[0].letter + '2', repConduite[repConduite.length - 1].cols[5].letter + '2'); }
+    if (repCable.length) { styleHeaderCell(ws.getCell(repCable[0].cols[0].letter + '2'), 'Câbles', cableHdrFill); mergeSafe(repCable[0].cols[0].letter + '2', repCable[repCable.length - 1].cols[5].letter + '2'); }
+    if (repConduite.length) { styleHeaderCell(ws.getCell(repConduite[0].cols[0].letter + '2'), 'Conduites', conduiteHdrFill); mergeSafe(repConduite[0].cols[0].letter + '2', repConduite[repConduite.length - 1].cols[5].letter + '2'); }
 
-    // Lignes 3 et 4 : titres de colonnes + unités
+    // Lignes 3 et 4 : titres de colonnes + unités (teintés selon la catégorie)
     cols.forEach(function (col) {
       if (col.field === 'spacer') return;
-      if (col.h3 !== undefined && col.h3 !== '') styleHeaderCell(ws.getCell(col.letter + '3'), col.h3);
-      else { ws.getCell(col.letter + '3').border = border; ws.getCell(col.letter + '3').fill = hdrFill; }
-      if (col.h4 !== undefined && col.h4 !== '') styleHeaderCell(ws.getCell(col.letter + '4'), col.h4);
-      else { ws.getCell(col.letter + '4').border = border; ws.getCell(col.letter + '4').fill = hdrFill; }
+      var f3 = fillForCategory(col.category);
+      if (col.h3 !== undefined && col.h3 !== '') styleHeaderCell(ws.getCell(col.letter + '3'), col.h3, f3);
+      else { ws.getCell(col.letter + '3').border = border; ws.getCell(col.letter + '3').fill = f3; }
+      if (col.h4 !== undefined && col.h4 !== '') styleHeaderCell(ws.getCell(col.letter + '4'), col.h4, f3);
+      else { ws.getCell(col.letter + '4').border = border; ws.getCell(col.letter + '4').fill = f3; }
     });
     // Titres "De"/"à" fusion verticale + groupe répartition (nom du canal sur les 6 colonnes en ligne 3)
     styleHeaderCell(ws.getCell('A3'), 'Tranchée impétrant\n(voir points sur le plan)'); mergeSafe('A3', 'B3');
     L.repartGroups.forEach(function (gr) {
-      styleHeaderCell(ws.getCell(gr.cols[0].letter + '3'), gr.channel.h3);
+      styleHeaderCell(ws.getCell(gr.cols[0].letter + '3'), gr.channel.h3, fillForCategory(gr.channel.category));
       mergeSafe(gr.cols[0].letter + '3', gr.cols[5].letter + '3');
     });
 
     // --- Lignes de données ---
     var fmt = '0.00';
+    var pctFmt = '0.0%';
+    var isPctCol = function (col) { return col.field === 'rep' && col.repWhich <= 1; };
     project.rows.forEach(function (row, i) {
       var R = DATA_START + i;
       cols.forEach(function (col) {
@@ -497,7 +517,7 @@
         if (f.formula !== undefined) {
           cell.value = { formula: f.formula };
           cell.fill = calcFill;
-          if (f.numfmt !== false) cell.numFmt = fmt;
+          if (f.numfmt !== false) cell.numFmt = isPctCol(col) ? pctFmt : fmt;
         } else {
           cell.value = f.value;
           if (col.kind === 'input') cell.fill = inputFill;
@@ -517,9 +537,200 @@
       }]
     });
 
+    // --- Ligne TOTAL (sommes des longueurs et volumes) ---
+    if (project.rows.length > 0) {
+      var TR = DATA_START + project.rows.length;
+      var totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
+      var totalFont = { bold: true, size: 9 };
+      var thick = { style: 'double', color: { argb: 'FF1F3864' } };
+      var totalRoles = ['AF', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
+      var tcell = ws.getCell('A' + TR);
+      tcell.value = 'TOTAL'; tcell.font = totalFont; tcell.fill = totalFill;
+      tcell.alignment = { horizontal: 'center' };
+      mergeSafe('A' + TR, 'D' + TR);
+      var sumTo = function (letter) {
+        var cell = ws.getCell(letter + TR);
+        cell.value = { formula: 'SUM(' + letter + DATA_START + ':' + letter + lastRow + ')' };
+        cell.numFmt = fmt; cell.font = totalFont; cell.fill = totalFill;
+        cell.border = { top: thick, left: thin, bottom: thin, right: thin };
+      };
+      sumTo('E');
+      totalRoles.forEach(function (role) { sumTo(lt(role)); });
+      // totaux répartition : longueur / sable / remblai / déblais par canal
+      L.repartGroups.forEach(function (gr) {
+        [2, 3, 4, 5].forEach(function (wi) { sumTo(gr.cols[wi].letter); });
+      });
+      ws.getRow(TR).height = 16;
+    }
+
     ws.getRow(3).height = 60;
     ws.getRow(1).height = 18; ws.getRow(2).height = 18;
+    ws.properties.tabColor = { argb: 'FF2563EB' };
+
+    // --- Onglet Synthèse (métré + clé de répartition) ---
+    buildSyntheseSheet(wb, project, L, lt, lastRow);
+
     return wb;
+  }
+
+  // Onglet « Synthèse » : quantités globales pour le métré, longueurs par type
+  // de tranchée, et clé de répartition par sous-réseau — le tout en formules
+  // vivantes référençant l'onglet gabarit (recalcul automatique dans Excel).
+  function buildSyntheseSheet(wb, project, L, lt, lastRow) {
+    var SRC = "'Gabarits tranchées communes'!";
+    var ref = function (letter) { return SRC + letter + '$' + DATA_START + ':' + letter + '$' + lastRow; };
+    var ws = wb.addWorksheet('Synthèse', { views: [{ showGridLines: false }] });
+    ws.properties.tabColor = { argb: 'FF0E9F6E' };
+
+    var thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+    var border = { top: thin, left: thin, bottom: thin, right: thin };
+    var fmt = '#,##0.00';
+    var titleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
+    var sectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
+    var thFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDF2F9' } };
+    var cableFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEBF7' } };
+    var conduiteFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+
+    var widths = [26, 14, 12, 14, 14, 16, 16, 16, 14, 16, 16];
+    widths.forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
+
+    var r = 1;
+    function mergeSafe(a, b) { try { ws.mergeCells(a + ':' + b); } catch (e) {} }
+    function section(title) {
+      var c = ws.getCell('A' + r);
+      c.value = title; c.font = { bold: true, size: 11, color: { argb: 'FF1F3864' } };
+      c.fill = sectionFill; c.alignment = { vertical: 'middle' };
+      mergeSafe('A' + r, 'K' + r);
+      ws.getRow(r).height = 18;
+      r += 1;
+    }
+    function kv(label, formula, unit, numFmtOverride) {
+      ws.getCell('A' + r).value = label;
+      ws.getCell('A' + r).border = border;
+      var v = ws.getCell('B' + r);
+      v.value = { formula: formula };
+      v.numFmt = numFmtOverride || fmt; v.font = { bold: true }; v.border = border;
+      v.alignment = { horizontal: 'right' };
+      ws.getCell('C' + r).value = unit || '';
+      ws.getCell('C' + r).font = { color: { argb: 'FF66727F' } };
+      ws.getCell('C' + r).border = border;
+      r += 1;
+    }
+    function headerRow(labels) {
+      labels.forEach(function (t, i) {
+        var c = ws.getCell(colLetter(i + 1) + r);
+        c.value = t; c.font = { bold: true, size: 9 }; c.fill = thFill; c.border = border;
+        c.alignment = { horizontal: i === 0 ? 'left' : 'center', wrapText: true, vertical: 'middle' };
+      });
+      ws.getRow(r).height = 28;
+      r += 1;
+    }
+
+    // --- Titre ---
+    var t = ws.getCell('A1');
+    t.value = 'Synthèse — Métré et clé de répartition';
+    t.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+    t.fill = titleFill; t.alignment = { vertical: 'middle', indent: 1 };
+    mergeSafe('A1', 'K1'); ws.getRow(1).height = 26;
+    r = 2;
+    ws.getCell('A2').value = 'Projet : ' + (project.name || '(sans nom)') + '    —    généré le ' + new Date().toLocaleDateString('fr-FR');
+    ws.getCell('A2').font = { italic: true, color: { argb: 'FF66727F' } };
+    r = 4;
+
+    // --- 1. Quantités globales ---
+    section('1. Quantités globales (métré)');
+    kv('Nombre de tronçons', 'COUNT(' + ref('E') + ')', '', '0');
+    kv('Longueur totale de tranchées', 'SUM(' + ref(lt('AF')) + ')', 'm');
+    kv('Volume total de tranchée', 'SUM(' + ref(lt('BT')) + ')', 'm³');
+    kv("Volume de sable d'enrobage", 'SUM(' + ref(lt('AW')) + ')+SUM(' + ref(lt('BP')) + ')', 'm³');
+    kv('Volume remblai en matériaux de sous-fondation', 'SUM(' + ref(lt('AX')) + ')+SUM(' + ref(lt('BQ')) + ')', 'm³');
+    kv('Volume déblais excédentaires (mise en merlon)', 'SUM(' + ref(lt('AY')) + ')+SUM(' + ref(lt('BR')) + ')', 'm³');
+    kv('Longueur gaines rigides', 'SUM(' + ref(lt('AU')) + ')', 'm');
+    kv('Tronçons en dépassement de largeur (NOK)', 'COUNTIF(' + ref(lt('AE')) + ',"NOK")', '', '0');
+    r += 1;
+
+    // --- 2. Longueurs et volumes par type de tranchée ---
+    section('2. Longueurs et volumes par type de tranchée');
+    var types = [];
+    project.rows.forEach(function (row) {
+      var ty = (row.type || '').trim();
+      if (ty && types.indexOf(ty) < 0) types.push(ty);
+    });
+    types.sort();
+    if (types.length) {
+      headerRow(['Type', 'Nb tronçons', '', 'Longueur (m)', 'Volume tranchée (m³)']);
+      types.forEach(function (ty) {
+        var q = '"' + ty.replace(/"/g, '""') + '"';
+        ws.getCell('A' + r).value = ty; ws.getCell('A' + r).border = border; ws.getCell('A' + r).font = { bold: true };
+        var c1 = ws.getCell('B' + r); c1.value = { formula: 'COUNTIF(' + ref('C') + ',' + q + ')' }; c1.numFmt = '0'; c1.border = border;
+        ws.getCell('C' + r).border = border;
+        var c2 = ws.getCell('D' + r); c2.value = { formula: 'SUMIFS(' + ref(lt('AF')) + ',' + ref('C') + ',' + q + ')' }; c2.numFmt = fmt; c2.border = border;
+        var c3 = ws.getCell('E' + r); c3.value = { formula: 'SUMIFS(' + ref(lt('BT')) + ',' + ref('C') + ',' + q + ')' }; c3.numFmt = fmt; c3.border = border;
+        r += 1;
+      });
+    } else {
+      ws.getCell('A' + r).value = '(aucun tronçon saisi)'; ws.getCell('A' + r).font = { italic: true, color: { argb: 'FF66727F' } };
+      r += 1;
+    }
+    r += 1;
+
+    // --- 3. Clé de répartition par sous-réseau ---
+    section('3. Clé de répartition par sous-réseau');
+    ws.getCell('A' + r).value = 'Clé = Σ(part volume tranchée totale × volume total du tronçon) ÷ Σ(volumes totaux). '
+      + 'Le volume des interstices est réparti au prorata de la largeur occupée par chaque sous-réseau.';
+    ws.getCell('A' + r).font = { italic: true, size: 8, color: { argb: 'FF66727F' } };
+    ws.getCell('A' + r).alignment = { wrapText: true, vertical: 'top' };
+    mergeSafe('A' + r, 'K' + r); ws.getRow(r).height = 24;
+    r += 1;
+
+    headerRow(['Impétrant', 'Sous-réseau', 'Catégorie', 'Clé de répartition',
+      'Longueur attribuée (m)', 'Vol. tranchée câbles (m³)', 'Vol. tranchée conduites (m³)',
+      'Vol. tranchée totale (m³)', 'Vol. sable (m³)', 'Vol. remblai s-fond. (m³)', 'Vol. déblais excéd. (m³)']);
+    var firstKey = r;
+    var btRange = ref(lt('BT'));
+    L.repartGroups.forEach(function (gr) {
+      var parts = gr.channel.h3.split('\n');
+      var isCable = gr.channel.category === 'cable';
+      var rowFill = isCable ? cableFill : conduiteFill;
+      var partTot = ref(gr.cols[1].letter);
+      var cells = [
+        { v: parts[0] || '' }, { v: parts[1] || '' }, { v: isCable ? 'Câbles' : 'Conduites' },
+        { f: 'IFERROR(SUMPRODUCT(' + partTot + ',' + btRange + ')/SUM(' + btRange + '),0)', nf: '0.00%' },
+        { f: 'SUM(' + ref(gr.cols[2].letter) + ')' },
+        { f: isCable ? 'SUMPRODUCT(' + partTot + ',' + btRange + ')' : '0' },
+        { f: !isCable ? 'SUMPRODUCT(' + partTot + ',' + btRange + ')' : '0' },
+        { f: 'F' + r + '+G' + r },
+        { f: 'SUM(' + ref(gr.cols[3].letter) + ')' },
+        { f: 'SUM(' + ref(gr.cols[4].letter) + ')' },
+        { f: 'SUM(' + ref(gr.cols[5].letter) + ')' }
+      ];
+      cells.forEach(function (spec, i) {
+        var c = ws.getCell(colLetter(i + 1) + r);
+        if (spec.f !== undefined) { c.value = { formula: spec.f }; c.numFmt = spec.nf || fmt; }
+        else c.value = spec.v;
+        c.border = border;
+        if (i < 3) c.fill = rowFill;
+      });
+      r += 1;
+    });
+    // Ligne TOTAL + contrôle
+    if (L.repartGroups.length) {
+      var lastKey = r - 1;
+      ws.getCell('A' + r).value = 'TOTAL'; ws.getCell('A' + r).font = { bold: true };
+      ws.getCell('A' + r).fill = sectionFill; ws.getCell('A' + r).border = border;
+      mergeSafe('A' + r, 'C' + r);
+      ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach(function (colL) {
+        var c = ws.getCell(colL + r);
+        c.value = { formula: 'SUM(' + colL + firstKey + ':' + colL + lastKey + ')' };
+        c.numFmt = colL === 'D' ? '0.00%' : fmt;
+        c.font = { bold: true }; c.fill = sectionFill; c.border = border;
+      });
+      r += 1;
+      var ctrl = ws.getCell('A' + r);
+      ctrl.value = { formula: 'IF(SUM(D' + firstKey + ':D' + lastKey + ')=0,"(aucun volume)",IF(ABS(SUM(D' + firstKey + ':D' + lastKey + ')-1)<0.0001,"Contrôle : la somme des clés vaut bien 100 %","Contrôle : ATTENTION, la somme des clés ne vaut pas 100 %"))' };
+      ctrl.font = { italic: true, size: 9, color: { argb: 'FF0E9F6E' } };
+      mergeSafe('A' + r, 'K' + r);
+    }
   }
 
   // Renvoie {value} pour une saisie, {formula} pour une cellule calculée.

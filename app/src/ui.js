@@ -354,9 +354,18 @@
     ])]));
     var tb = el('tbody');
     rep.channels.forEach(function (ch) {
+      // cellule « part totale » avec mini-barre proportionnelle
+      var barCell = el('td', { class: 'num' }, [
+        el('div', { class: 'minibar' + (ch.category === 'conduite' ? ' conduite' : '') }, [
+          el('span', { text: fmtPct(ch.partTot) }),
+          el('div', { class: 'track' }, [
+            el('div', { class: 'fill', style: 'width:' + Math.min(100, Math.max(0, ch.partTot * 100)).toFixed(1) + '%' })
+          ])
+        ])
+      ]);
       tb.appendChild(el('tr', {}, [
         td(ch.label), td(ch.category === 'cable' ? 'Câbles' : 'Conduites'),
-        td(fmt(ch.width), 'num'), td(fmtPct(ch.partCat), 'num'), td(fmtPct(ch.partTot), 'num'),
+        td(fmt(ch.width), 'num'), td(fmtPct(ch.partCat), 'num'), barCell,
         td(fmt(ch.volCable), 'num'), td(fmt(ch.volConduite), 'num'), td(fmt(ch.volTranchee), 'num')
       ]));
     });
