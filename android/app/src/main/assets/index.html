@@ -20565,6 +20565,8 @@ var __async = (__this, __arguments, generator) => {
     addCalc('AS', { h3: 'Largeur interstices câbles', h4: '(m)' });
     addCalc('AT', { h3: 'Largeur totale tranchée câbles', h4: '(m)' });
     addCalc('AU', { kind: 'input', dtype: 'number', gkey: 'longueurGaines', h3: 'Longueur gaines rigides', h4: '(m)' });
+    addCalc('GD', { kind: 'input', dtype: 'number', h3: 'Ø gaine\n(si câbles sous fourreaux)', h4: '(mm)' });
+    addCalc('GV', { h3: 'Volume gaines (longueur × section)', h4: '(m³)' });
     addCalc('AV', { h3: 'Volume occupé par câbles sable et câbles', h4: '(m³)' });
     addCalc('AW', { h3: 'Volume sable', h4: '(m³)' });
     addCalc('AX', { h3: 'Volume remblais en matériaux de sous-fondation', h4: '(m³)' });
@@ -20652,6 +20654,12 @@ var __async = (__this, __arguments, generator) => {
     var E = num(row.longueur, 0);
     var AF = E;
     var AG = num(g.litPoseCable, 0), AH = num(g.htMoyCable, 0), AI = num(g.recouvSableMinCable, 0);
+    // Câbles sous gaines : le Ø de la gaine PRIME sur la hauteur moyenne des
+    // câbles (les câbles sont à l'intérieur des fourreaux) — hauteurs et
+    // volumes de la partie câbles sont calculés avec Ø.
+    var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
+    var DG = num(g.diamGaine, 0.16);
+    if (gaines) AH = DG;
     var AJ = (g.ligneAligne || 'OUI');
     var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0);
     var AR = sum(wc), AS = sum(ic), AT = AR + AS;
@@ -20672,11 +20680,12 @@ var __async = (__this, __arguments, generator) => {
     // côte, on déduit le volume des gaines (nb = AR/Ø ; cylindres π(Ø/2)²×AF),
     // comme le fait BP pour les conduites. Sans gaines, le volume des câbles
     // n'est pas déduit (AW = AV).
-    var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
-    var nbGaines = gaines ? AR / num(g.diamGaine, 0.16) : 0;
-    var AW = gaines ? AV - nbGaines * Math.PI * Math.pow(num(g.diamGaine, 0.16) / 2, 2) * AF : AV;
+    var nbGaines = gaines ? AR / DG : 0;
     // AU (longueur de gaines rigides) : auto si gaines, sinon saisie manuelle
     var AU = gaines ? nbGaines * AF : num(g.longueurGaines, 0);
+    // GV (volume des gaines) = longueur × section circulaire ; AW = AV − GV
+    var GV = gaines ? AU * Math.PI * Math.pow(DG / 2, 2) : 0;
+    var AW = AV - GV;
     var BE = (BD === 'OUI' && AT > 0) ? Math.max(BC, BF - (AL - AI)) : BC;
     var BH = BA + BB + BF - BG;
     var BI = BA + BB + BE;
@@ -20694,7 +20703,7 @@ var __async = (__this, __arguments, generator) => {
 
     return {
       AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AP: AP, AQ: AQ,
-      AU: AU, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
+      AU: AU, GV: GV, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
       BL: BL, BM: BM, BN: BN, BO: BO, BP: BP, BQ: BQ, BR: BR, BS: BS, BT: BT
     };
   }
@@ -20897,7 +20906,7 @@ var __async = (__this, __arguments, generator) => {
       var totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
       var totalFont = { bold: true, size: 9 };
       var thick = { style: 'double', color: { argb: 'FF1F3864' } };
-      var totalRoles = ['AF', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
+      var totalRoles = ['AF', 'AU', 'GV', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
       var tcell = ws.getCell('A' + TR);
       tcell.value = 'TOTAL'; tcell.font = totalFont; tcell.fill = totalFill;
       tcell.alignment = { horizontal: 'center' };
@@ -21000,6 +21009,7 @@ var __async = (__this, __arguments, generator) => {
     kv('Volume remblai en matériaux de sous-fondation', 'SUM(' + ref(lt('AX')) + ')+SUM(' + ref(lt('BQ')) + ')', 'm³');
     kv('Volume déblais excédentaires (mise en merlon)', 'SUM(' + ref(lt('AY')) + ')+SUM(' + ref(lt('BR')) + ')', 'm³');
     kv('Longueur gaines rigides', 'SUM(' + ref(lt('AU')) + ')', 'm');
+    kv('Volume des gaines (déduit du sable)', 'SUM(' + ref(lt('GV')) + ')', 'm³');
     kv('Tronçons en dépassement de largeur (NOK)', 'COUNTIF(' + ref(lt('AE')) + ',"NOK")', '', '0');
     r += 1;
 
@@ -21094,17 +21104,17 @@ var __async = (__this, __arguments, generator) => {
     var D = String(num(g.diamGaine, 0.16));
     // AP / BJ : terres (0), empierrement (=AN-AO / =BH-BI) ou valeur manuelle
     if (col.role === 'AP' || col.role === 'BJ') return remblaiCell(col.role, R, lt, row);
-    // AW : câbles sous gaines -> déduction du volume des gaines du sable
-    if (col.role === 'AW' && gaines) {
-      return { formula: lt('AV') + R + '-(' + lt('AR') + R + '/' + D + ')*PI()*(' + D + '/2)^2*' + lt('AF') + R };
-    }
     // BB : hauteur moyenne conduites forcée manuellement
     if (col.role === 'BB' && g.htConduiteMode === 'manuel') {
       return { value: num(g.htConduiteManuelle, 0), input: true };
     }
-    // AU : longueur de gaines auto = (largeur câbles / Ø) × longueur
+    // AH : sous gaines, la hauteur effective des câbles = Ø gaine (cellule GD, en mm)
+    if (col.role === 'AH' && gaines) {
+      return { formula: lt('GD') + R + '/1000' };
+    }
+    // AU : longueur de gaines auto = (largeur câbles ÷ Ø) × longueur
     if (col.role === 'AU' && gaines) {
-      return { formula: '(' + lt('AR') + R + '/' + D + ')*' + lt('AF') + R };
+      return { formula: 'IFERROR((' + lt('AR') + R + '/(' + lt('GD') + R + '/1000))*' + lt('AF') + R + ',0)' };
     }
     if (col.kind === 'input') {
       return { value: inputValue(col, row) };
@@ -21143,6 +21153,12 @@ var __async = (__this, __arguments, generator) => {
       case 'calc': // saisies parmi les colonnes calculées (gkey)
         if (col.role === 'AD') return num(row.largeurMax, 0);
         if (col.role === 'AJ') return (row.geom && row.geom.ligneAligne) || 'OUI';
+        // GD : Ø gaine en mm (vide si le tronçon n'est pas sous gaines)
+        if (col.role === 'GD') {
+          var gg = row.geom || {};
+          if (gg.gainesCables === 'OUI' && num(gg.diamGaine, 0) > 0) return Math.round(num(gg.diamGaine, 0.16) * 1e6) / 1e3;
+          return null;
+        }
         if (col.gkey) return num(row.geom[col.gkey], 0);
         return null;
       default: return null;
@@ -21167,7 +21183,10 @@ var __async = (__this, __arguments, generator) => {
       AS: sumList(ci),
       AT: lt('AR') + R + '+' + lt('AS') + R,
       AV: lt('AF') + R + '*' + lt('AO') + R + '*' + lt('AT') + R,
-      AW: lt('AV') + R,
+      // Volume des gaines = longueur de gaines × section circulaire (Ø en mm)
+      GV: lt('AU') + R + '*PI()*((' + lt('GD') + R + '/1000)/2)^2',
+      // Volume de sable câbles = volume occupé − volume des gaines (0 sans gaines)
+      AW: lt('AV') + R + '-' + lt('GV') + R,
       AX: lt('AF') + R + '*' + lt('AP') + R + '*' + lt('AT') + R,
       AY: lt('AV') + R + '+' + lt('AX') + R,
       AZ: lt('AF') + R + '*' + lt('AN') + R + '*' + lt('AT') + R,
@@ -21257,7 +21276,7 @@ var __async = (__this, __arguments, generator) => {
   var NS = 'http://www.w3.org/2000/svg';
   var COL = {
     coffre: '#9aa5b1', terres: '#a9744f', sousfond: '#d8c19a', sable: '#f3e6a8',
-    conduiteFill: '#cdeee2', line: '#33414f', dim: '#62707e', leader: '#9aa7b4'
+    conduiteFill: '#cdeee2', gaineFill: '#f2ede2', line: '#33414f', dim: '#62707e', leader: '#9aa7b4'
   };
   var PALETTE = ['#2f6fed', '#e0533d', '#7b3fe4', '#0e9f6e', '#d9890b', '#c026d3', '#0891b2', '#65a30d', '#db2777', '#475569'];
 
@@ -21295,6 +21314,11 @@ var __async = (__this, __arguments, generator) => {
 
     var AM = n(g.hauteurCoffre, 0), APv = c.AP, BJv = c.BJ; // AP/BJ effectifs (selon mode de remblai)
     var AG = n(g.litPoseCable, 0), AH = n(g.htMoyCable, 0), BA = n(g.litPoseConduite, 0);
+    // Câbles sous gaines : le Ø de la gaine prime sur la hauteur des câbles,
+    // et les gaines sont dessinées en cercles (comme les conduites).
+    var gaines = (g.gainesCables === 'OUI') && n(g.diamGaine, 0) > 0;
+    var DG = n(g.diamGaine, 0.16);
+    if (gaines) AH = DG;
     var AT = c.AT, BN = c.BN, AC = c.AC;
     var depthCable = c.AN, depthCond = c.BH;
     var totalDepth = AM + Math.max(depthCable, depthCond, 0);
@@ -21364,12 +21388,23 @@ var __async = (__this, __arguments, generator) => {
       layerRect(AT, BN, e, c.BI, COL.sable);
     }
 
-    // ---- Câbles (rectangles) ----
+    // ---- Câbles : rectangles, ou cercles Ø gaine si posés sous fourreaux ----
     var cableTop = AM + c.AQ + APv + c.AK;
     channels.forEach(function (ch) {
       if (ch.cat !== 'cable' || AH <= 0) return;
-      svg.appendChild(E('rect', { x: X(ch.x0), y: Y(cableTop), width: ch.w * scale, height: AH * scale,
-        fill: colorForConc(project, ch.col.concId), stroke: COL.line, 'stroke-width': 0.6, rx: 1 }));
+      if (gaines) {
+        // une rangée de gaines côte à côte : nb = largeur du canal ÷ Ø
+        var nb = Math.max(1, Math.round(ch.w / DG));
+        for (var i = 0; i < nb; i++) {
+          svg.appendChild(E('circle', {
+            cx: X(ch.x0 + DG / 2 + i * DG), cy: Y(cableTop + DG / 2), r: (DG / 2) * scale,
+            fill: COL.gaineFill, stroke: colorForConc(project, ch.col.concId), 'stroke-width': 1.4
+          }, [E('title', {}, [document.createTextNode(ch.col.h3.replace('\n', ' ') + ' — gaine Ø ' + fnum(DG) + ' m')])]));
+        }
+      } else {
+        svg.appendChild(E('rect', { x: X(ch.x0), y: Y(cableTop), width: ch.w * scale, height: AH * scale,
+          fill: colorForConc(project, ch.col.concId), stroke: COL.line, 'stroke-width': 0.6, rx: 1 }));
+      }
       ch.topY = Y(cableTop);
     });
     // ---- Conduites (cercles) ----
@@ -21437,7 +21472,7 @@ var __async = (__this, __arguments, generator) => {
     var AK = c.AK;
     drawCotes(X(0) - 12, -1, 0, [
       { name: 'Coffre', h: AM }, { name: 'Remblai terres', h: c.AQ }, { name: 'Remblai s-fond.', h: APv },
-      { name: 'Recouvr. sable', h: AK }, { name: 'Câbles', h: AH }, { name: 'Lit de pose', h: AG }
+      { name: 'Recouvr. sable', h: AK }, { name: gaines ? 'Gaines Ø' : 'Câbles', h: AH }, { name: 'Lit de pose', h: AG }
     ]);
     if (BN > 0) {
       drawCotes(X(AC) + 12, 1, AM, [
@@ -21481,7 +21516,7 @@ var __async = (__this, __arguments, generator) => {
     // ---- Légende (matières + impétrants) ----
     var lg = x0 + W + 116, ly = y0 + 2;
     [['Coffre', COL.coffre], ['Remblai terres', COL.terres], ['Remblai sous-fond.', COL.sousfond],
-     ['Sable', COL.sable], ['Conduite', COL.conduiteFill]].forEach(function (it) {
+     ['Sable', COL.sable], ['Conduite', COL.conduiteFill], ['Gaine (fourreau)', COL.gaineFill]].forEach(function (it) {
       legendItem(svg, lg, ly, it[1], it[0]); ly += 16;
     });
     ly += 6;
@@ -21605,7 +21640,7 @@ var __async = (__this, __arguments, generator) => {
     formula('Remblai terres décaissées (AQ)', 'AN − AO − AP');
     formula('Volume occupé câbles+sable (AV) / Volume sable (AW)', 'AF × AO × AT ; AW = AV');
     p([new TextRun({ text: 'Câbles sous gaines (fourreaux) : ', bold: true }),
-       new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le volume des gaines est déduit du volume de sable — AW = AV − (AR ÷ Ø) × π × (Ø/2)² × AF — comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
+       new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le Ø de la gaine PRIME sur la hauteur moyenne des câbles (AH = Ø) pour toutes les hauteurs et tous les volumes. Le classeur généré contient une colonne « Ø gaine (mm) » (saisie) et une colonne « Volume gaines (m³) » = longueur de gaines × section circulaire π(Ø/2)² ; le volume de sable est alors simplement AW = AV − Volume gaines (0 sans gaines), comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Modifier le Ø directement dans la cellule du classeur recalcule AH, AU, le volume des gaines et le sable. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
     formula('Volume remblai sous-fondation (AX)', 'AF × AP × AT');
     formula('Volume déblais excédentaires (AY)', 'AV + AX');
     formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT');
@@ -22078,12 +22113,13 @@ var __async = (__this, __arguments, generator) => {
 
   function fillPreview(pv, c) {
     pv.innerHTML = '';
-    [['Largeur théorique', c.AC, 'm'], ['Largeur totale câbles', c.AT, 'm'], ['Largeur totale conduites', c.BN, 'm'],
+    var items = [['Largeur théorique', c.AC, 'm'], ['Largeur totale câbles', c.AT, 'm'], ['Largeur totale conduites', c.BN, 'm'],
      ['Volume tranchée câbles', c.AZ, 'm³'], ['Volume tranchée conduites', c.BS, 'm³'], ['Volume total', c.BT, 'm³'],
-     ['Volume sable', c.AW + c.BP, 'm³'], ['Volume déblais excéd.', c.AY + c.BR, 'm³']]
-      .forEach(function (x) {
-        pv.appendChild(el('div', { class: 'pv' }, [el('b', { text: fmt(x[1]) }), el('span', { text: x[0] + ' (' + x[2] + ')' })]));
-      });
+     ['Volume sable', c.AW + c.BP, 'm³'], ['Volume déblais excéd.', c.AY + c.BR, 'm³']];
+    if (c.AU > 0) items.push(['Longueur gaines', c.AU, 'm']);
+    items.forEach(function (x) {
+      pv.appendChild(el('div', { class: 'pv' }, [el('b', { text: fmt(x[1]) }), el('span', { text: x[0] + ' (' + x[2] + ')' })]));
+    });
   }
 
   function updateRowPreview(r) {

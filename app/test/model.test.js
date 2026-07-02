@@ -74,6 +74,20 @@ assert.strictEqual(failed, 0, 'Des écarts de calcul détectés');
   console.log('Répartition : cohérence parts/volumes OK');
 })();
 
+// Câbles sous gaines : le Ø de la gaine prime sur la hauteur des câbles saisie.
+(function () {
+  const row = makeRow(project, REF[5]);
+  row.geom.gainesCables = 'OUI'; row.geom.diamGaine = 0.16;
+  row.geom.htMoyCable = 0.05; // volontairement différent du Ø
+  const c = M.computeRow(project, row);
+  // AO = AG + AH_eff + AK avec AH_eff = Ø = 0.16
+  assert.ok(Math.abs(c.AO - (0.1 + 0.16 + c.AK)) < 1e-9, 'AO doit utiliser Ø gaine');
+  assert.ok(Math.abs(c.AN - (0.1 + 0.16 + 0.8 - 0.3)) < 1e-9, 'AN doit utiliser Ø gaine');
+  assert.ok(c.AW < c.AV, 'AW doit déduire le volume des gaines');
+  assert.ok(Math.abs(c.AU - (c.AR / 0.16) * c.AF) < 1e-9, 'AU auto = (AR/Ø)×AF');
+  console.log('Gaines : Ø prime sur la hauteur des câbles OK');
+})();
+
 // Génération Excel
 project.rows = [makeRow(project, REF[5]), makeRow(project, REF[30])];
 const wb = M.buildWorkbook(project, ExcelJS);
@@ -89,6 +103,9 @@ wb.xlsx.writeFile(outPath).then(async () => {
   checks[lt('AC') + '5'] = lt('AT') + '5+' + lt('BN') + '5';
   checks[lt('AT') + '5'] = lt('AR') + '5+' + lt('AS') + '5';
   checks[lt('BT') + '5'] = lt('AZ') + '5+' + lt('BS') + '5';
+  // Colonnes gaines explicites : volume gaines = AU × section(Ø mm) ; sable = AV − GV
+  checks[lt('GV') + '5'] = lt('AU') + '5*PI()*((' + lt('GD') + '5/1000)/2)^2';
+  checks[lt('AW') + '5'] = lt('AV') + '5-' + lt('GV') + '5';
   let fp = 0, ff = 0;
   Object.keys(checks).forEach(addr => {
     const f = get(addr);

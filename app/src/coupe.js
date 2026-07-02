@@ -20,7 +20,7 @@
   var NS = 'http://www.w3.org/2000/svg';
   var COL = {
     coffre: '#9aa5b1', terres: '#a9744f', sousfond: '#d8c19a', sable: '#f3e6a8',
-    conduiteFill: '#cdeee2', line: '#33414f', dim: '#62707e', leader: '#9aa7b4'
+    conduiteFill: '#cdeee2', gaineFill: '#f2ede2', line: '#33414f', dim: '#62707e', leader: '#9aa7b4'
   };
   var PALETTE = ['#2f6fed', '#e0533d', '#7b3fe4', '#0e9f6e', '#d9890b', '#c026d3', '#0891b2', '#65a30d', '#db2777', '#475569'];
 
@@ -58,6 +58,11 @@
 
     var AM = n(g.hauteurCoffre, 0), APv = c.AP, BJv = c.BJ; // AP/BJ effectifs (selon mode de remblai)
     var AG = n(g.litPoseCable, 0), AH = n(g.htMoyCable, 0), BA = n(g.litPoseConduite, 0);
+    // Câbles sous gaines : le Ø de la gaine prime sur la hauteur des câbles,
+    // et les gaines sont dessinées en cercles (comme les conduites).
+    var gaines = (g.gainesCables === 'OUI') && n(g.diamGaine, 0) > 0;
+    var DG = n(g.diamGaine, 0.16);
+    if (gaines) AH = DG;
     var AT = c.AT, BN = c.BN, AC = c.AC;
     var depthCable = c.AN, depthCond = c.BH;
     var totalDepth = AM + Math.max(depthCable, depthCond, 0);
@@ -127,12 +132,23 @@
       layerRect(AT, BN, e, c.BI, COL.sable);
     }
 
-    // ---- Câbles (rectangles) ----
+    // ---- Câbles : rectangles, ou cercles Ø gaine si posés sous fourreaux ----
     var cableTop = AM + c.AQ + APv + c.AK;
     channels.forEach(function (ch) {
       if (ch.cat !== 'cable' || AH <= 0) return;
-      svg.appendChild(E('rect', { x: X(ch.x0), y: Y(cableTop), width: ch.w * scale, height: AH * scale,
-        fill: colorForConc(project, ch.col.concId), stroke: COL.line, 'stroke-width': 0.6, rx: 1 }));
+      if (gaines) {
+        // une rangée de gaines côte à côte : nb = largeur du canal ÷ Ø
+        var nb = Math.max(1, Math.round(ch.w / DG));
+        for (var i = 0; i < nb; i++) {
+          svg.appendChild(E('circle', {
+            cx: X(ch.x0 + DG / 2 + i * DG), cy: Y(cableTop + DG / 2), r: (DG / 2) * scale,
+            fill: COL.gaineFill, stroke: colorForConc(project, ch.col.concId), 'stroke-width': 1.4
+          }, [E('title', {}, [document.createTextNode(ch.col.h3.replace('\n', ' ') + ' — gaine Ø ' + fnum(DG) + ' m')])]));
+        }
+      } else {
+        svg.appendChild(E('rect', { x: X(ch.x0), y: Y(cableTop), width: ch.w * scale, height: AH * scale,
+          fill: colorForConc(project, ch.col.concId), stroke: COL.line, 'stroke-width': 0.6, rx: 1 }));
+      }
       ch.topY = Y(cableTop);
     });
     // ---- Conduites (cercles) ----
@@ -200,7 +216,7 @@
     var AK = c.AK;
     drawCotes(X(0) - 12, -1, 0, [
       { name: 'Coffre', h: AM }, { name: 'Remblai terres', h: c.AQ }, { name: 'Remblai s-fond.', h: APv },
-      { name: 'Recouvr. sable', h: AK }, { name: 'Câbles', h: AH }, { name: 'Lit de pose', h: AG }
+      { name: 'Recouvr. sable', h: AK }, { name: gaines ? 'Gaines Ø' : 'Câbles', h: AH }, { name: 'Lit de pose', h: AG }
     ]);
     if (BN > 0) {
       drawCotes(X(AC) + 12, 1, AM, [
@@ -244,7 +260,7 @@
     // ---- Légende (matières + impétrants) ----
     var lg = x0 + W + 116, ly = y0 + 2;
     [['Coffre', COL.coffre], ['Remblai terres', COL.terres], ['Remblai sous-fond.', COL.sousfond],
-     ['Sable', COL.sable], ['Conduite', COL.conduiteFill]].forEach(function (it) {
+     ['Sable', COL.sable], ['Conduite', COL.conduiteFill], ['Gaine (fourreau)', COL.gaineFill]].forEach(function (it) {
       legendItem(svg, lg, ly, it[1], it[0]); ly += 16;
     });
     ly += 6;

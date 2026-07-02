@@ -233,6 +233,8 @@
     addCalc('AS', { h3: 'Largeur interstices câbles', h4: '(m)' });
     addCalc('AT', { h3: 'Largeur totale tranchée câbles', h4: '(m)' });
     addCalc('AU', { kind: 'input', dtype: 'number', gkey: 'longueurGaines', h3: 'Longueur gaines rigides', h4: '(m)' });
+    addCalc('GD', { kind: 'input', dtype: 'number', h3: 'Ø gaine\n(si câbles sous fourreaux)', h4: '(mm)' });
+    addCalc('GV', { h3: 'Volume gaines (longueur × section)', h4: '(m³)' });
     addCalc('AV', { h3: 'Volume occupé par câbles sable et câbles', h4: '(m³)' });
     addCalc('AW', { h3: 'Volume sable', h4: '(m³)' });
     addCalc('AX', { h3: 'Volume remblais en matériaux de sous-fondation', h4: '(m³)' });
@@ -320,6 +322,12 @@
     var E = num(row.longueur, 0);
     var AF = E;
     var AG = num(g.litPoseCable, 0), AH = num(g.htMoyCable, 0), AI = num(g.recouvSableMinCable, 0);
+    // Câbles sous gaines : le Ø de la gaine PRIME sur la hauteur moyenne des
+    // câbles (les câbles sont à l'intérieur des fourreaux) — hauteurs et
+    // volumes de la partie câbles sont calculés avec Ø.
+    var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
+    var DG = num(g.diamGaine, 0.16);
+    if (gaines) AH = DG;
     var AJ = (g.ligneAligne || 'OUI');
     var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0);
     var AR = sum(wc), AS = sum(ic), AT = AR + AS;
@@ -340,11 +348,12 @@
     // côte, on déduit le volume des gaines (nb = AR/Ø ; cylindres π(Ø/2)²×AF),
     // comme le fait BP pour les conduites. Sans gaines, le volume des câbles
     // n'est pas déduit (AW = AV).
-    var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
-    var nbGaines = gaines ? AR / num(g.diamGaine, 0.16) : 0;
-    var AW = gaines ? AV - nbGaines * Math.PI * Math.pow(num(g.diamGaine, 0.16) / 2, 2) * AF : AV;
+    var nbGaines = gaines ? AR / DG : 0;
     // AU (longueur de gaines rigides) : auto si gaines, sinon saisie manuelle
     var AU = gaines ? nbGaines * AF : num(g.longueurGaines, 0);
+    // GV (volume des gaines) = longueur × section circulaire ; AW = AV − GV
+    var GV = gaines ? AU * Math.PI * Math.pow(DG / 2, 2) : 0;
+    var AW = AV - GV;
     var BE = (BD === 'OUI' && AT > 0) ? Math.max(BC, BF - (AL - AI)) : BC;
     var BH = BA + BB + BF - BG;
     var BI = BA + BB + BE;
@@ -362,7 +371,7 @@
 
     return {
       AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AP: AP, AQ: AQ,
-      AU: AU, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
+      AU: AU, GV: GV, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
       BL: BL, BM: BM, BN: BN, BO: BO, BP: BP, BQ: BQ, BR: BR, BS: BS, BT: BT
     };
   }
@@ -565,7 +574,7 @@
       var totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
       var totalFont = { bold: true, size: 9 };
       var thick = { style: 'double', color: { argb: 'FF1F3864' } };
-      var totalRoles = ['AF', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
+      var totalRoles = ['AF', 'AU', 'GV', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
       var tcell = ws.getCell('A' + TR);
       tcell.value = 'TOTAL'; tcell.font = totalFont; tcell.fill = totalFill;
       tcell.alignment = { horizontal: 'center' };
@@ -668,6 +677,7 @@
     kv('Volume remblai en matériaux de sous-fondation', 'SUM(' + ref(lt('AX')) + ')+SUM(' + ref(lt('BQ')) + ')', 'm³');
     kv('Volume déblais excédentaires (mise en merlon)', 'SUM(' + ref(lt('AY')) + ')+SUM(' + ref(lt('BR')) + ')', 'm³');
     kv('Longueur gaines rigides', 'SUM(' + ref(lt('AU')) + ')', 'm');
+    kv('Volume des gaines (déduit du sable)', 'SUM(' + ref(lt('GV')) + ')', 'm³');
     kv('Tronçons en dépassement de largeur (NOK)', 'COUNTIF(' + ref(lt('AE')) + ',"NOK")', '', '0');
     r += 1;
 
@@ -762,17 +772,17 @@
     var D = String(num(g.diamGaine, 0.16));
     // AP / BJ : terres (0), empierrement (=AN-AO / =BH-BI) ou valeur manuelle
     if (col.role === 'AP' || col.role === 'BJ') return remblaiCell(col.role, R, lt, row);
-    // AW : câbles sous gaines -> déduction du volume des gaines du sable
-    if (col.role === 'AW' && gaines) {
-      return { formula: lt('AV') + R + '-(' + lt('AR') + R + '/' + D + ')*PI()*(' + D + '/2)^2*' + lt('AF') + R };
-    }
     // BB : hauteur moyenne conduites forcée manuellement
     if (col.role === 'BB' && g.htConduiteMode === 'manuel') {
       return { value: num(g.htConduiteManuelle, 0), input: true };
     }
-    // AU : longueur de gaines auto = (largeur câbles / Ø) × longueur
+    // AH : sous gaines, la hauteur effective des câbles = Ø gaine (cellule GD, en mm)
+    if (col.role === 'AH' && gaines) {
+      return { formula: lt('GD') + R + '/1000' };
+    }
+    // AU : longueur de gaines auto = (largeur câbles ÷ Ø) × longueur
     if (col.role === 'AU' && gaines) {
-      return { formula: '(' + lt('AR') + R + '/' + D + ')*' + lt('AF') + R };
+      return { formula: 'IFERROR((' + lt('AR') + R + '/(' + lt('GD') + R + '/1000))*' + lt('AF') + R + ',0)' };
     }
     if (col.kind === 'input') {
       return { value: inputValue(col, row) };
@@ -811,6 +821,12 @@
       case 'calc': // saisies parmi les colonnes calculées (gkey)
         if (col.role === 'AD') return num(row.largeurMax, 0);
         if (col.role === 'AJ') return (row.geom && row.geom.ligneAligne) || 'OUI';
+        // GD : Ø gaine en mm (vide si le tronçon n'est pas sous gaines)
+        if (col.role === 'GD') {
+          var gg = row.geom || {};
+          if (gg.gainesCables === 'OUI' && num(gg.diamGaine, 0) > 0) return Math.round(num(gg.diamGaine, 0.16) * 1e6) / 1e3;
+          return null;
+        }
         if (col.gkey) return num(row.geom[col.gkey], 0);
         return null;
       default: return null;
@@ -835,7 +851,10 @@
       AS: sumList(ci),
       AT: lt('AR') + R + '+' + lt('AS') + R,
       AV: lt('AF') + R + '*' + lt('AO') + R + '*' + lt('AT') + R,
-      AW: lt('AV') + R,
+      // Volume des gaines = longueur de gaines × section circulaire (Ø en mm)
+      GV: lt('AU') + R + '*PI()*((' + lt('GD') + R + '/1000)/2)^2',
+      // Volume de sable câbles = volume occupé − volume des gaines (0 sans gaines)
+      AW: lt('AV') + R + '-' + lt('GV') + R,
       AX: lt('AF') + R + '*' + lt('AP') + R + '*' + lt('AT') + R,
       AY: lt('AV') + R + '+' + lt('AX') + R,
       AZ: lt('AF') + R + '*' + lt('AN') + R + '*' + lt('AT') + R,

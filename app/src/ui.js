@@ -379,12 +379,13 @@
 
   function fillPreview(pv, c) {
     pv.innerHTML = '';
-    [['Largeur théorique', c.AC, 'm'], ['Largeur totale câbles', c.AT, 'm'], ['Largeur totale conduites', c.BN, 'm'],
+    var items = [['Largeur théorique', c.AC, 'm'], ['Largeur totale câbles', c.AT, 'm'], ['Largeur totale conduites', c.BN, 'm'],
      ['Volume tranchée câbles', c.AZ, 'm³'], ['Volume tranchée conduites', c.BS, 'm³'], ['Volume total', c.BT, 'm³'],
-     ['Volume sable', c.AW + c.BP, 'm³'], ['Volume déblais excéd.', c.AY + c.BR, 'm³']]
-      .forEach(function (x) {
-        pv.appendChild(el('div', { class: 'pv' }, [el('b', { text: fmt(x[1]) }), el('span', { text: x[0] + ' (' + x[2] + ')' })]));
-      });
+     ['Volume sable', c.AW + c.BP, 'm³'], ['Volume déblais excéd.', c.AY + c.BR, 'm³']];
+    if (c.AU > 0) items.push(['Longueur gaines', c.AU, 'm']);
+    items.forEach(function (x) {
+      pv.appendChild(el('div', { class: 'pv' }, [el('b', { text: fmt(x[1]) }), el('span', { text: x[0] + ' (' + x[2] + ')' })]));
+    });
   }
 
   function updateRowPreview(r) {

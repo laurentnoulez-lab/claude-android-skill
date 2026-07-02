@@ -87,7 +87,7 @@
     formula('Remblai terres décaissées (AQ)', 'AN − AO − AP');
     formula('Volume occupé câbles+sable (AV) / Volume sable (AW)', 'AF × AO × AT ; AW = AV');
     p([new TextRun({ text: 'Câbles sous gaines (fourreaux) : ', bold: true }),
-       new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le volume des gaines est déduit du volume de sable — AW = AV − (AR ÷ Ø) × π × (Ø/2)² × AF — comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
+       new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le Ø de la gaine PRIME sur la hauteur moyenne des câbles (AH = Ø) pour toutes les hauteurs et tous les volumes. Le classeur généré contient une colonne « Ø gaine (mm) » (saisie) et une colonne « Volume gaines (m³) » = longueur de gaines × section circulaire π(Ø/2)² ; le volume de sable est alors simplement AW = AV − Volume gaines (0 sans gaines), comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Modifier le Ø directement dans la cellule du classeur recalcule AH, AU, le volume des gaines et le sable. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
     formula('Volume remblai sous-fondation (AX)', 'AF × AP × AT');
     formula('Volume déblais excédentaires (AY)', 'AV + AX');
     formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT');
