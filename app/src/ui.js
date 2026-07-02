@@ -276,6 +276,9 @@
       var widthCols = L.cols.filter(function (col) { return (col.isChannel || col.isInterstice) && col.category === cat; });
       if (!widthCols.length) return;
       inner.appendChild(el('h3', { text: cat === 'cable' ? 'Largeurs — Câbles (m)' : 'Largeurs — Conduites (m)' }));
+      if (cat === 'cable') {
+        inner.appendChild(el('p', { class: 'hint', text: 'Si « câbles sous gaines » est activé, chaque largeur est automatiquement arrondie au multiple de Ø supérieur (nombre entier de fourreaux) pour toutes les largeurs, volumes et parts — la largeur effective est visible dans le tableau des parts et sur la coupe.' }));
+      }
       var g = el('div', { class: 'width-grid' });
       widthCols.forEach(function (col) {
         if (col.isInterstice) {

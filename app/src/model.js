@@ -45,6 +45,16 @@
     return (typeof n === 'number' && isFinite(n)) ? n : (dflt === undefined ? 0 : dflt);
   }
 
+  // Largeur effective d'un sous-réseau câbles posé sous gaines : chaque câble
+  // occupe une gaine entière, la largeur est donc arrondie au multiple de Ø
+  // supérieur (nombre entier de fourreaux). L'arrondi du ratio à 1e-9 évite
+  // les faux dépassements dus à la virgule flottante (0,48/0,16 = 3, pas 4).
+  function effGaineWidth(w, D) {
+    if (!(w > 0) || !(D > 0)) return 0;
+    var ratio = Math.round((w / D) * 1e9) / 1e9;
+    return Math.ceil(ratio) * D;
+  }
+
   // ---------------------------------------------------------------------------
   // Projet par défaut
   // ---------------------------------------------------------------------------
@@ -327,7 +337,12 @@
     // volumes de la partie câbles sont calculés avec Ø.
     var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
     var DG = num(g.diamGaine, 0.16);
-    if (gaines) AH = DG;
+    if (gaines) {
+      AH = DG; // le Ø prime sur la hauteur des câbles
+      // ... et la largeur de chaque sous-réseau s'arrondit au multiple de Ø
+      // supérieur (nombre entier de gaines côte à côte)
+      wc = wc.map(function (w) { return effGaineWidth(w, DG); });
+    }
     var AJ = (g.ligneAligne || 'OUI');
     var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0);
     var AR = sum(wc), AS = sum(ic), AT = AR + AS;
@@ -391,10 +406,16 @@
   function computeRepartition(project, row, L) {
     L = L || buildLayout(project);
     var c = computeRowWithLayout(project, row, L);
+    var g = row.geom || {};
+    var repGaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
+    var repDG = num(g.diamGaine, 0.16);
     var widthOf = function (col) { return num(row.widths[col.srId], 0); };
     var res = [];
     var add = function (col, cat) {
       var w = widthOf(col);
+      // sous gaines : la part se calcule sur la largeur effective (nb de
+      // gaines × Ø), cohérente avec AR — la somme des parts reste 100 %
+      if (cat === 'cable' && repGaines) w = effGaineWidth(w, repDG);
       var occ = cat === 'cable' ? c.AR : c.BL;
       var volPart = cat === 'cable' ? c.AZ : c.BS;
       var partCat = occ > 0 ? w / occ : 0;
@@ -817,7 +838,16 @@
       case 'longueur': return num(row.longueur, 0);
       case 'largeurMax': return num(row.largeurMax, 0);
       case 'int': return num(row.interstices[col.intKey], 0);
-      case 'ch': return num(row.widths[col.srId], 0);
+      case 'ch': {
+        var wv = num(row.widths[col.srId], 0);
+        // sous gaines : la cellule porte la largeur effective (nb gaines × Ø),
+        // comme dans le classeur d'origine — AR/parts/AU restent cohérents
+        var rg = row.geom || {};
+        if (col.category === 'cable' && rg.gainesCables === 'OUI' && num(rg.diamGaine, 0) > 0) {
+          return effGaineWidth(wv, num(rg.diamGaine, 0.16));
+        }
+        return wv;
+      }
       case 'calc': // saisies parmi les colonnes calculées (gkey)
         if (col.role === 'AD') return num(row.largeurMax, 0);
         if (col.role === 'AJ') return (row.geom && row.geom.ligneAligne) || 'OUI';
@@ -908,7 +938,7 @@
 
   return {
     DATA_START: DATA_START,
-    uid: uid, colLetter: colLetter, num: num,
+    uid: uid, colLetter: colLetter, num: num, effGaineWidth: effGaineWidth,
     defaultProject: defaultProject, defaultGeometry: defaultGeometry, newRow: newRow,
     buildLayout: buildLayout,
     computeRow: computeRow, computeRowWithLayout: computeRowWithLayout, projectTotals: projectTotals,

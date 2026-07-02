@@ -74,18 +74,33 @@ assert.strictEqual(failed, 0, 'Des écarts de calcul détectés');
   console.log('Répartition : cohérence parts/volumes OK');
 })();
 
-// Câbles sous gaines : le Ø de la gaine prime sur la hauteur des câbles saisie.
+// Câbles sous gaines : le Ø prime sur la hauteur ET la largeur s'arrondit au
+// multiple de Ø supérieur (nb entier de fourreaux) ; répartition cohérente.
 (function () {
   const row = makeRow(project, REF[5]);
   row.geom.gainesCables = 'OUI'; row.geom.diamGaine = 0.16;
   row.geom.htMoyCable = 0.05; // volontairement différent du Ø
   const c = M.computeRow(project, row);
-  // AO = AG + AH_eff + AK avec AH_eff = Ø = 0.16
+  // Hauteurs : AH_eff = Ø = 0.16
   assert.ok(Math.abs(c.AO - (0.1 + 0.16 + c.AK)) < 1e-9, 'AO doit utiliser Ø gaine');
   assert.ok(Math.abs(c.AN - (0.1 + 0.16 + 0.8 - 0.3)) < 1e-9, 'AN doit utiliser Ø gaine');
-  assert.ok(c.AW < c.AV, 'AW doit déduire le volume des gaines');
-  assert.ok(Math.abs(c.AU - (c.AR / 0.16) * c.AF) < 1e-9, 'AU auto = (AR/Ø)×AF');
-  console.log('Gaines : Ø prime sur la hauteur des câbles OK');
+  // Largeurs : 6 sous-réseaux non nuls (0.05, 0.05, 0.1, 0.12, 0.06, 0.05)
+  // -> chacun arrondi à 1 gaine de 0.16 -> AR = 6 × 0.16 = 0.96
+  assert.ok(Math.abs(c.AR - 0.96) < 1e-9, 'AR = nb entier de gaines × Ø (0.96)');
+  assert.ok(Math.abs(c.AU - 6 * c.AF) < 1e-9, 'AU = 6 gaines × longueur');
+  assert.ok(Math.abs(c.GV - c.AU * Math.PI * 0.08 * 0.08) < 1e-9, 'GV = AU × section');
+  assert.ok(Math.abs(c.AW - (c.AV - c.GV)) < 1e-9, 'AW = AV − GV');
+  // Répartition : largeurs effectives -> parts cohérentes
+  const rep = M.computeRepartition(project, row);
+  const cableParts = rep.channels.filter(x => x.category === 'cable').reduce((s, x) => s + x.partCat, 0);
+  const totParts = rep.channels.reduce((s, x) => s + x.partTot, 0);
+  const volSum = rep.channels.reduce((s, x) => s + x.volTranchee, 0);
+  assert.ok(Math.abs(cableParts - 1) < 1e-9, 'somme parts câbles = 100 % sous gaines');
+  assert.ok(Math.abs(totParts - 1) < 1e-9, 'somme parts totales = 100 % sous gaines');
+  assert.ok(Math.abs(volSum - c.BT) < 1e-6, 'somme volumes attribués = BT sous gaines');
+  const w0 = rep.channels.find(x => x.category === 'cable' && x.width > 0);
+  assert.ok(Math.abs(w0.width - 0.16) < 1e-9, 'largeur affichée = effective (0.16)');
+  console.log('Gaines : Ø prime (hauteur + largeur), répartition cohérente OK');
 })();
 
 // Génération Excel

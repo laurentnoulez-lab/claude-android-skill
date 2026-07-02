@@ -83,6 +83,7 @@
         cursorC += iw; return;
       }
       var w = n(row.widths[col.srId], 0);
+      if (gaines) w = M.effGaineWidth(w, DG); // largeur effective = nb gaines × Ø
       if (w > 0) channels.push({ col: col, cat: 'cable', x0: cursorC, w: w, center: cursorC + w / 2 });
       cursorC += w;
     });
