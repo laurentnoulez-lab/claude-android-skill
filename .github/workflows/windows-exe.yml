@@ -1,0 +1,47 @@
+name: Windows EXE
+
+on:
+  push:
+    branches: [ "claude/trench-template-automation-6gcqnk" ]
+    paths:
+      - 'desktop/**'
+      - 'app/**'
+      - 'gabarit-tranchees-impetrants.html'
+      - '.github/workflows/windows-exe.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Rebuild single-file web app
+        run: python app/build.py
+
+      - name: Copy web app into desktop shell
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop/app | Out-Null
+          Copy-Item gabarit-tranchees-impetrants.html desktop/app/index.html -Force
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Build NSIS installer
+        working-directory: desktop
+        run: npm run dist
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gabarit-tranchees-windows-setup
+          path: desktop/dist/GabaritTranchees-Setup-*.exe
+          if-no-files-found: error

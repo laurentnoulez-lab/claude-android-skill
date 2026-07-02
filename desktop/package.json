@@ -1,0 +1,49 @@
+{
+  "name": "gabarit-tranchees-impetrants",
+  "productName": "Gabarit Tranchées Impétrants",
+  "version": "1.0.0",
+  "description": "Calcul des largeurs, volumes et répartition des tranchées par impétrant — génération Excel et Word",
+  "main": "main.js",
+  "author": "Gabarit Tranchées",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.tranchees.impetrants",
+    "productName": "Gabarit Tranchées Impétrants",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gabarit Tranchées",
+      "artifactName": "GabaritTranchees-Setup-${version}.${ext}",
+      "installerLanguages": ["fr_FR"],
+      "language": "1036"
+    }
+  }
+}

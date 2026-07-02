@@ -29,6 +29,12 @@ ExcelJS).
   avec une note expliquant la répartition des interstices.
 - **Générer Word** — produit un document `.docx` (notice méthodologique +
   données du projet + explication du traitement des interstices).
+- **Options par tronçon fidèles à l'original** : remblai terres décaissées /
+  empierrement de sous-fondation (AP/AQ/BJ/BK automatiques), **câbles sous
+  gaines** (le volume des fourreaux Ø paramétrable est déduit du sable, et la
+  longueur de gaines AU devient automatique), et hauteur moyenne des conduites
+  forcée (BB). Équivalence vérifiée à 100 % sur les 43 tronçons du classeur de
+  référence (1031/1031 valeurs identiques).
 - **Paramètres par défaut** — valeurs géométriques pré-remplies pour chaque
   nouveau tronçon (lit de pose, recouvrements, hauteur de coffre, etc.), avec un
   bouton pour les réappliquer à tous les tronçons existants.

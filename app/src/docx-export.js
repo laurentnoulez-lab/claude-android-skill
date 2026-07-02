@@ -86,6 +86,8 @@
     formula('Lit + câbles + recouvrement (AO)', 'AG + AH + AK');
     formula('Remblai terres décaissées (AQ)', 'AN − AO − AP');
     formula('Volume occupé câbles+sable (AV) / Volume sable (AW)', 'AF × AO × AT ; AW = AV');
+    p([new TextRun({ text: 'Câbles sous gaines (fourreaux) : ', bold: true }),
+       new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le volume des gaines est déduit du volume de sable — AW = AV − (AR ÷ Ø) × π × (Ø/2)² × AF — comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
     formula('Volume remblai sous-fondation (AX)', 'AF × AP × AT');
     formula('Volume déblais excédentaires (AY)', 'AV + AX');
     formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT');
@@ -95,7 +97,7 @@
 
     // -------------------------------------------------- 5. Volumes conduites
     h1('5. Géométrie et volumes — partie conduites');
-    formula('Ht moyenne conduites (BB)', 'MAX(diamètres des conduites)');
+    formula('Ht moyenne conduites (BB)', 'MAX(diamètres des conduites) — ou valeur forcée manuellement (option par tronçon)');
     formula('Recouvrement sable effectif (BE)', 'SI(ligne alignée="OUI" ET câbles présents ; MAX(BC ; BF−(AL−AI)) ; BC)');
     formula('Hauteur terrassement (BH)', 'BA + BB + BF − BG   (BG = AM)');
     formula('Lit + conduites + recouvrement (BI)', 'BA + BB + BE');

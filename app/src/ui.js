@@ -140,12 +140,12 @@
     ['ligneAligne', 'Ligne recouvrement alignée', 'OUI/NON'],
     ['recouvNiveauFiniCable', 'Recouvr. min. / niveau fini (câbles)', 'm'],
     ['hauteurCoffre', 'Hauteur coffre (travaux SPI)', 'm'],
-    ['longueurGaines', 'Longueur gaines rigides', 'm'],
     ['litPoseConduite', 'Lit de pose min. conduites', 'm'],
     ['recouvSableMinConduite', 'Recouvrement sable min. conduites', 'm'],
     ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini (conduites)', 'm']
   ];
-  var REMBLAI_KEYS = ['remblaiModeCable', 'remblaiSousFondCable', 'remblaiModeConduite', 'remblaiSousFondConduite'];
+  var REMBLAI_KEYS = ['remblaiModeCable', 'remblaiSousFondCable', 'remblaiModeConduite', 'remblaiSousFondConduite',
+    'gainesCables', 'diamGaine', 'longueurGaines', 'htConduiteMode', 'htConduiteManuelle'];
 
   function geomField(obj, key, labelTxt, unit, onUpdate) {
     var input;
@@ -171,6 +171,8 @@
     GEOM_FIELDS.forEach(function (f) { grid.appendChild(geomField(d, f[0], f[1], f[2], save)); });
     remblaiControl(d, 'remblaiModeCable', 'remblaiSousFondCable', save).forEach(function (fld) { grid.appendChild(fld); });
     remblaiControl(d, 'remblaiModeConduite', 'remblaiSousFondConduite', save).forEach(function (fld) { grid.appendChild(fld); });
+    gaineControl(d, save).forEach(function (fld) { grid.appendChild(fld); });
+    htConduiteControl(d, save).forEach(function (fld) { grid.appendChild(fld); });
 
     var apply = el('button', { class: 'tiny', text: 'Appliquer ces paramètres à tous les tronçons existants', onclick: function () {
       if (!project.rows.length) { toast('Aucun tronçon.'); return; }
@@ -291,9 +293,10 @@
     var gc = el('div', { class: 'grid-params' });
     [['litPoseCable', 'Lit de pose min.', 'm'], ['htMoyCable', 'Ht moyenne câbles', 'm'], ['recouvSableMinCable', 'Recouvrement sable min.', 'm'],
      ['ligneAligne', 'Ligne recouvrement alignée', 'OUI/NON'], ['recouvNiveauFiniCable', 'Recouvr. min. / niveau fini', 'm'],
-     ['hauteurCoffre', 'Hauteur coffre (SPI)', 'm'], ['longueurGaines', 'Longueur gaines rigides', 'm']]
+     ['hauteurCoffre', 'Hauteur coffre (SPI)', 'm']]
       .forEach(function (f) { gc.appendChild(geomField(r.geom, f[0], f[1], f[2], upd)); });
     remblaiControl(r.geom, 'remblaiModeCable', 'remblaiSousFondCable', upd).forEach(function (fld) { gc.appendChild(fld); });
+    gaineControl(r.geom, upd).forEach(function (fld) { gc.appendChild(fld); });
     inner.appendChild(gc);
 
     // Paramètres conduites
@@ -303,6 +306,7 @@
      ['recouvNiveauFiniConduite', 'Recouvr. min. / niveau fini', 'm']]
       .forEach(function (f) { gp.appendChild(geomField(r.geom, f[0], f[1], f[2], upd)); });
     remblaiControl(r.geom, 'remblaiModeConduite', 'remblaiSousFondConduite', upd).forEach(function (fld) { gp.appendChild(fld); });
+    htConduiteControl(r.geom, upd).forEach(function (fld) { gp.appendChild(fld); });
     inner.appendChild(gp);
 
     // Aperçu calculé
@@ -421,6 +425,49 @@
     return [
       el('div', { class: 'fld' }, [el('label', { html: 'Remblai (sable → fond de coffre)' }), sel]),
       el('div', { class: 'fld' }, [el('label', { html: 'Hauteur empierrement <small>(m, si manuel)</small>' }), numInput])
+    ];
+  }
+
+  // Câbles sous gaines (fourreaux) : OUI/NON + Ø ; la longueur de gaines
+  // devient automatique ((largeur câbles ÷ Ø) × longueur) quand OUI, et le
+  // volume des gaines est déduit du volume de sable.
+  function gaineControl(geom, on) {
+    var diamInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom.diamGaine != null ? geom.diamGaine : 0.16,
+      oninput: function (e) { geom.diamGaine = num(e.target.value); on(); } });
+    var lgInput = el('input', { class: 'in', type: 'number', step: '0.1', value: geom.longueurGaines != null ? geom.longueurGaines : 0,
+      oninput: function (e) { geom.longueurGaines = num(e.target.value); on(); } });
+    var sync = function () {
+      var oui = (geom.gainesCables || 'NON') === 'OUI';
+      diamInput.disabled = !oui;
+      lgInput.disabled = oui;
+      lgInput.title = oui ? 'Calculée automatiquement : (largeur câbles ÷ Ø) × longueur' : '';
+    };
+    var sel = el('select', { onchange: function (e) { geom.gainesCables = e.target.value; sync(); on(); } }, [
+      el('option', { value: 'NON', text: 'NON' }), el('option', { value: 'OUI', text: 'OUI' })
+    ]);
+    sel.value = geom.gainesCables || 'NON';
+    sync();
+    return [
+      el('div', { class: 'fld' }, [el('label', { html: 'Câbles sous gaines (fourreaux)' }), sel]),
+      el('div', { class: 'fld' }, [el('label', { html: 'Ø gaine <small>(m)</small>' }), diamInput]),
+      el('div', { class: 'fld' }, [el('label', { html: 'Longueur gaines rigides <small>(m, auto si gaines)</small>' }), lgInput])
+    ];
+  }
+
+  // Hauteur moyenne conduites (BB) : MAX automatique des diamètres, ou forcée.
+  function htConduiteControl(geom, on) {
+    var valInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom.htConduiteManuelle != null ? geom.htConduiteManuelle : 0,
+      oninput: function (e) { geom.htConduiteManuelle = num(e.target.value); on(); } });
+    var sync = function () { valInput.disabled = (geom.htConduiteMode || 'auto') !== 'manuel'; };
+    var sel = el('select', { onchange: function (e) { geom.htConduiteMode = e.target.value; sync(); on(); } }, [
+      el('option', { value: 'auto', text: 'Auto (MAX des Ø)' }),
+      el('option', { value: 'manuel', text: 'Manuelle' })
+    ]);
+    sel.value = geom.htConduiteMode || 'auto';
+    sync();
+    return [
+      el('div', { class: 'fld' }, [el('label', { html: 'Ht moyenne conduites' }), sel]),
+      el('div', { class: 'fld' }, [el('label', { html: 'Ht conduites forcée <small>(m, si manuelle)</small>' }), valInput])
     ];
   }
 

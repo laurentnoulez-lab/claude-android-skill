@@ -63,13 +63,20 @@
       //  'manuel'       -> hauteur AP saisie librement
       remblaiModeCable: 'terres',   // AP (mode)
       remblaiSousFondCable: 0,      // AP (valeur si mode manuel)
-      longueurGaines: 0,            // AU
+      // Câbles posés sous gaines (fourreaux) côte à côte : le volume des gaines
+      // (cylindres Ø × longueur) est déduit du volume de sable, comme pour les
+      // conduites. Nombre de gaines = largeur occupée câbles ÷ Ø.
+      gainesCables: 'NON',          // OUI/NON
+      diamGaine: 0.16,              // Ø gaine (m)
+      longueurGaines: 0,            // AU (auto = (AR/Ø)×AF si gaines OUI)
       // partie conduites
       litPoseConduite: 0.1,         // BA
       recouvSableMinConduite: 0.2,  // BC
       recouvNiveauFiniConduite: 1,  // BF
       remblaiModeConduite: 'terres',// BJ (mode)
-      remblaiSousFondConduite: 0    // BJ (valeur si mode manuel)
+      remblaiSousFondConduite: 0,   // BJ (valeur si mode manuel)
+      htConduiteMode: 'auto',       // BB : 'auto' (MAX des Ø) ou 'manuel'
+      htConduiteManuelle: 0         // BB (valeur si mode manuel)
     };
   }
 
@@ -118,12 +125,16 @@
         hauteurCoffre: num(d.hauteurCoffre, 0.3),
         remblaiModeCable: d.remblaiModeCable || 'terres',
         remblaiSousFondCable: num(d.remblaiSousFondCable, 0),
+        gainesCables: d.gainesCables || 'NON',
+        diamGaine: num(d.diamGaine, 0.16),
         longueurGaines: num(d.longueurGaines, 0),
         litPoseConduite: num(d.litPoseConduite, 0.1),
         recouvSableMinConduite: num(d.recouvSableMinConduite, 0.2),
         recouvNiveauFiniConduite: num(d.recouvNiveauFiniConduite, 1),
         remblaiModeConduite: d.remblaiModeConduite || 'terres',
-        remblaiSousFondConduite: num(d.remblaiSousFondConduite, 0)
+        remblaiSousFondConduite: num(d.remblaiSousFondConduite, 0),
+        htConduiteMode: d.htConduiteMode || 'auto',
+        htConduiteManuelle: num(d.htConduiteManuelle, 0)
       }
     };
     return row;
@@ -313,7 +324,9 @@
     var AL = num(g.recouvNiveauFiniCable, 0), AM = num(g.hauteurCoffre, 0);
     var AR = sum(wc), AS = sum(ic), AT = AR + AS;
     var BA = num(g.litPoseConduite, 0), BC = num(g.recouvSableMinConduite, 0), BF = num(g.recouvNiveauFiniConduite, 0);
-    var BB = wp.length ? Math.max.apply(null, wp) : 0;
+    // BB : hauteur moyenne conduites — MAX des diamètres, ou valeur forcée
+    var BB = (g.htConduiteMode === 'manuel') ? num(g.htConduiteManuelle, 0)
+                                             : (wp.length ? Math.max.apply(null, wp) : 0);
     var BL = sum(wp), BM = sum(ip), BN = BL + BM;
     var BD = AJ, BG = AM;
     var AK = (AJ === 'OUI' && BN > 0) ? Math.max(AI, AL - (BF - BC)) : AI;
@@ -322,7 +335,16 @@
     // AP (remblai sous-fondation/empierrement câbles) selon le mode choisi
     var AP = remblaiEff(g.remblaiModeCable, AN - AO, num(g.remblaiSousFondCable, 0));
     var AQ = AN - AO - AP;
-    var AV = AF * AO * AT, AW = AV, AX = AF * AP * AT, AY = AV + AX, AZ = AF * AN * AT;
+    var AV = AF * AO * AT, AX = AF * AP * AT, AY = AV + AX, AZ = AF * AN * AT;
+    // AW (volume sable câbles) : si les câbles sont posés sous gaines côte à
+    // côte, on déduit le volume des gaines (nb = AR/Ø ; cylindres π(Ø/2)²×AF),
+    // comme le fait BP pour les conduites. Sans gaines, le volume des câbles
+    // n'est pas déduit (AW = AV).
+    var gaines = (g.gainesCables === 'OUI') && num(g.diamGaine, 0) > 0;
+    var nbGaines = gaines ? AR / num(g.diamGaine, 0.16) : 0;
+    var AW = gaines ? AV - nbGaines * Math.PI * Math.pow(num(g.diamGaine, 0.16) / 2, 2) * AF : AV;
+    // AU (longueur de gaines rigides) : auto si gaines, sinon saisie manuelle
+    var AU = gaines ? nbGaines * AF : num(g.longueurGaines, 0);
     var BE = (BD === 'OUI' && AT > 0) ? Math.max(BC, BF - (AL - AI)) : BC;
     var BH = BA + BB + BF - BG;
     var BI = BA + BB + BE;
@@ -340,7 +362,7 @@
 
     return {
       AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AP: AP, AQ: AQ,
-      AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
+      AU: AU, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
       BL: BL, BM: BM, BN: BN, BO: BO, BP: BP, BQ: BQ, BR: BR, BS: BS, BT: BT
     };
   }
@@ -520,8 +542,8 @@
           if (f.numfmt !== false) cell.numFmt = isPctCol(col) ? pctFmt : fmt;
         } else {
           cell.value = f.value;
-          if (col.kind === 'input') cell.fill = inputFill;
-          if (col.dtype === 'number') cell.numFmt = fmt;
+          if (col.kind === 'input' || f.input) cell.fill = inputFill;
+          if (col.dtype === 'number' || f.input) cell.numFmt = fmt;
         }
         if (col.field === 'commentaire') cell.alignment = { wrapText: true, vertical: 'top' };
       });
@@ -735,8 +757,23 @@
 
   // Renvoie {value} pour une saisie, {formula} pour une cellule calculée.
   function formulaFor(col, R, L, lt, row) {
+    var g = (row && row.geom) || {};
+    var gaines = g.gainesCables === 'OUI' && num(g.diamGaine, 0) > 0;
+    var D = String(num(g.diamGaine, 0.16));
     // AP / BJ : terres (0), empierrement (=AN-AO / =BH-BI) ou valeur manuelle
     if (col.role === 'AP' || col.role === 'BJ') return remblaiCell(col.role, R, lt, row);
+    // AW : câbles sous gaines -> déduction du volume des gaines du sable
+    if (col.role === 'AW' && gaines) {
+      return { formula: lt('AV') + R + '-(' + lt('AR') + R + '/' + D + ')*PI()*(' + D + '/2)^2*' + lt('AF') + R };
+    }
+    // BB : hauteur moyenne conduites forcée manuellement
+    if (col.role === 'BB' && g.htConduiteMode === 'manuel') {
+      return { value: num(g.htConduiteManuelle, 0), input: true };
+    }
+    // AU : longueur de gaines auto = (largeur câbles / Ø) × longueur
+    if (col.role === 'AU' && gaines) {
+      return { formula: '(' + lt('AR') + R + '/' + D + ')*' + lt('AF') + R };
+    }
     if (col.kind === 'input') {
       return { value: inputValue(col, row) };
     }
