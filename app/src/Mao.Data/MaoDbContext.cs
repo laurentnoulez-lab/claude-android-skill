@@ -31,6 +31,12 @@ public class MaoDbContext : DbContext
     public DbSet<Adjudication> Adjudications => Set<Adjudication>();
     public DbSet<StatistiquePrix> StatistiquesPrix => Set<StatistiquePrix>();
 
+    // Déchets & révision par métré
+    public DbSet<TypeDechet> TypesDechets => Set<TypeDechet>();
+    public DbSet<CodeDechet> CodesDechets => Set<CodeDechet>();
+    public DbSet<PrixPosteDechet> PrixPostesDechets => Set<PrixPosteDechet>();
+    public DbSet<FormuleRevisionMetre> FormulesRevisionMetre => Set<FormuleRevisionMetre>();
+
     public MaoDbContext(DbContextOptions<MaoDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -41,6 +47,37 @@ public class MaoDbContext : DbContext
             e.Property(x => x.Intitule).IsRequired();
             e.HasMany(x => x.Divisions).WithOne(d => d.Metre!)
                 .HasForeignKey(d => d.MetreId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.FormulesRevision).WithOne()
+                .HasForeignKey(f => f.MetreId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.PrixDechets).WithOne()
+                .HasForeignKey(p => p.MetreId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TypeDechet>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
+        b.Entity<CodeDechet>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TypeDechetId);
+            e.Property(x => x.Pourcentage).HasColumnType("decimal(5,2)");
+        });
+
+        b.Entity<PrixPosteDechet>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Prix).HasColumnType("decimal(16,4)");
+        });
+
+        b.Entity<FormuleRevisionMetre>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Ignore(x => x.SommeCoefficients);
+            foreach (var col in new[] { "A", "A1", "A2", "B", "B1", "B2", "C", "C2", "D" })
+                e.Property(col).HasColumnType("decimal(12,5)");
         });
 
         b.Entity<Division>(e =>

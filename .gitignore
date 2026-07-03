@@ -11,3 +11,4 @@
 # Base SQLite locale générée
 *.db-shm
 *.db-wal
+installer/*.exe

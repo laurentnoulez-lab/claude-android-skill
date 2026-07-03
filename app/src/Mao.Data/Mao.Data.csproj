@@ -9,13 +9,16 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
     <PackageReference Include="System.Data.Odbc" Version="8.0.1" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Catalogue des Postes Normalisés Qualiroutes (CPN, QR17), gzippé -->
+    <!-- Catalogue des Postes Normalisés Qualiroutes (QR21, repris de MAO.db), gzippé -->
     <EmbeddedResource Include="Resources\catalogue_qr.json.gz" />
     <!-- Données utilisateur reprises de MAO.db (métrés + TVA), gzippées -->
     <EmbeddedResource Include="Resources\donnees_mao.json.gz" />
+    <!-- Référentiel repris de MAO.db : déchets, indices, formules de référence -->
+    <EmbeddedResource Include="Resources\referentiel.json.gz" />
   </ItemGroup>
 
   <ItemGroup>

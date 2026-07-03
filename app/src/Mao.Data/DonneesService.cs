@@ -18,4 +18,12 @@ public class DonneesService
 
     /// <summary>Importe/met à jour le catalogue depuis un fichier JSON.</summary>
     public int ImporterCatalogueJson(string chemin) => new CatalogueImporter(_ctx).ImporterDepuisFichier(chemin);
+
+    /// <summary>Exporte un métré au format d'échange .mao.</summary>
+    public void ExporterMao(Domain.Entities.Metre metre, string chemin) =>
+        new MaoFichierService(_ctx).Exporter(metre, chemin);
+
+    /// <summary>Importe un fichier .mao comme nouveau métré.</summary>
+    public Domain.Entities.Metre ImporterMao(string chemin) =>
+        new MaoFichierService(_ctx).Importer(chemin);
 }

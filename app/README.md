@@ -82,11 +82,54 @@ L'exécutable autonome est généré sous
 - Export **PDF** (QuestPDF), **Excel .xlsx** (ClosedXML) et **CSV** (Excel FR).
 
 **Données réelles préchargées**
-- Le **catalogue** Qualiroutes QR17 (9 691 postes) **et les 701 métrés**
-  repris de la base `MAO.db` d'origine (78 742 postes) sont **embarqués** et
-  chargés au premier lancement (avec les taux de TVA réels). Le premier
-  démarrage prend une vingtaine de secondes (insertion initiale), puis
-  l'application démarre instantanément.
+- Le **catalogue Qualiroutes QR21** (14 092 postes, repris de la base
+  `MAO.db` de l'utilisateur) et les **701 métrés** (78 742 postes) sont
+  **embarqués** et chargés au premier lancement, avec : taux de TVA réels,
+  **types et codes de déchets**, affectations déchets par poste (4 210),
+  **formules de révision par métré** (704), prix des postes déchets (1 269),
+  **indices salaires et matériaux réels** (2 337 valeurs jusqu'à fin 2023) et
+  formules de référence TP (109). Le premier démarrage prend ~25 secondes
+  (insertion initiale), puis l'application démarre instantanément.
+- Fidélité de la reprise : 99,3 % des quantités concordent avec les formules
+  saisies ; les écarts résiduels (dossiers 108 « ROCHEFORT/JAMBLINNE » ×1000 et
+  partiellement 259 « N62-MALMEDY ») existent tels quels dans la base
+  d'origine — MAO V8 affichait les mêmes montants.
+
+**Génération des postes déchets (D9000)** — bouton « Générer postes déchets »
+- Reproduit la génération de MAO V8 : quantité de déchet = quantité du poste ×
+  coefficient de conversion (affectation TYPE_DECHET_POSTE), répartie vers les
+  codes de destination D9xxx selon les pourcentages de la table CODE_DECHET,
+  prix repris de PRIX_POSTE_DECHET. Les postes générés sont marqués et
+  remplacés à chaque exécution (équivalent O_GEN_AUTO).
+
+**Formules de révision** — bouton « Formules de révision »
+- Les formules propres à chaque métré (reprises de FORMULE_REVISION) sont
+  affichées avec leurs coefficients (p = p0 × (A·s/S + B·i/I + C), type 3 =
+  sans révision) et un calcul de coefficient/prix révisé pré-rempli avec les
+  indices réels.
+
+**Échange .mao** — menu Données
+- Export du métré ouvert / import d'un métré au format d'échange `.mao`
+  (texte tabulé sectionné, décimales « . » ou « , », encodage Windows-1252
+  comme le programme d'origine). ⚠️ Le format exact des fichiers produits par
+  MAO V8 doit encore être validé sur un fichier témoin exporté du programme
+  d'origine.
+
+## Installateur Windows
+
+Le dossier [`installer/`](installer/) contient le script NSIS. Compilation :
+
+```bash
+dotnet publish src/Mao.App/Mao.App.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:EnableCompressionInSingleFile=true -o publish
+makensis -DVERSION=1.1 -DPUBLISH_DIR=publish installer/MaoModerne.nsi
+```
+
+Produit `MaoModerne-Setup-<version>.exe` : installation dans Program Files,
+raccourcis menu Démarrer (groupe « Qualiroutes ») et bureau, désinstalleur,
+association du type de fichier `.mao`. La base de données utilisateur
+(`%AppData%\MaoModerne`) est conservée à la désinstallation.
 
 **Phase 5 — Révision de prix** (menu Outils → Révision de prix)
 - Gestion des indices salaire et matériaux (CRUD, par période mensuelle).

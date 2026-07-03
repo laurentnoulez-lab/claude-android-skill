@@ -42,13 +42,24 @@ public partial class MainWindow : Window
         {
             _editeurSuivi.CatalogueDemande -= OnCatalogueDemande;
             _editeurSuivi.ExportDemande -= OnExportDemande;
+            _editeurSuivi.RevisionDemande -= OnRevisionDemande;
         }
         _editeurSuivi = _vm?.Editeur;
         if (_editeurSuivi is not null)
         {
             _editeurSuivi.CatalogueDemande += OnCatalogueDemande;
             _editeurSuivi.ExportDemande += OnExportDemande;
+            _editeurSuivi.RevisionDemande += OnRevisionDemande;
         }
+    }
+
+    private void OnRevisionDemande()
+    {
+        if (_vm is null || _editeurSuivi is null) return;
+        new FormulesMetreWindow
+        {
+            DataContext = new FormulesMetreViewModel(_editeurSuivi.Metre, _vm.Revision),
+        }.ShowDialog(this);
     }
 
     private async void OnExportDemande(TypeDocument type, string format)
@@ -117,6 +128,44 @@ public partial class MainWindow : Window
     }
 
     // --- Menu Données ---
+
+    private async void OnImporterMaoFichier(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        var chemin = await ChoisirOuverture("Importer un métré (.mao)", "Métré MAO", "*.mao");
+        if (chemin is null) return;
+        try
+        {
+            var metre = await Task.Run(() => _vm.Donnees.ImporterMao(chemin));
+            _vm.RafraichirApresImport();
+            await Dialogs.Info(this, "Import .mao", $"Métré « {metre.Intitule} » importé.");
+        }
+        catch (Exception ex)
+        {
+            await Dialogs.Info(this, "Import .mao", "Échec de l'import : " + ex.Message);
+        }
+    }
+
+    private async void OnExporterMaoFichier(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        if (_vm.Editeur is null)
+        {
+            await Dialogs.Info(this, "Export .mao", "Ouvrez d'abord le métré à exporter.");
+            return;
+        }
+        var f = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Exporter le métré (.mao)",
+            SuggestedFileName = _vm.Editeur.Metre.Intitule.Replace(' ', '_') + ".mao",
+            DefaultExtension = "mao",
+            FileTypeChoices = new[] { new FilePickerFileType("Métré MAO") { Patterns = new[] { "*.mao" } } },
+        });
+        if (f is null) return;
+        var chemin = f.TryGetLocalPath() ?? f.Path.LocalPath;
+        await Task.Run(() => _vm.Donnees.ExporterMao(_vm.Editeur.Metre, chemin));
+        await Dialogs.Info(this, "Export .mao", "Export terminé : " + chemin);
+    }
 
     private async void OnImporterMaoDb(object? sender, RoutedEventArgs e)
     {

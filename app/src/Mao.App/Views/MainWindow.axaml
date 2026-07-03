@@ -15,6 +15,9 @@
   <!-- Barre de menu -->
   <Menu DockPanel.Dock="Top">
     <MenuItem Header="_Données">
+      <MenuItem Header="Importer un métré (.mao)…" Click="OnImporterMaoFichier"/>
+      <MenuItem Header="Exporter le métré ouvert (.mao)…" Click="OnExporterMaoFichier"/>
+      <Separator/>
       <MenuItem Header="Importer un fichier MAO (.db Sybase)…" Click="OnImporterMaoDb"/>
       <MenuItem Header="Importer le catalogue (JSON)…" Click="OnImporterCatalogue"/>
       <Separator/>
@@ -94,7 +97,15 @@
                   <Button Content="Récapitulatif PDF" Command="{Binding ExporterRecapitulatifPdfCommand}"/>
                   <Button Content="Estimatif Excel" Command="{Binding ExporterEstimatifExcelCommand}"/>
                   <Button Content="Export CSV" Command="{Binding ExporterBordereauCsvCommand}"/>
+                  <Border Width="1" Background="#DDD" Margin="4,2"/>
+                  <Button Content="Générer postes déchets" Command="{Binding GenererPostesDechetsCommand}"/>
+                  <Button Content="Formules de révision" Command="{Binding VoirFormulesRevisionCommand}"/>
                 </StackPanel>
+
+                <!-- Message d'information (génération déchets, etc.) -->
+                <TextBlock DockPanel.Dock="Top" Text="{Binding MessageInfo}"
+                           Foreground="#0A6E31" Margin="0,0,0,4"
+                           IsVisible="{Binding MessageInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
                 <!-- Totaux -->
                 <Border DockPanel.Dock="Bottom" Background="#F4F6F8" CornerRadius="4" Padding="8" Margin="0,8,0,0">

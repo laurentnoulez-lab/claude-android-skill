@@ -15,12 +15,15 @@ public class MetreService
     public List<Metre> ListerMetres() =>
         _ctx.Metres.OrderByDescending(m => m.DerniereMaj).ToList();
 
-    /// <summary>Charge un métré avec toute sa hiérarchie Division/Chapitre/Poste.</summary>
+    /// <summary>Charge un métré avec toute sa hiérarchie Division/Chapitre/Poste,
+    /// ses formules de révision et ses prix de postes déchets.</summary>
     public Metre? ChargerComplet(int id) =>
         _ctx.Metres
             .Include(m => m.Divisions.OrderBy(d => d.Numero))
                 .ThenInclude(d => d.Chapitres.OrderBy(c => c.Numero))
                     .ThenInclude(c => c.Postes.OrderBy(p => p.Numero))
+            .Include(m => m.FormulesRevision.OrderBy(f => f.Numero))
+            .Include(m => m.PrixDechets)
             .FirstOrDefault(m => m.Id == id);
 
     public Metre CreerMetre(string intitule)

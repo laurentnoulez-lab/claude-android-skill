@@ -41,6 +41,8 @@ public class BackupService
     {
         Metres = _ctx.Metres
             .Include(m => m.Divisions).ThenInclude(d => d.Chapitres).ThenInclude(c => c.Postes)
+            .Include(m => m.FormulesRevision)
+            .Include(m => m.PrixDechets)
             .AsNoTracking().ToList(),
         Catalogue = _ctx.PostesStd.AsNoTracking().ToList(),
         TauxTva = _ctx.TauxTva.AsNoTracking().ToList(),
@@ -117,6 +119,8 @@ public class BackupService
                     foreach (var p in c.Postes) p.Id = 0;
                 }
             }
+            foreach (var f in m.FormulesRevision) { f.Id = 0; f.MetreId = 0; }
+            foreach (var p in m.PrixDechets) { p.Id = 0; p.MetreId = 0; }
         }
         foreach (var f in d.Formules) { f.Id = 0; foreach (var t in f.Termes) t.Id = 0; }
         foreach (var i in d.Indices) i.Id = 0;

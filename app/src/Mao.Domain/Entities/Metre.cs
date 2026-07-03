@@ -29,4 +29,10 @@ public class Metre
     public DateTime DerniereMaj { get; set; } = DateTime.Now;
 
     public List<Division> Divisions { get; set; } = new();
+
+    /// <summary>Formules de révision propres au métré (table FORMULE_REVISION).</summary>
+    public List<FormuleRevisionMetre> FormulesRevision { get; set; } = new();
+
+    /// <summary>Prix des postes déchets propres au métré (table PRIX_POSTE_DECHET).</summary>
+    public List<PrixPosteDechet> PrixDechets { get; set; } = new();
 }

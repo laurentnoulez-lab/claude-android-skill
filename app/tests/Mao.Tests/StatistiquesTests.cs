@@ -101,9 +101,9 @@ public class StatistiquesServiceTests : IDisposable
 
         _service.ImporterFichierMao(FichierReel);
 
-        var resolu = _service.StatistiquesParPoste().FirstOrDefault(s => s.Code == "D1100");
-        Assert.NotNull(resolu.Code);
-        Assert.Equal("Abattage", resolu.Intitule);
+        var resolu = _service.StatistiquesParPoste().SingleOrDefault(s => s.Code == "D1100");
+        Assert.NotNull(resolu);
+        Assert.Equal("Abattage", resolu!.Intitule);
 
         var fourchette = _service.FourchettePrix("D1100");
         Assert.NotNull(fourchette);

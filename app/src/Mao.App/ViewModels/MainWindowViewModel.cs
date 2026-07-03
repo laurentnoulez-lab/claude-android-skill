@@ -18,6 +18,7 @@ public partial class MainWindowViewModel : ObservableObject
     public RevisionService Revision { get; }
     public StatistiquesService Statistiques { get; }
     public DonneesService Donnees { get; }
+    public DechetService Dechets { get; }
 
     public ObservableCollection<Metre> Metres { get; } = new();
 
@@ -33,7 +34,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel(MetreService service, CatalogueService catalogue,
                                AdminService admin, RevisionService revision,
-                               StatistiquesService statistiques, DonneesService donnees)
+                               StatistiquesService statistiques, DonneesService donnees,
+                               DechetService dechets)
     {
         _service = service;
         Catalogue = catalogue;
@@ -41,6 +43,7 @@ public partial class MainWindowViewModel : ObservableObject
         Revision = revision;
         Statistiques = statistiques;
         Donnees = donnees;
+        Dechets = dechets;
         Rafraichir();
     }
 
@@ -77,7 +80,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (MetreSelectionne is null) return;
         var complet = _service.ChargerComplet(MetreSelectionne.Id);
         if (complet is null) return;
-        Editeur = new MetreEditorViewModel(_service, complet);
+        Editeur = new MetreEditorViewModel(_service, complet, Dechets);
     }
 
     [RelayCommand(CanExecute = nameof(PeutAgir))]

@@ -36,6 +36,18 @@ public class Poste
     /// <summary>Poste issu du catalogue normalisé (vs poste libre).</summary>
     public bool EstNormalise { get; set; }
 
+    /// <summary>Type de déchet affecté au poste (TYPE_DECHET_POSTE.TDPO_TYDE_ID).</summary>
+    public int? TypeDechetId { get; set; }
+
+    /// <summary>Coefficient de conversion quantité → quantité de déchet (TDPO_CCONVERSION).</summary>
+    public decimal? CoefConversionDechet { get; set; }
+
+    /// <summary>Numéro local de la formule de révision du métré appliquée au poste (ID_FORMULE_REVISION).</summary>
+    public int? FormuleRevisionNumero { get; set; }
+
+    /// <summary>Poste généré automatiquement (postes déchets D9xxx — O_GEN_AUTO).</summary>
+    public bool EstGenere { get; set; }
+
     /// <summary>Montant HTVA du poste.</summary>
     public decimal MontantHtva => QuantitePresumee * PrixUnitaire;
 }

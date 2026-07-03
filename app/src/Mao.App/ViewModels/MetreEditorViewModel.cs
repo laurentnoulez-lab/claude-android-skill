@@ -13,8 +13,11 @@ namespace Mao.App.ViewModels;
 public partial class MetreEditorViewModel : ObservableObject
 {
     private readonly MetreService _service;
+    private readonly DechetService? _dechets;
     private readonly MetreCalculator _calc;
     public Metre Metre { get; }
+
+    [ObservableProperty] private string _messageInfo = string.Empty;
 
     public ObservableCollection<PosteRowViewModel> Lignes { get; } = new();
 
@@ -30,18 +33,43 @@ public partial class MetreEditorViewModel : ObservableObject
     /// <summary>Demande d'export : (type de document, format « pdf » ou « csv »). La vue choisit le fichier.</summary>
     public event Action<TypeDocument, string>? ExportDemande;
 
-    public MetreEditorViewModel(MetreService service, Metre metre)
+    /// <summary>Demande d'affichage des formules de révision du métré.</summary>
+    public event Action? RevisionDemande;
+
+    [RelayCommand]
+    private void VoirFormulesRevision() => RevisionDemande?.Invoke();
+
+    public MetreEditorViewModel(MetreService service, Metre metre, DechetService? dechets = null)
     {
         _service = service;
+        _dechets = dechets;
         _calc = service.CreerCalculateur();
         Metre = metre;
 
-        foreach (var div in metre.Divisions.OrderBy(d => d.Numero))
+        ReconstruireLignes();
+        Recalculer();
+    }
+
+    /// <summary>Reconstruit la grille depuis la hiérarchie du métré (après génération/import).</summary>
+    private void ReconstruireLignes()
+    {
+        foreach (var l in Lignes) l.Modifie -= Recalculer;
+        Lignes.Clear();
+        foreach (var div in Metre.Divisions.OrderBy(d => d.Numero))
             foreach (var chap in div.Chapitres.OrderBy(c => c.Numero))
                 foreach (var poste in chap.Postes.OrderBy(p => p.Numero))
                     AjouterLigne(poste, chap, div);
+    }
 
+    /// <summary>Génération des postes déchets D9000 (reproduit MAO V8).</summary>
+    [RelayCommand]
+    private void GenererPostesDechets()
+    {
+        if (_dechets is null) { MessageInfo = "Service déchets indisponible."; return; }
+        var rapport = _dechets.Generer(Metre);
+        ReconstruireLignes();
         Recalculer();
+        MessageInfo = rapport.Message;
     }
 
     public string Intitule

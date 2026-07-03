@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Mao.App.ViewModels"
+        x:Class="Mao.App.Views.FormulesMetreWindow"
+        x:DataType="vm:FormulesMetreViewModel"
+        Width="860" Height="560"
+        WindowStartupLocation="CenterOwner"
+        Title="Formules de révision du métré">
+
+  <DockPanel Margin="10">
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Metre.Intitule}" FontWeight="Bold" Margin="0,0,0,8"/>
+    <TextBlock DockPanel.Dock="Top" Foreground="#666" TextWrapping="Wrap" Margin="0,0,0,8"
+               Text="Formule des marchés publics : p = p0 × ( A·s/S + B·i/I + C ).  Type 3 = sans révision."/>
+
+    <!-- Simulation -->
+    <Border DockPanel.Dock="Bottom" Background="#F4F6F8" CornerRadius="4" Padding="10" Margin="0,8,0,0">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="Auto,110,24,Auto,110,24,Auto,110" >
+          <TextBlock Grid.Column="0" Text="s (salaire courant) " VerticalAlignment="Center"/>
+          <TextBox Grid.Column="1" Text="{Binding SalaireCourant}"/>
+          <TextBlock Grid.Column="3" Text="S (salaire base) " VerticalAlignment="Center"/>
+          <TextBox Grid.Column="4" Text="{Binding SalaireBase}"/>
+          <TextBlock Grid.Column="6" Text="p0 (prix de base €) " VerticalAlignment="Center"/>
+          <TextBox Grid.Column="7" Text="{Binding PrixBase}"/>
+        </Grid>
+        <Grid ColumnDefinitions="Auto,110,24,Auto,110,24,Auto">
+          <TextBlock Grid.Column="0" Text="i (matériaux courant) " VerticalAlignment="Center"/>
+          <TextBox Grid.Column="1" Text="{Binding MateriauxCourant}"/>
+          <TextBlock Grid.Column="3" Text="I (matériaux base) " VerticalAlignment="Center"/>
+          <TextBox Grid.Column="4" Text="{Binding MateriauxBase}"/>
+          <Button Grid.Column="6" Content="Calculer la révision" Command="{Binding CalculerCommand}" Margin="12,0,0,0"/>
+        </Grid>
+        <TextBlock Text="{Binding Resultat}" FontWeight="Bold"/>
+      </StackPanel>
+    </Border>
+
+    <DataGrid ItemsSource="{Binding Formules}" SelectedItem="{Binding Selection}"
+              AutoGenerateColumns="False" IsReadOnly="True"
+              GridLinesVisibility="All" HeadersVisibility="Column">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="N°" Width="50" Binding="{Binding Numero}"/>
+        <DataGridTextColumn Header="Type" Width="55" Binding="{Binding Type}"/>
+        <DataGridTextColumn Header="Intitulé" Width="*" Binding="{Binding Intitule}"/>
+        <DataGridTextColumn Header="A (salaires)" Width="95" Binding="{Binding A}"/>
+        <DataGridTextColumn Header="B (matériaux)" Width="105" Binding="{Binding B}"/>
+        <DataGridTextColumn Header="C (fixe)" Width="80" Binding="{Binding C}"/>
+        <DataGridTextColumn Header="C2" Width="70" Binding="{Binding C2}"/>
+        <DataGridTextColumn Header="Σ A+B+C" Width="85" Binding="{Binding SommeCoefficients, StringFormat='{}{0:0.###}'}"/>
+      </DataGrid.Columns>
+    </DataGrid>
+  </DockPanel>
+</Window>
