@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Mao.App.ViewModels"
+        xmlns:entities="using:Mao.Domain.Entities"
+        x:Class="Mao.App.Views.RevisionWindow"
+        x:DataType="vm:RevisionViewModel"
+        Width="820" Height="620"
+        WindowStartupLocation="CenterOwner"
+        Title="Révision de prix — indices et formules">
+
+  <DockPanel Margin="10">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                HorizontalAlignment="Right" Margin="0,8,0,0">
+      <Button Content="Enregistrer les indices" Classes="accent"
+              Command="{Binding EnregistrerCommand}"/>
+    </StackPanel>
+
+    <TabControl>
+      <TabItem Header="Indices">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+            <Button Content="+ Indice salaire" Command="{Binding AjouterIndiceSalaireCommand}"/>
+            <Button Content="+ Indice matériaux" Command="{Binding AjouterIndiceMateriauxCommand}"/>
+            <Button Content="Supprimer" Command="{Binding SupprimerIndiceCommand}"/>
+          </StackPanel>
+          <DataGrid ItemsSource="{Binding Indices}" SelectedItem="{Binding IndiceSelectionne}"
+                    AutoGenerateColumns="False" GridLinesVisibility="All" HeadersVisibility="Column">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Type" Width="120" IsReadOnly="True" Binding="{Binding Type}"/>
+              <DataGridTextColumn Header="Code" Width="100" Binding="{Binding Code}"/>
+              <DataGridTextColumn Header="Période" Width="140" Binding="{Binding Periode, StringFormat='{}{0:yyyy-MM}'}"/>
+              <DataGridTextColumn Header="Valeur" Width="*" Binding="{Binding Valeur, StringFormat='{}{0:0.0000}'}"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Calcul de révision">
+        <StackPanel Margin="6" Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+          <TextBlock TextWrapping="Wrap" Foreground="#666"
+                     Text="Formule : p = p0 × ( part fixe + Σ coefficient × indice_courant / indice_base )."/>
+
+          <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Formule" VerticalAlignment="Center" Margin="0,0,0,6"/>
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Formules}"
+                      SelectedItem="{Binding FormulePourCalcul}" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="entities:FormuleReference">
+                  <TextBlock Text="{Binding Description}"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Période de base (1er du mois)" VerticalAlignment="Center" Margin="0,0,0,6"/>
+            <DatePicker Grid.Row="1" Grid.Column="1" SelectedDate="{Binding PeriodeBase}"/>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Période courante" VerticalAlignment="Center" Margin="0,0,0,6"/>
+            <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding PeriodeCourante}"/>
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Prix de base (€)" VerticalAlignment="Center" Margin="0,0,0,6"/>
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding PrixBase}"/>
+          </Grid>
+
+          <Button Content="Calculer" Command="{Binding CalculerRevisionCommand}"/>
+          <TextBlock Text="{Binding Resultat}" FontWeight="Bold" TextWrapping="Wrap"/>
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>

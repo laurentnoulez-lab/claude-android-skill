@@ -1,0 +1,68 @@
+name: Build Windows executable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/app-analysis-improvements-1nbyc2
+    paths:
+      - 'app/**'
+      - '.github/workflows/windows-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publier l'exécutable autonome (self-contained, fichier unique)
+        run: >
+          dotnet publish app/src/Mao.App/Mao.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:DebugSymbols=false
+          -o ${{ github.workspace }}\publish
+
+      - name: Installer NSIS (pour l'installateur)
+        run: choco install nsis -y --no-progress
+        continue-on-error: true
+
+      - name: Construire l'installateur
+        run: makensis -DVERSION=1.1 "-DPUBLISH_DIR=${{ github.workspace }}\publish" app\installer\MaoModerne.nsi
+        continue-on-error: true
+
+      - name: Rassembler les livrables
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item publish\MaoModerne.exe dist\MaoModerne.exe
+          if (Test-Path app\installer\MaoModerne-Setup-1.1.exe) {
+            Copy-Item app\installer\MaoModerne-Setup-1.1.exe dist\MaoModerne-Setup-1.1.exe
+          }
+          Get-ChildItem dist
+
+      - name: Publier en artefact (téléchargeable depuis l'onglet Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaoModerne-Windows
+          path: dist/*
+
+      - name: Créer / mettre à jour la release téléchargeable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = Get-ChildItem dist\* | ForEach-Object { $_.FullName }
+          gh release delete v1.1 --yes --cleanup-tag 2>$null
+          gh release create v1.1 --target $env:GITHUB_SHA $assets `
+            --title "MAO Moderne 1.1" `
+            --notes "MaoModerne.exe : application Windows autonome — telechargez et double-cliquez pour lancer (aucune installation ni runtime requis). MaoModerne-Setup-1.1.exe : installateur classique (raccourcis menu Demarrer / bureau). Au premier demarrage, patientez ~25 s : l'application charge les 701 metres, le catalogue QR21, les dechets et les formules de revision."

@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Mao.App.ViewModels"
+        x:Class="Mao.App.Views.AdminWindow"
+        x:DataType="vm:AdminViewModel"
+        Width="820" Height="600"
+        WindowStartupLocation="CenterOwner"
+        Title="Administration">
+
+  <DockPanel Margin="10">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                HorizontalAlignment="Right" Margin="0,8,0,0">
+      <Button Content="Enregistrer les modifications" Classes="accent"
+              Command="{Binding EnregistrerCommand}"/>
+    </StackPanel>
+
+    <TabControl>
+      <TabItem Header="Utilisateurs">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+            <Button Content="Ajouter" Command="{Binding AjouterUtilisateurCommand}"/>
+            <Button Content="Supprimer" Command="{Binding SupprimerUtilisateurCommand}"/>
+          </StackPanel>
+          <DataGrid ItemsSource="{Binding Utilisateurs}" SelectedItem="{Binding UtilisateurSelectionne}"
+                    AutoGenerateColumns="False" GridLinesVisibility="All" HeadersVisibility="Column">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Code" Width="120" Binding="{Binding Code}"/>
+              <DataGridTextColumn Header="Nom" Width="*" Binding="{Binding Nom}"/>
+              <DataGridTextColumn Header="Rôle" Width="160" Binding="{Binding Role}"/>
+              <DataGridCheckBoxColumn Header="Actif" Width="70" Binding="{Binding Actif}"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Entités">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+            <Button Content="Ajouter" Command="{Binding AjouterEntiteCommand}"/>
+            <Button Content="Supprimer" Command="{Binding SupprimerEntiteCommand}"/>
+          </StackPanel>
+          <DataGrid ItemsSource="{Binding Entites}" SelectedItem="{Binding EntiteSelectionnee}"
+                    AutoGenerateColumns="False" GridLinesVisibility="All" HeadersVisibility="Column">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Code" Width="140" Binding="{Binding Code}"/>
+              <DataGridTextColumn Header="Nom" Width="*" Binding="{Binding Nom}"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Taux de TVA">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+            <Button Content="Ajouter" Command="{Binding AjouterTvaCommand}"/>
+            <Button Content="Supprimer" Command="{Binding SupprimerTvaCommand}"/>
+          </StackPanel>
+          <DataGrid ItemsSource="{Binding TauxTva}" SelectedItem="{Binding TvaSelectionnee}"
+                    AutoGenerateColumns="False" GridLinesVisibility="All" HeadersVisibility="Column">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Code" Width="120" Binding="{Binding Code}"/>
+              <DataGridTextColumn Header="Taux (fraction)" Width="160" Binding="{Binding Taux, StringFormat='{}{0:0.####}'}"/>
+              <DataGridTextColumn Header="Libellé" Width="*" Binding="{Binding Libelle}"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="Paramètres">
+        <DataGrid ItemsSource="{Binding Parametres}"
+                  AutoGenerateColumns="False" GridLinesVisibility="All" HeadersVisibility="Column">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Clé" Width="180" IsReadOnly="True" Binding="{Binding Cle}"/>
+            <DataGridTextColumn Header="Valeur" Width="260" Binding="{Binding Valeur}"/>
+            <DataGridTextColumn Header="Description" Width="*" IsReadOnly="True" Binding="{Binding Description}"/>
+          </DataGrid.Columns>
+        </DataGrid>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>

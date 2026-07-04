@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{1601A5C5-1DDA-4E53-B228-ACF689FB53C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mao.Domain", "src\Mao.Domain\Mao.Domain.csproj", "{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mao.Data", "src\Mao.Data\Mao.Data.csproj", "{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{EF5DA401-48D9-4EEE-A241-999E3B0A20ED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mao.Tests", "tests\Mao.Tests\Mao.Tests.csproj", "{EA7D07D4-4F7D-42EA-B511-7D6B7433F000}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mao.App", "src\Mao.App\Mao.App.csproj", "{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mao.Reports", "src\Mao.Reports\Mao.Reports.csproj", "{905782E3-7BB0-4177-B2AC-EF6D95F1740E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA7D07D4-4F7D-42EA-B511-7D6B7433F000}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA7D07D4-4F7D-42EA-B511-7D6B7433F000}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA7D07D4-4F7D-42EA-B511-7D6B7433F000}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA7D07D4-4F7D-42EA-B511-7D6B7433F000}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{905782E3-7BB0-4177-B2AC-EF6D95F1740E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{905782E3-7BB0-4177-B2AC-EF6D95F1740E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{905782E3-7BB0-4177-B2AC-EF6D95F1740E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{905782E3-7BB0-4177-B2AC-EF6D95F1740E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EE1E1601-AB93-46CA-85D0-5FC9312DDBEF} = {1601A5C5-1DDA-4E53-B228-ACF689FB53C3}
+		{1A572DC1-4BC8-4847-8ED7-637B3F3FB22C} = {1601A5C5-1DDA-4E53-B228-ACF689FB53C3}
+		{EA7D07D4-4F7D-42EA-B511-7D6B7433F000} = {EF5DA401-48D9-4EEE-A241-999E3B0A20ED}
+		{B3F2C531-A87E-4B92-BDC8-801D1F8CE3A3} = {1601A5C5-1DDA-4E53-B228-ACF689FB53C3}
+		{905782E3-7BB0-4177-B2AC-EF6D95F1740E} = {1601A5C5-1DDA-4E53-B228-ACF689FB53C3}
+	EndGlobalSection
+EndGlobal
