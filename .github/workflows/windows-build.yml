@@ -3,8 +3,11 @@ name: Build Windows executable
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - claude/app-analysis-improvements-1nbyc2
+    paths:
+      - 'app/**'
+      - '.github/workflows/windows-build.yml'
 
 permissions:
   contents: write
@@ -53,12 +56,13 @@ jobs:
           name: MaoModerne-Windows
           path: dist/*
 
-      - name: Créer la release (sur tag v*)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Créer / mettre à jour la release téléchargeable
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          gh release create ${{ github.ref_name }} (Get-ChildItem dist\* | ForEach-Object FullName)
-          --title "MAO Moderne ${{ github.ref_name }}"
-          --notes "MaoModerne.exe : application Windows autonome — téléchargez et double-cliquez pour lancer (aucune installation requise, aucun runtime à installer). MaoModerne-Setup-1.1.exe : installateur classique (raccourcis menu Démarrer/bureau). Au premier démarrage, patientez ~25 s : l'application charge les 701 métrés, le catalogue QR21, les déchets et les formules."
+        run: |
+          $assets = Get-ChildItem dist\* | ForEach-Object { $_.FullName }
+          gh release delete v1.1 --yes --cleanup-tag 2>$null
+          gh release create v1.1 --target $env:GITHUB_SHA $assets `
+            --title "MAO Moderne 1.1" `
+            --notes "MaoModerne.exe : application Windows autonome — telechargez et double-cliquez pour lancer (aucune installation ni runtime requis). MaoModerne-Setup-1.1.exe : installateur classique (raccourcis menu Demarrer / bureau). Au premier demarrage, patientez ~25 s : l'application charge les 701 metres, le catalogue QR21, les dechets et les formules de revision."
