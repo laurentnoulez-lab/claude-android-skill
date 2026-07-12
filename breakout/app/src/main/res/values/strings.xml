@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Casse-Brique</string>
+    <string name="menu_tagline">Détruisez toutes les briques !</string>
+    <string name="menu_help">Glissez le doigt pour déplacer la raquette.\nTouchez l\'écran pour lancer la balle.\nAttrapez les bonus qui tombent !</string>
+    <string name="play">Jouer</string>
+    <string name="high_score">Meilleur score : %1$d</string>
+    <string name="score_value">Score %1$d</string>
+    <string name="level_value">Niveau %1$d</string>
+    <string name="tap_to_launch">Touchez pour lancer</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Reprendre</string>
+    <string name="restart">Recommencer</string>
+    <string name="back_to_menu">Menu</string>
+    <string name="next_level">Continuer</string>
+    <string name="replay">Rejouer</string>
+    <string name="level_cleared">Niveau %1$d terminé !</string>
+    <string name="level_bonus">+%1$d points de bonus</string>
+    <string name="game_over">Partie terminée</string>
+    <string name="final_score">Score final : %1$d</string>
+    <string name="new_record">Nouveau record !</string>
+    <string name="won_title">Victoire !</string>
+</resources>

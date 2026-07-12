@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rangée de briques rouges -->
+    <path
+        android:fillColor="#FF5252"
+        android:pathData="M30,32 h10.5 v6 h-10.5 z M43.5,32 h10.5 v6 h-10.5 z M57,32 h10.5 v6 h-10.5 z M70.5,32 h7.5 v6 h-7.5 z" />
+    <!-- Rangée de briques orange -->
+    <path
+        android:fillColor="#FFB74D"
+        android:pathData="M30,41 h10.5 v6 h-10.5 z M43.5,41 h10.5 v6 h-10.5 z M57,41 h10.5 v6 h-10.5 z M70.5,41 h7.5 v6 h-7.5 z" />
+    <!-- Rangée de briques bleues -->
+    <path
+        android:fillColor="#4FC3F7"
+        android:pathData="M30,50 h10.5 v6 h-10.5 z M43.5,50 h10.5 v6 h-10.5 z M57,50 h10.5 v6 h-10.5 z M70.5,50 h7.5 v6 h-7.5 z" />
+    <!-- Balle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,64 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0" />
+    <!-- Raquette -->
+    <path
+        android:fillColor="#26C6DA"
+        android:pathData="M42,74 h24 a3,3 0 0 1 0,6 h-24 a3,3 0 0 1 0,-6 z" />
+</vector>
