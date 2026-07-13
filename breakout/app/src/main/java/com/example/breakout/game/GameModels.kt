@@ -12,15 +12,23 @@ enum class GameStatus {
     WON,
 }
 
-enum class PowerUpType {
-    /** Élargit temporairement la raquette. */
-    EXPAND,
-    /** Ajoute une vie. */
-    EXTRA_LIFE,
-    /** Divise chaque balle en trois. */
-    MULTI_BALL,
-    /** Ralentit temporairement les balles. */
-    SLOW_BALL,
+enum class PowerUpType(val isMalus: Boolean) {
+    /** Bonus : élargit temporairement la raquette. */
+    EXPAND(isMalus = false),
+    /** Bonus : ajoute une vie. */
+    EXTRA_LIFE(isMalus = false),
+    /** Bonus : divise chaque balle en trois. */
+    MULTI_BALL(isMalus = false),
+    /** Bonus : ralentit temporairement les balles. */
+    SLOW_BALL(isMalus = false),
+    /** Bonus : les balles tirent des lasers tout autour d'elles. */
+    LASER_BALL(isMalus = false),
+    /** Bonus : les balles grossissent temporairement. */
+    BIG_BALL(isMalus = false),
+    /** Malus : accélère temporairement les balles. */
+    FAST_BALL(isMalus = true),
+    /** Malus : rétrécit temporairement la raquette. */
+    SHRINK_PADDLE(isMalus = true),
 }
 
 class Ball(
@@ -28,7 +36,7 @@ class Ball(
     var y: Float,
     var vx: Float,
     var vy: Float,
-    val radius: Float,
+    var radius: Float,
 )
 
 class Brick(
@@ -50,6 +58,14 @@ class PowerUp(
     var y: Float,
     val type: PowerUpType,
     val size: Float,
+)
+
+/** Projectile laser émis par une balle sous l'effet du bonus LASER_BALL. */
+class Laser(
+    var x: Float,
+    var y: Float,
+    var vx: Float,
+    var vy: Float,
 )
 
 /**

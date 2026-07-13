@@ -214,6 +214,168 @@ class GameEngineTest {
     }
 
     @Test
+    fun `fast ball malus speeds up then restores ball speed`() {
+        val engine = newEngine()
+        engine.launchBall()
+        val ball = engine.balls.first()
+        val speedBefore = sqrt(ball.vx * ball.vx + ball.vy * ball.vy)
+        engine.applyPowerUp(PowerUpType.FAST_BALL)
+        val speedFast = sqrt(ball.vx * ball.vx + ball.vy * ball.vy)
+        assertEquals(speedBefore * GameEngine.FAST_FACTOR, speedFast, 0.5f)
+        // Laisse l'effet expirer (la balle est maintenue en jeu manuellement).
+        var elapsed = 0f
+        while (elapsed < GameEngine.SPEED_EFFECT_DURATION_S + 1f) {
+            ball.x = engine.worldWidth / 2f
+            ball.y = engine.worldHeight * 0.7f
+            engine.update(0.016f)
+            elapsed += 0.016f
+        }
+        val speedAfter = engine.balls.first().let { sqrt(it.vx * it.vx + it.vy * it.vy) }
+        assertEquals(speedBefore, speedAfter, speedBefore * 0.05f)
+    }
+
+    @Test
+    fun `shrink paddle malus narrows the paddle and expand overrides it`() {
+        val engine = newEngine()
+        engine.applyPowerUp(PowerUpType.SHRINK_PADDLE)
+        assertEquals(
+            engine.basePaddleWidth * GameEngine.SHRINK_FACTOR,
+            engine.paddleWidth,
+            0.01f,
+        )
+        // Un bonus d'élargissement remplace le malus.
+        engine.applyPowerUp(PowerUpType.EXPAND)
+        assertTrue(engine.paddleWidth > engine.basePaddleWidth)
+    }
+
+    @Test
+    fun `big ball power up grows then restores ball radius`() {
+        val engine = newEngine()
+        engine.launchBall()
+        val ball = engine.balls.first()
+        engine.applyPowerUp(PowerUpType.BIG_BALL)
+        assertEquals(engine.ballRadius * GameEngine.BIG_BALL_FACTOR, ball.radius, 0.01f)
+        var elapsed = 0f
+        while (elapsed < GameEngine.BIG_BALL_DURATION_S + 1f) {
+            ball.x = engine.worldWidth / 2f
+            ball.y = engine.worldHeight * 0.7f
+            engine.update(0.016f)
+            elapsed += 0.016f
+        }
+        assertEquals(engine.ballRadius, engine.balls.first().radius, 0.01f)
+    }
+
+    @Test
+    fun `laser power up fires beams that destroy bricks`() {
+        val engine = newEngine()
+        engine.launchBall()
+        val ball = engine.balls.first()
+        // Balle au centre, sous les briques, presque immobile verticalement.
+        ball.x = engine.worldWidth / 2f
+        ball.y = engine.worldHeight / 2f
+        engine.applyPowerUp(PowerUpType.LASER_BALL)
+        val aliveBefore = engine.bricks.count { it.alive }
+        var elapsed = 0f
+        while (elapsed < 2f && engine.status == GameStatus.RUNNING) {
+            ball.x = engine.worldWidth / 2f
+            ball.y = engine.worldHeight / 2f
+            engine.update(0.016f)
+            elapsed += 0.016f
+        }
+        val aliveAfter = engine.bricks.count { it.alive }
+        assertTrue(
+            "Les lasers doivent détruire des briques ($aliveBefore -> $aliveAfter)",
+            aliveAfter < aliveBefore,
+        )
+    }
+
+    @Test
+    fun `catching a malus gives no score`() {
+        val engine = newEngine()
+        engine.launchBall()
+        val before = engine.score
+        engine.applyPowerUp(PowerUpType.FAST_BALL)
+        assertEquals(before, engine.score)
+    }
+
+    @Test
+    fun `snapshot and restore round trip preserves the game`() {
+        val engine = newEngine()
+        engine.launchBall()
+        engine.applyPowerUp(PowerUpType.EXPAND)
+        engine.applyPowerUp(PowerUpType.MULTI_BALL)
+        engine.bricks.first().hp = 0
+        engine.run(0.2f)
+
+        val snapshot = engine.snapshot()
+        val restored = GameEngine(engine.worldWidth, engine.worldHeight, random = Random(1))
+        restored.restore(snapshot)
+
+        assertEquals(engine.score, restored.score)
+        assertEquals(engine.lives, restored.lives)
+        assertEquals(engine.level, restored.level)
+        assertEquals(engine.balls.size, restored.balls.size)
+        assertEquals(engine.paddleWidth, restored.paddleWidth, 0.01f)
+        assertEquals(
+            engine.bricks.count { it.alive },
+            restored.bricks.count { it.alive },
+        )
+        // Une partie sauvegardée en cours reprend en pause.
+        assertEquals(GameStatus.PAUSED, restored.status)
+    }
+
+    @Test
+    fun `snapshot json round trip is lossless`() {
+        val engine = newEngine()
+        engine.launchBall()
+        engine.applyPowerUp(PowerUpType.LASER_BALL)
+        engine.update(0.016f)
+        val snapshot = engine.snapshot()
+        val decoded = GameSnapshot.fromJson(snapshot.toJson())
+        assertEquals(snapshot, decoded)
+    }
+
+    @Test
+    fun `corrupt save json is rejected`() {
+        assertEquals(null, GameSnapshot.fromJson("pas du json"))
+        assertEquals(null, GameSnapshot.fromJson("{\"version\":99}"))
+    }
+
+    @Test
+    fun `restore rescales to a different world size`() {
+        val engine = newEngine() // 360 x 640
+        engine.launchBall()
+        val snapshot = engine.snapshot()
+
+        val other = GameEngine(720f, 1280f, random = Random(1))
+        other.restore(snapshot)
+
+        assertEquals(engine.balls.first().x * 2f, other.balls.first().x, 0.01f)
+        assertEquals(engine.balls.first().y * 2f, other.balls.first().y, 0.01f)
+        assertEquals(engine.bricks.first().x * 2f, other.bricks.first().x, 0.01f)
+        // Toutes les briques restent dans le monde.
+        assertTrue(other.bricks.all { it.right <= other.worldWidth + 0.01f })
+    }
+
+    @Test
+    fun `ready game is in progress but game over is not`() {
+        val engine = newEngine()
+        assertTrue(engine.isInProgress)
+        repeat(GameEngine.STARTING_LIVES) {
+            engine.launchBall()
+            val ball = engine.balls.first()
+            ball.x = 10f
+            ball.y = engine.worldHeight - 1f
+            ball.vx = 0f
+            ball.vy = 500f
+            engine.movePaddle(engine.worldWidth - 10f)
+            engine.run(1f)
+        }
+        assertEquals(GameStatus.GAME_OVER, engine.status)
+        assertTrue(!engine.isInProgress)
+    }
+
+    @Test
     fun `slow power up reduces then restores ball speed`() {
         val engine = newEngine()
         engine.launchBall()
@@ -224,7 +386,7 @@ class GameEngineTest {
         assertEquals(speedBefore * GameEngine.SLOW_FACTOR, speedSlow, 0.5f)
         // Laisse l'effet expirer (la balle est maintenue en jeu manuellement).
         var elapsed = 0f
-        while (elapsed < GameEngine.SLOW_DURATION_S + 1f) {
+        while (elapsed < GameEngine.SPEED_EFFECT_DURATION_S + 1f) {
             ball.x = engine.worldWidth / 2f
             ball.y = engine.worldHeight * 0.7f
             engine.update(0.016f)

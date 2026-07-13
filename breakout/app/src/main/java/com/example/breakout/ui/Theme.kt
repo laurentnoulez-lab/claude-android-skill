@@ -30,18 +30,18 @@ object GameColors {
         else -> Color(0xFFFF5252)
     }
 
+    val laser = Color(0xFFFFF176)
+    val malusRing = Color(0xFF7F1D1D)
+
     fun powerUpColor(type: PowerUpType): Color = when (type) {
         PowerUpType.EXPAND -> Color(0xFF66BB6A)
         PowerUpType.EXTRA_LIFE -> Color(0xFFFF8A80)
         PowerUpType.MULTI_BALL -> Color(0xFFBA68C8)
         PowerUpType.SLOW_BALL -> Color(0xFF4DB6AC)
-    }
-
-    fun powerUpLabel(type: PowerUpType): String = when (type) {
-        PowerUpType.EXPAND -> "↔"
-        PowerUpType.EXTRA_LIFE -> "+"
-        PowerUpType.MULTI_BALL -> "3"
-        PowerUpType.SLOW_BALL -> "S"
+        PowerUpType.LASER_BALL -> Color(0xFFFBC02D)
+        PowerUpType.BIG_BALL -> Color(0xFF7986CB)
+        PowerUpType.FAST_BALL -> Color(0xFFFF7043)
+        PowerUpType.SHRINK_PADDLE -> Color(0xFFE53935)
     }
 }
 

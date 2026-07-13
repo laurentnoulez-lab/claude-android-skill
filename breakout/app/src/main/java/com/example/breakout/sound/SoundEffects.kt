@@ -33,7 +33,12 @@ class SoundEffects : GameEvents {
     override fun onBrickHit(destroyed: Boolean) =
         play(if (destroyed) ToneGenerator.TONE_PROP_BEEP2 else ToneGenerator.TONE_PROP_BEEP, 40)
 
-    override fun onPowerUpCaught(type: PowerUpType) = play(ToneGenerator.TONE_PROP_ACK, 90)
+    override fun onPowerUpCaught(type: PowerUpType) =
+        if (type.isMalus) {
+            play(ToneGenerator.TONE_PROP_NACK, 120)
+        } else {
+            play(ToneGenerator.TONE_PROP_ACK, 90)
+        }
 
     override fun onBallLost() = play(ToneGenerator.TONE_SUP_ERROR, 200)
 

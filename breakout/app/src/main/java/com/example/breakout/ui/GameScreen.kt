@@ -49,9 +49,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.breakout.GameSaveStore
 import com.example.breakout.HighScoreStore
 import com.example.breakout.R
 import com.example.breakout.game.GameEngine
+import com.example.breakout.game.GameSnapshot
 import com.example.breakout.game.GameStatus
 import com.example.breakout.game.PowerUpType
 import com.example.breakout.sound.SoundEffects
@@ -78,7 +80,9 @@ private fun snapshotOf(engine: GameEngine) = HudSnapshot(
 @Composable
 fun GameScreen(
     highScoreStore: HighScoreStore,
+    saveStore: GameSaveStore,
     soundEffects: SoundEffects,
+    initialSnapshot: GameSnapshot?,
     onExit: () -> Unit,
 ) {
     BoxWithConstraints(
@@ -92,7 +96,18 @@ fun GameScreen(
         val scale = widthPx / WORLD_WIDTH
 
         val engine = remember(worldHeight) {
-            GameEngine(WORLD_WIDTH, worldHeight, events = soundEffects)
+            GameEngine(WORLD_WIDTH, worldHeight, events = soundEffects).also { engine ->
+                initialSnapshot?.let { engine.restore(it) }
+            }
+        }
+
+        // Sauvegarde la partie en cours (ou efface la sauvegarde si terminée).
+        fun persistGame() {
+            if (engine.isInProgress) {
+                saveStore.save(engine.snapshot())
+            } else {
+                saveStore.clear()
+            }
         }
 
         var hud by remember(engine) { mutableStateOf(snapshotOf(engine)) }
@@ -115,22 +130,25 @@ fun GameScreen(
             }
         }
 
-        // Met le jeu en pause quand l'application passe en arrière-plan.
+        // Met le jeu en pause et sauvegarde quand l'application passe en
+        // arrière-plan (c'est ce qui permet de reprendre après fermeture).
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner, engine) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_PAUSE && engine.status == GameStatus.RUNNING) {
-                    engine.togglePause()
+                if (event == Lifecycle.Event.ON_PAUSE) {
+                    if (engine.status == GameStatus.RUNNING) engine.togglePause()
+                    persistGame()
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
-        // Enregistre le meilleur score en fin de partie.
+        // Fin de partie : meilleur score + suppression de la sauvegarde.
         LaunchedEffect(hud.status) {
             if (hud.status == GameStatus.GAME_OVER || hud.status == GameStatus.WON) {
                 newRecord = highScoreStore.submit(engine.score)
+                saveStore.clear()
             }
         }
 
@@ -183,7 +201,12 @@ fun GameScreen(
                 OutlinedButton(onClick = { engine.startGame() }) {
                     Text(stringResource(R.string.restart))
                 }
-                TextButton(onClick = onExit) {
+                TextButton(
+                    onClick = {
+                        persistGame()
+                        onExit()
+                    },
+                ) {
                     Text(stringResource(R.string.back_to_menu), color = GameColors.textSecondary)
                 }
             }
@@ -192,7 +215,12 @@ fun GameScreen(
                 title = stringResource(R.string.level_cleared, hud.level),
                 subtitle = stringResource(R.string.level_bonus, GameEngine.LEVEL_CLEAR_BONUS),
             ) {
-                Button(onClick = { engine.nextLevel() }) {
+                Button(
+                    onClick = {
+                        engine.nextLevel()
+                        persistGame()
+                    },
+                ) {
                     Text(stringResource(R.string.next_level))
                 }
             }
@@ -335,9 +363,22 @@ private fun GameOverlay(
 
 private fun DrawScope.drawWorld(engine: GameEngine) {
     drawBricks(engine)
+    drawLasers(engine)
     drawPowerUps(engine)
     drawPaddle(engine)
     drawBalls(engine)
+}
+
+private fun DrawScope.drawLasers(engine: GameEngine) {
+    for (laser in engine.lasers) {
+        // Petit trait orienté dans le sens du déplacement.
+        drawLine(
+            color = GameColors.laser,
+            start = Offset(laser.x - laser.vx * 0.02f, laser.y - laser.vy * 0.02f),
+            end = Offset(laser.x, laser.y),
+            strokeWidth = 1.6f,
+        )
+    }
 }
 
 private fun DrawScope.drawBricks(engine: GameEngine) {
@@ -379,7 +420,11 @@ private fun DrawScope.drawBalls(engine: GameEngine) {
     for (ball in engine.balls) {
         val center = Offset(ball.x, ball.y)
         drawCircle(
-            color = GameColors.ball.copy(alpha = 0.18f),
+            color = if (engine.laserActive) {
+                GameColors.laser.copy(alpha = 0.30f)
+            } else {
+                GameColors.ball.copy(alpha = 0.18f)
+            },
             radius = ball.radius * 2f,
             center = center,
         )
@@ -400,6 +445,15 @@ private fun DrawScope.drawPowerUps(engine: GameEngine) {
             radius = half,
             center = center,
         )
+        // Anneau sombre : signale un malus à éviter.
+        if (powerUp.type.isMalus) {
+            drawCircle(
+                color = GameColors.malusRing,
+                radius = half,
+                center = center,
+                style = Stroke(width = half * 0.22f),
+            )
+        }
         drawPowerUpGlyph(powerUp.type, center, half)
     }
 }
@@ -439,6 +493,51 @@ private fun DrawScope.drawPowerUpGlyph(type: PowerUpType, center: Offset, half: 
                 center = center,
                 style = Stroke(width = stroke),
             )
+        }
+
+        PowerUpType.LASER_BALL -> {
+            // Étoile : quatre rayons autour d'un point central.
+            val ray = half * 0.55f
+            drawCircle(glyph, half * 0.16f, center)
+            drawLine(glyph, center + Offset(-ray, 0f), center + Offset(ray, 0f), stroke)
+            drawLine(glyph, center + Offset(0f, -ray), center + Offset(0f, ray), stroke)
+            val diag = ray * 0.7f
+            drawLine(glyph, center + Offset(-diag, -diag), center + Offset(diag, diag), stroke)
+            drawLine(glyph, center + Offset(-diag, diag), center + Offset(diag, -diag), stroke)
+        }
+
+        PowerUpType.BIG_BALL -> {
+            drawCircle(glyph, half * 0.2f, center)
+            drawCircle(
+                color = glyph,
+                radius = half * 0.55f,
+                center = center,
+                style = Stroke(width = stroke * 0.8f),
+            )
+        }
+
+        PowerUpType.FAST_BALL -> {
+            // Double chevron « avance rapide ».
+            val h = half * 0.42f
+            val w = half * 0.34f
+            for (xShift in listOf(-w * 1.1f, w * 0.1f)) {
+                val base = center + Offset(xShift, 0f)
+                drawLine(glyph, base + Offset(0f, -h), base + Offset(w, 0f), stroke)
+                drawLine(glyph, base + Offset(w, 0f), base + Offset(0f, h), stroke)
+            }
+        }
+
+        PowerUpType.SHRINK_PADDLE -> {
+            // Deux flèches horizontales pointant vers le centre.
+            val arm = half * 0.6f
+            val head = half * 0.26f
+            val inner = half * 0.12f
+            drawLine(glyph, center - Offset(arm, 0f), center - Offset(inner, 0f), stroke)
+            drawLine(glyph, center - Offset(inner, 0f), center - Offset(inner + head, head), stroke)
+            drawLine(glyph, center - Offset(inner, 0f), center - Offset(inner + head, -head), stroke)
+            drawLine(glyph, center + Offset(arm, 0f), center + Offset(inner, 0f), stroke)
+            drawLine(glyph, center + Offset(inner, 0f), center + Offset(inner + head, head), stroke)
+            drawLine(glyph, center + Offset(inner, 0f), center + Offset(inner + head, -head), stroke)
         }
     }
 }

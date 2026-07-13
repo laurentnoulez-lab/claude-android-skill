@@ -11,8 +11,15 @@ Un jeu de casse-brique complet pour Android, écrit en **Kotlin** avec **Jetpack
   - **+** **Vie supplémentaire**
   - **3** **Multi-balles** (jusqu'à 6 balles simultanées)
   - **S** **Ralenti** (temporaire)
+  - ✳ **Laser** : les balles tirent des salves de lasers tout autour d'elles (temporaire)
+  - ◎ **Grosse balle** : les balles grossissent (temporaire)
+- **Malus** (signalés par un anneau sombre, à éviter !) :
+  - » **Accélération** des balles (temporaire)
+  - →← **Rétrécissement** de la raquette (temporaire)
 - **Rebond directionnel** : l'angle de renvoi dépend du point d'impact sur la raquette
 - **Score, vies, niveaux** avec bonus de fin de niveau
+- **Sauvegarde automatique** : fermez l'application et reprenez la partie exactement
+  où vous l'avez laissée (« Reprendre la partie » dans le menu)
 - **Meilleur score persistant** (SharedPreferences)
 - **Pause** (bouton ou passage en arrière-plan)
 - **Effets sonores** générés sans assets (ToneGenerator)
@@ -23,8 +30,9 @@ Un jeu de casse-brique complet pour Android, écrit en **Kotlin** avec **Jetpack
 ```
 app/src/main/java/com/example/breakout/
 ├── game/                  # Moteur de jeu en Kotlin pur (aucune dépendance Android)
-│   ├── GameEngine.kt      # Physique, collisions, score, bonus, niveaux
-│   ├── GameModels.kt      # Ball, Brick, PowerUp, GameStatus, GameEvents
+│   ├── GameEngine.kt      # Physique, collisions, score, bonus/malus, niveaux
+│   ├── GameModels.kt      # Ball, Brick, PowerUp, Laser, GameStatus, GameEvents
+│   ├── GameSnapshot.kt    # État sérialisable (kotlinx.serialization) pour la reprise
 │   └── Levels.kt          # Dispositions des 8 niveaux
 ├── ui/                    # Interface Jetpack Compose
 │   ├── BreakoutApp.kt     # Menu principal + navigation
@@ -33,11 +41,13 @@ app/src/main/java/com/example/breakout/
 ├── sound/
 │   └── SoundEffects.kt    # Sons via ToneGenerator
 ├── HighScoreStore.kt      # Persistance du meilleur score
+├── GameSaveStore.kt       # Persistance de la partie en cours (reprise)
 └── MainActivity.kt
 ```
 
-Le moteur (`game/`) est découplé de l'UI : il est testé par **19 tests unitaires JUnit**
-(`app/src/test/`) qui couvrent rebonds, collisions, vies, niveaux, bonus et pause.
+Le moteur (`game/`) est découplé de l'UI : il est testé par **29 tests unitaires JUnit**
+(`app/src/test/`) qui couvrent rebonds, collisions, vies, niveaux, bonus/malus,
+pause et sauvegarde/restauration (y compris le changement de taille d'écran).
 
 ## Contrôles
 
