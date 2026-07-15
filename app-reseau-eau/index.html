@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dimensionnement de réseau de distribution d'eau — avant-projet</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/print.css" media="print">
+</head>
+<body>
+
+<header class="entete">
+  <div class="entete-titre">
+    <h1>💧 Dimensionnement de réseau de distribution d'eau</h1>
+    <span class="sous-titre">Note de calcul d'avant-projet — pressions relatives (manométriques) en bar</span>
+  </div>
+  <nav class="etapes" id="nav-etapes">
+    <button data-etape="projet"    class="actif">① Projet</button>
+    <button data-etape="schema">② Schéma</button>
+    <button data-etape="donnees">③ Données</button>
+    <button data-etape="calcul">④ Calcul</button>
+    <button data-etape="controles">⑤ Contrôles</button>
+    <button data-etape="exports">⑥ Exports</button>
+  </nav>
+</header>
+
+<div class="bandeau-reglementaire" title="AR 06/05/1971, règlement-type art. 36 ; CM 14/10/1975 art. 1.5">
+  ⚠️ Dimensionnement d'avant-projet — validation par le distributeur et consultation préalable
+  de la zone de secours obligatoires (AR 06/05/1971, règlement-type art. 36&nbsp;; CM 14/10/1975 art. 1.5).
+</div>
+
+<main>
+
+<!-- ① PROJET ─────────────────────────────────────────────────────────── -->
+<section id="etape-projet" class="etape visible">
+  <div class="colonnes">
+    <div class="carte">
+      <h2>Métadonnées du projet</h2>
+      <div id="form-meta"></div>
+    </div>
+    <div class="carte">
+      <h2>Point d'alimentation</h2>
+      <p class="aide">Piquage sur le réseau existant. Soit une pression fixée (hypothèse forte),
+        soit — recommandé — la courbe issue d'un <strong>essai débit-pression</strong> réalisé sur place :
+        P(Q) = P0 − (P0 − P1)·(Q/Q1)<sup>1,852</sup> (extrapolation type Hazen-Williams, règle de l'art).</p>
+      <div id="form-alimentation"></div>
+    </div>
+    <div class="carte">
+      <h2>Fichier projet</h2>
+      <p class="aide">⚠️ La sauvegarde automatique n'a lieu que dans la mémoire de <em>ce</em> navigateur :
+        seul l'<strong>export du fichier JSON</strong> constitue une sauvegarde pérenne et transmissible.</p>
+      <div class="rangee-boutons">
+        <button id="btn-export-json" class="btn">💾 Exporter le projet (JSON)</button>
+        <button id="btn-import-json" class="btn">📂 Importer un projet…</button>
+        <input type="file" id="input-import-json" accept=".json,application/json" hidden>
+        <button id="btn-exemple" class="btn secondaire">🧪 Charger le projet d'exemple</button>
+        <button id="btn-nouveau" class="btn secondaire">🗑️ Nouveau projet vide</button>
+      </div>
+      <p id="info-sauvegarde" class="aide"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ② SCHÉMA ─────────────────────────────────────────────────────────── -->
+<section id="etape-schema" class="etape">
+  <div class="schema-conteneur">
+    <div class="schema-outils" id="barre-outils">
+      <button data-mode="selection" class="actif" title="Sélectionner / déplacer (glisser-déposer, grille magnétique)">🖱️ Sélection</button>
+      <button data-mode="noeud-consommation" title="Ajouter un nœud de consommation (cliquer sur le fond)">⚪ + Consommation</button>
+      <button data-mode="noeud-jonction" title="Ajouter une jonction (té, coude)">▫️ + Jonction</button>
+      <button data-mode="noeud-hydrant" title="Ajouter un nœud avec hydrant">🧯 + Hydrant</button>
+      <button data-mode="noeud-alimentation" title="Placer / déplacer le point d'alimentation (piquage)">🔷 + Alimentation</button>
+      <button data-mode="troncon" title="Relier deux nœuds : cliquer le 1ᵉʳ nœud puis le 2ᵈ">➡️ + Tronçon</button>
+      <button data-mode="supprimer" title="Supprimer l'élément cliqué">❌ Supprimer</button>
+      <span class="separateur"></span>
+      <button id="btn-zoom-plus" title="Zoom avant">➕</button>
+      <button id="btn-zoom-moins" title="Zoom arrière">➖</button>
+      <button id="btn-zoom-ajuster" title="Ajuster la vue au réseau">🔍 Ajuster</button>
+      <label class="case" title="Aimante les nœuds sur une grille de 20 px"><input type="checkbox" id="chk-grille" checked> Grille magnétique</label>
+      <span class="separateur"></span>
+      <label class="case">Cas affiché :
+        <select id="sel-cas-affiche" title="Cas de charge dont les résultats sont affichés sur le schéma">
+          <option value="pointe">Pointe</option>
+          <option value="incendie">Incendie (critique)</option>
+        </select>
+      </label>
+    </div>
+    <p class="aide schema-note">Le schéma est <strong>schématique, pas à l'échelle</strong> :
+      les longueurs des tronçons sont saisies manuellement, jamais déduites du dessin.
+      Molette = zoom, glisser le fond = déplacement de la vue.</p>
+    <div class="schema-zone">
+      <svg id="svg-schema" tabindex="0"></svg>
+      <aside id="panneau-proprietes" class="carte proprietes"></aside>
+    </div>
+    <div id="legende-schema" class="legende">
+      <span><span class="pastille ok"></span> OK</span>
+      <span><span class="pastille warn"></span> Avertissement</span>
+      <span><span class="pastille nok"></span> NOK</span>
+      <span>🔷 alimentation — ⚪ consommation — 🧯 hydrant — ▫️ jonction — flèche = sens d'écoulement</span>
+    </div>
+  </div>
+</section>
+
+<!-- ③ DONNÉES ────────────────────────────────────────────────────────── -->
+<section id="etape-donnees" class="etape">
+  <div class="carte">
+    <h2>Hypothèses de calcul <span class="badge">panneau unique</span></h2>
+    <p class="aide">Chaque hypothèse est affichée avec sa valeur, son unité et sa source / justification.
+      Les valeurs marquées « à confirmer » doivent être validées par écrit par le distributeur ou la zone de secours.</p>
+    <div id="form-hypotheses"></div>
+  </div>
+  <div class="carte">
+    <h2>Nœuds</h2>
+    <div id="table-noeuds"></div>
+  </div>
+  <div class="carte">
+    <h2>Tronçons</h2>
+    <p class="aide">Diamètres <strong>intérieurs réels</strong> (mm). « Auto » = plus petit diamètre commercial
+      satisfaisant les contrôles ; un diamètre peut être forcé par tronçon.</p>
+    <div id="table-troncons"></div>
+  </div>
+</section>
+
+<!-- ④ CALCUL ─────────────────────────────────────────────────────────── -->
+<section id="etape-calcul" class="etape">
+  <div class="carte">
+    <div class="rangee-boutons">
+      <button id="btn-calculer" class="btn principal">🧮 Calculer le réseau</button>
+      <span id="statut-calcul" class="statut"></span>
+    </div>
+    <div id="erreurs-validation"></div>
+  </div>
+  <div id="resultats-conteneur"></div>
+</section>
+
+<!-- ⑤ CONTRÔLES ──────────────────────────────────────────────────────── -->
+<section id="etape-controles" class="etape">
+  <div class="carte">
+    <h2>Contrôles réglementaires et de bonne pratique</h2>
+    <div id="liste-controles"><p class="aide">Lancez d'abord le calcul (étape ④).</p></div>
+  </div>
+</section>
+
+<!-- ⑥ EXPORTS ────────────────────────────────────────────────────────── -->
+<section id="etape-exports" class="etape">
+  <div class="carte">
+    <h2>Exports de la note de calcul</h2>
+    <p class="aide">Les exports reprennent : hypothèses et conventions, références réglementaires,
+      données d'entrée, méthode, résultats par tronçon et par nœud, contrôles, schéma, réserves.</p>
+    <div class="rangee-boutons">
+      <button id="btn-export-docx" class="btn">📄 Note de calcul DOCX</button>
+      <button id="btn-export-pdf" class="btn">🖨️ PDF (impression)</button>
+      <button id="btn-export-xlsx" class="btn">📊 Classeur XLSX (formules vivantes)</button>
+      <button id="btn-export-json2" class="btn">💾 Projet JSON</button>
+    </div>
+    <p class="aide">Le classeur XLSX contient les formules Darcy-Weisbach / Swamee-Jain référençant
+      l'onglet Hypothèses : modifiez une hypothèse dans Excel et les colonnes v, Re, λ, ΔH se recalculent.
+      Les débits d'équilibrage (Hardy Cross) restent ceux calculés par l'application.
+      Cellules d'entrée : fond jaune, police bleue.</p>
+    <p id="statut-export" class="statut"></p>
+  </div>
+</section>
+
+</main>
+
+<!-- Rapport pour impression PDF (rempli au moment de l'export) -->
+<div id="rapport-impression" aria-hidden="true"></div>
+
+<footer class="pied">
+  Application 100 % côté client — aucune donnée n'est envoyée à l'extérieur.
+  Outil d'avant-projet : ne remplace ni la validation du distributeur ni l'étude de la zone de secours.
+</footer>
+
+<script src="vendor/xlsx-js-style.min.js"></script>
+<script src="vendor/docx.iife.js"></script>
+<script src="js/core/units.js"></script>
+<script src="js/core/materials.js"></script>
+<script src="js/core/hydraulics.js"></script>
+<script src="js/core/supply.js"></script>
+<script src="js/core/network.js"></script>
+<script src="js/core/checks.js"></script>
+<script src="js/core/sizing.js"></script>
+<script src="js/core/example.js"></script>
+<script src="js/ui/state.js"></script>
+<script src="js/ui/forms.js"></script>
+<script src="js/ui/editor.js"></script>
+<script src="js/ui/results.js"></script>
+<script src="js/export/rapport.js"></script>
+<script src="js/export/xlsx.js"></script>
+<script src="js/export/docx.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

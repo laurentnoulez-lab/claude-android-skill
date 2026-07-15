@@ -1,0 +1,25 @@
+/* print.css — mise en page d'impression dédiée : seule la note de calcul
+   (#rapport-impression) est imprimée, avec pagination propre. Sert de
+   génération PDF via « Imprimer → Enregistrer en PDF ». */
+@page { size: A4; margin: 18mm 15mm; }
+
+body > header, body > main, body > footer, .bandeau-reglementaire { display: none !important; }
+
+#rapport-impression {
+  display: block !important;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 10.5pt; color: #000;
+}
+#rapport-impression h1 { font-size: 17pt; margin: 0 0 4pt; }
+#rapport-impression h2 { font-size: 13pt; margin: 14pt 0 4pt; border-bottom: 1pt solid #000; page-break-after: avoid; }
+#rapport-impression h3 { font-size: 11pt; margin: 8pt 0 3pt; page-break-after: avoid; }
+#rapport-impression table { border-collapse: collapse; width: 100%; font-size: 8.5pt; page-break-inside: avoid; margin: 4pt 0 8pt; }
+#rapport-impression th, #rapport-impression td { border: 0.5pt solid #444; padding: 2pt 4pt; }
+#rapport-impression th { background: #e8e8e8; }
+#rapport-impression .page-garde { text-align: center; padding-top: 40mm; page-break-after: always; }
+#rapport-impression .page-garde table { width: 70%; margin: 10mm auto; font-size: 10.5pt; }
+#rapport-impression .encadre { border: 1pt solid #000; padding: 6pt 8pt; margin: 6pt 0; font-weight: 600; }
+#rapport-impression .schema-image { max-width: 100%; border: 0.5pt solid #888; margin: 4pt 0; }
+#rapport-impression .nok { color: #b00020; font-weight: 700; }
+#rapport-impression .avertissement { color: #b35c00; font-weight: 600; }
+#rapport-impression .num { text-align: right; font-variant-numeric: tabular-nums; }
