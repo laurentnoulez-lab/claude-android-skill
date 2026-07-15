@@ -1,0 +1,10 @@
+{
+  "name": "app-reseau-eau",
+  "version": "1.0.0",
+  "description": "Dimensionnement hydraulique de réseaux de distribution d'eau potable — avant-projet (100 % côté client)",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "build": "node build.js"
+  }
+}

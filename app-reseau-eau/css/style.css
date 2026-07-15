@@ -1,0 +1,161 @@
+/* style.css — feuille de style écran (usage bureau prioritaire, tablette ensuite) */
+:root {
+  --bleu: #0b5394;
+  --bleu-clair: #e8f0fe;
+  --vert: #1e8e3e;
+  --orange: #e8710a;
+  --rouge: #c5221f;
+  --gris: #5f6368;
+  --fond: #f6f8fa;
+  --bord: #d4d9de;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  font-size: 14px; color: #202124; background: var(--fond);
+}
+
+/* ───── En-tête et navigation par étapes ───── */
+.entete {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  justify-content: space-between; padding: 8px 16px;
+  background: var(--bleu); color: #fff;
+}
+.entete h1 { font-size: 17px; margin: 0; }
+.sous-titre { font-size: 11.5px; opacity: .85; }
+.etapes { display: flex; flex-wrap: wrap; gap: 4px; }
+.etapes button {
+  border: 1px solid rgba(255,255,255,.4); background: transparent; color: #fff;
+  padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.etapes button:hover { background: rgba(255,255,255,.15); }
+.etapes button.actif { background: #fff; color: var(--bleu); font-weight: 600; }
+
+.bandeau-reglementaire {
+  background: #fef7e0; border-bottom: 1px solid #f0d264;
+  padding: 6px 16px; font-size: 12.5px; color: #7a5c00;
+}
+
+main { padding: 12px 16px 40px; max-width: 1500px; margin: 0 auto; }
+.etape { display: none; }
+.etape.visible { display: block; }
+.colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+
+.carte {
+  background: #fff; border: 1px solid var(--bord); border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.carte h2 { font-size: 15px; margin: 0 0 8px; color: var(--bleu); }
+.aide { font-size: 12px; color: var(--gris); margin: 4px 0 10px; }
+.badge {
+  font-size: 10px; background: var(--bleu-clair); color: var(--bleu);
+  border-radius: 10px; padding: 2px 8px; vertical-align: middle;
+}
+
+/* ───── Formulaires ───── */
+.champ { display: grid; grid-template-columns: 210px 1fr; gap: 6px; align-items: center; margin: 4px 0; }
+.champ label { font-size: 12.5px; }
+.champ .unite { font-size: 11.5px; color: var(--gris); margin-left: 6px; }
+.champ input[type=number], .champ input[type=text], .champ input[type=date], .champ select, .champ textarea {
+  padding: 5px 8px; border: 1px solid var(--bord); border-radius: 5px; font-size: 13px; max-width: 340px;
+}
+input:invalid { border-color: var(--rouge); }
+.infobulle {
+  display: inline-block; width: 15px; height: 15px; line-height: 15px; text-align: center;
+  border-radius: 50%; background: var(--bleu-clair); color: var(--bleu);
+  font-size: 10px; font-weight: 700; cursor: help; margin-left: 5px;
+}
+.hypothese-source { font-size: 11px; color: var(--gris); font-style: italic; }
+.champ-important input { background: #fff8e1; }
+
+.rangee-boutons { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+.btn {
+  padding: 8px 14px; border: 1px solid var(--bleu); background: #fff; color: var(--bleu);
+  border-radius: 6px; cursor: pointer; font-size: 13.5px;
+}
+.btn:hover { background: var(--bleu-clair); }
+.btn.principal { background: var(--bleu); color: #fff; font-weight: 600; }
+.btn.principal:hover { background: #094276; }
+.btn.secondaire { border-color: var(--gris); color: var(--gris); }
+.statut { font-size: 12.5px; color: var(--gris); }
+
+/* ───── Tableaux ───── */
+table.donnees { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+table.donnees th, table.donnees td { border: 1px solid var(--bord); padding: 4px 7px; text-align: left; }
+table.donnees th { background: var(--bleu-clair); color: var(--bleu); font-weight: 600; white-space: nowrap; }
+table.donnees td.num, table.donnees th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.donnees input, table.donnees select { width: 100%; min-width: 60px; border: 1px solid transparent; background: transparent; padding: 3px; font-size: 12.5px; }
+table.donnees input:hover, table.donnees input:focus, table.donnees select:hover { border-color: var(--bord); background: #fff; }
+table.donnees tr.ok td:first-child { border-left: 4px solid var(--vert); }
+table.donnees tr.warn td:first-child { border-left: 4px solid var(--orange); }
+table.donnees tr.nok td:first-child { border-left: 4px solid var(--rouge); }
+.table-defilante { overflow-x: auto; }
+
+.statut-ok { color: var(--vert); font-weight: 600; }
+.statut-warn { color: var(--orange); font-weight: 600; }
+.statut-nok { color: var(--rouge); font-weight: 600; }
+
+/* ───── Contrôles ───── */
+.controle { border-left: 4px solid var(--gris); background: #fff; padding: 8px 12px; margin: 6px 0; border-radius: 0 6px 6px 0; border-top: 1px solid var(--bord); border-right: 1px solid var(--bord); border-bottom: 1px solid var(--bord); font-size: 13px; }
+.controle.nok { border-left-color: var(--rouge); background: #fdecea; }
+.controle.avertissement { border-left-color: var(--orange); background: #fff4e5; }
+.controle.info { border-left-color: var(--vert); background: #eef8f0; }
+.controle .code { font-size: 10.5px; color: var(--gris); }
+
+/* ───── Éditeur de schéma ───── */
+.schema-conteneur { background: #fff; border: 1px solid var(--bord); border-radius: 8px; padding: 10px; }
+.schema-outils { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 4px; }
+.schema-outils button {
+  padding: 6px 9px; border: 1px solid var(--bord); background: #fff;
+  border-radius: 6px; cursor: pointer; font-size: 12.5px;
+}
+.schema-outils button:hover { background: var(--bleu-clair); }
+.schema-outils button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
+.schema-outils .separateur { width: 1px; height: 22px; background: var(--bord); margin: 0 4px; }
+.schema-outils .case { font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
+.schema-note { margin: 2px 0 6px; }
+.schema-zone { position: relative; display: flex; gap: 10px; }
+#svg-schema {
+  flex: 1; height: 520px; min-width: 0; border: 1px solid var(--bord); border-radius: 6px;
+  background: #fcfdfe; touch-action: none; cursor: default;
+}
+#svg-schema:focus { outline: 2px solid var(--bleu-clair); }
+.proprietes { width: 300px; max-height: 520px; overflow-y: auto; margin: 0; }
+.proprietes h3 { font-size: 13.5px; margin: 0 0 6px; color: var(--bleu); }
+.proprietes .champ { grid-template-columns: 120px 1fr; }
+.proprietes:empty { display: none; }
+.legende { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11.5px; color: var(--gris); margin-top: 6px; }
+.pastille { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; }
+.pastille.ok { background: var(--vert); }
+.pastille.warn { background: var(--orange); }
+.pastille.nok { background: var(--rouge); }
+
+/* Éléments SVG */
+.svg-troncon { stroke: #607d8b; stroke-width: 3.5; cursor: pointer; }
+.svg-troncon.ok { stroke: var(--vert); }
+.svg-troncon.warn { stroke: var(--orange); }
+.svg-troncon.nok { stroke: var(--rouge); }
+.svg-troncon.selection { stroke-dasharray: 7 4; stroke-width: 5; }
+.svg-noeud { cursor: pointer; }
+.svg-noeud .forme { fill: #fff; stroke: #37474f; stroke-width: 2; }
+.svg-noeud.alimentation .forme { fill: var(--bleu); stroke: var(--bleu); }
+.svg-noeud.hydrant .forme { stroke: var(--rouge); }
+.svg-noeud.selection .forme { stroke-width: 4; stroke: var(--bleu); }
+.svg-noeud.p-ok .forme { fill: #d7f0dd; }
+.svg-noeud.p-nok .forme { fill: #f8d1d0; }
+.svg-etiquette { font-size: 11px; fill: #37474f; pointer-events: none; user-select: none; }
+.svg-etiquette.resultat { fill: var(--bleu); font-weight: 600; }
+.svg-marqueur-h { font-size: 10px; font-weight: 700; fill: var(--rouge); pointer-events: none; }
+.svg-fleche { fill: var(--bleu); pointer-events: none; }
+
+.pied { padding: 14px 16px; font-size: 11.5px; color: var(--gris); text-align: center; }
+#rapport-impression { display: none; }
+
+/* ───── Tablette / petits écrans ───── */
+@media (max-width: 900px) {
+  .schema-zone { flex-direction: column; }
+  .proprietes { width: auto; max-height: none; }
+  #svg-schema { height: 380px; }
+  .champ { grid-template-columns: 1fr; }
+}
