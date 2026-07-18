@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Back photo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.35"
+        android:pathData="M34,30 h40 a5,5 0 0 1 5,5 v30 a5,5 0 0 1 -5,5 h-40 a5,5 0 0 1 -5,-5 v-30 a5,5 0 0 1 5,-5 z" />
+    <!-- Middle photo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M31,36 h40 a5,5 0 0 1 5,5 v30 a5,5 0 0 1 -5,5 h-40 a5,5 0 0 1 -5,-5 v-30 a5,5 0 0 1 5,-5 z" />
+    <!-- Front photo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,42 h40 a5,5 0 0 1 5,5 v30 a5,5 0 0 1 -5,5 h-40 a5,5 0 0 1 -5,-5 v-30 a5,5 0 0 1 5,-5 z" />
+    <!-- Play triangle -->
+    <path
+        android:fillColor="#5B4BFF"
+        android:pathData="M42,52 L58,62 L42,72 z" />
+</vector>

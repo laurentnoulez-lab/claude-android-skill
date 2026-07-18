@@ -1,0 +1,62 @@
+name: Build Diaporama APK
+
+on:
+  push:
+    branches:
+      - "claude/android-slideshow-video-app-cremjs"
+      - "main"
+    paths:
+      - "DiaporamaApp/**"
+      - ".github/workflows/build-diaporama-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DiaporamaApp
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.6"
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: diaporama-debug-apk
+          path: DiaporamaApp/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publish rolling release
+        if: github.ref_name == 'claude/android-slideshow-video-app-cremjs' || github.ref_name == 'main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: diaporama-latest
+          name: Diaporama (dernière version)
+          body: |
+            APK de debug généré automatiquement à partir du dernier commit.
+            Téléchargez `app-debug.apk` ci-dessous et installez-le sur votre
+            téléphone (autorisez les sources inconnues).
+          prerelease: true
+          files: DiaporamaApp/app/build/outputs/apk/debug/app-debug.apk
