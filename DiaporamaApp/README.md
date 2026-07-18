@@ -9,9 +9,12 @@ affichées en même temps** (collages) et des **transitions en fondu** enchaîn�
 - 🎬 **Export vidéo 1080p** (H.264/MP4, 30 fps, ~16 Mbps) encodé en natif avec
   `MediaCodec` + OpenGL — aucune bibliothèque externe, aucun serveur.
 - 🖼️ **Plusieurs images par écran** : mise en page en collage de 1 à 6 photos
-  simultanées, avec des dispositions soignées pour chaque nombre.
-- ✨ **Rendu fluide** : effet **Ken Burns** (zoom/panoramique lent) sur chaque
-  photo et **fondu enchaîné** (crossfade) doux entre les écrans.
+  simultanées. Les **dispositions alternent aléatoirement** d'un écran à l'autre
+  (plusieurs variantes par nombre de photos).
+- 👁️ **Chaque photo toujours visible à 100%** : affichage « contain » (jamais de
+  recadrage), chaque image posée sur une carte à coins arrondis.
+- ✨ **Rendu fluide** : léger mouvement (respiration + dérive qui ne recadre
+  jamais) sur chaque photo et **fondu enchaîné** (crossfade) doux entre les écrans.
 - 🎨 Fond flouté généré à partir des photos, coins arrondis, marges élégantes.
 - ⚙️ Réglages : nombre de photos par écran, durée par écran, durée de transition.
 - 💾 Enregistrement direct dans la **galerie** (`Movies/Diaporama`) + partage.

@@ -4,11 +4,16 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import kotlin.math.min
 
-/** Per-cell slow zoom/pan (Ken Burns) parameters, in normalized units. */
+/**
+ * Per-cell gentle motion. Because photos are shown fully (never cropped), the
+ * "zoom" only breathes between a slightly smaller and the fully-fitted size,
+ * and the pan drifts the photo inside the free space that leaves — the whole
+ * image therefore stays 100% visible at every frame.
+ */
 data class KenBurns(
     val zoomStart: Float,
     val zoomEnd: Float,
@@ -20,8 +25,7 @@ data class KenBurns(
 
 /**
  * A decoded collage ready to render: the photos, their target rectangles, the
- * Ken Burns motion for each, and a tiny blurred background derived from the
- * first photo.
+ * motion for each, and a tiny blurred background derived from the first photo.
  */
 class Screen(
     val photos: List<Bitmap>,
@@ -45,12 +49,12 @@ class FrameComposer(
     private val cornerRadius: Float,
 ) {
     private val bgPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val dimPaint = Paint().apply { color = Color.argb(115, 0, 0, 0) }
+    private val dimPaint = Paint().apply { color = Color.argb(120, 0, 0, 0) }
+    private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(24, 24, 34) }
     private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val clipPath = Path()
-    private val srcRect = Rect()
     private val bgSrc = Rect()
     private val bgDst = RectF(0f, 0f, width.toFloat(), height.toFloat())
+    private val destF = RectF()
 
     fun renderScreen(target: Bitmap, screen: Screen, progress: Float) {
         val canvas = Canvas(target)
@@ -80,45 +84,41 @@ class FrameComposer(
         kb: KenBurns,
         progress: Float,
     ) {
-        val zoom = lerp(kb.zoomStart, kb.zoomEnd, progress)
-        val panX = lerp(kb.panXStart, kb.panXEnd, progress)
-        val panY = lerp(kb.panYStart, kb.panYEnd, progress)
+        // Rounded "card" the photo sits on.
+        canvas.drawRoundRect(dst, cornerRadius, cornerRadius, cardPaint)
 
-        val targetAspect = dst.width() / dst.height()
+        // Padding keeps the photo clear of the rounded corners, so the whole
+        // image is visible with no clipping.
+        val pad = min(cornerRadius, min(dst.width(), dst.height()) * 0.14f)
+        val innerL = dst.left + pad
+        val innerT = dst.top + pad
+        val innerW = dst.width() - 2 * pad
+        val innerH = dst.height() - 2 * pad
+        if (innerW <= 0f || innerH <= 0f) return
+
         val iw = photo.width.toFloat()
         val ih = photo.height.toFloat()
 
-        // Center-crop the photo to the cell aspect ratio.
-        var cropW: Float
-        var cropH: Float
-        if (iw / ih > targetAspect) {
-            cropH = ih
-            cropW = ih * targetAspect
-        } else {
-            cropW = iw
-            cropH = iw / targetAspect
-        }
-        // Zoom in by shrinking the source crop.
-        val zw = cropW / zoom
-        val zh = cropH / zoom
-        val cx = iw / 2f + panX * (iw - zw) / 2f
-        val cy = ih / 2f + panY * (ih - zh) / 2f
+        // Fit the whole photo inside the inner area (contain).
+        val fitScale = min(innerW / iw, innerH / ih)
+        // Breathe factor is always <= 1, so the photo is never enlarged past fit.
+        val breathe = lerp(kb.zoomStart, kb.zoomEnd, progress).coerceIn(0.5f, 1f)
+        val scale = fitScale * breathe
+        val fw = iw * scale
+        val fh = ih * scale
 
-        val sl = (cx - zw / 2f).coerceIn(0f, iw - zw)
-        val stp = (cy - zh / 2f).coerceIn(0f, ih - zh)
-        srcRect.set(
-            sl.toInt(),
-            stp.toInt(),
-            (sl + zw).toInt(),
-            (stp + zh).toInt(),
-        )
+        // Drift inside the leftover space (guarantees full visibility).
+        val freeX = innerW - fw
+        val freeY = innerH - fh
+        val panX = lerp(kb.panXStart, kb.panXEnd, progress)
+        val panY = lerp(kb.panYStart, kb.panYEnd, progress)
+        val offX = freeX * (0.5f + panX * 0.5f)
+        val offY = freeY * (0.5f + panY * 0.5f)
 
-        val save = canvas.save()
-        clipPath.reset()
-        clipPath.addRoundRect(dst, cornerRadius, cornerRadius, Path.Direction.CW)
-        canvas.clipPath(clipPath)
-        canvas.drawBitmap(photo, srcRect, dst, imagePaint)
-        canvas.restoreToCount(save)
+        val l = innerL + offX.coerceIn(0f, freeX)
+        val t = innerT + offY.coerceIn(0f, freeY)
+        destF.set(l, t, l + fw, t + fh)
+        canvas.drawBitmap(photo, null, destF, imagePaint)
     }
 
     companion object {

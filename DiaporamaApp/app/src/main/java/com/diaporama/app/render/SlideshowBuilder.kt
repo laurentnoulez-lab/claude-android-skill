@@ -177,8 +177,11 @@ class SlideshowBuilder(
 
     private fun prepareScreen(uris: List<Uri>, seed: Int): Screen {
         val count = uris.size
-        val rects = Layouts.forCount(count, config.width, config.height, margin = 40f, gap = 16f)
         val random = Random(seed * 977 + 13)
+
+        // Randomly alternate between the layouts available for this count.
+        val variant = random.nextInt(Layouts.variantCount(count))
+        val rects = Layouts.forCount(count, config.width, config.height, margin = 40f, gap = 16f, variant = variant)
 
         val photos = uris.mapIndexed { i, uri ->
             val rect = rects[i]
@@ -194,11 +197,13 @@ class SlideshowBuilder(
     }
 
     private fun generateMotion(random: Random): KenBurns {
+        // Whole photo stays visible: breathe between a slightly smaller size and
+        // the fully-fitted size (factor <= 1), and drift inside the free space.
         val zoomIn = random.nextBoolean()
-        val delta = 0.06f + random.nextFloat() * 0.05f
-        val zStart = if (zoomIn) 1.0f else 1.0f + delta
-        val zEnd = if (zoomIn) 1.0f + delta else 1.0f
-        fun pan() = (random.nextFloat() * 2f - 1f) * 0.6f
+        val small = 0.86f + random.nextFloat() * 0.04f
+        val zStart = if (zoomIn) small else 1.0f
+        val zEnd = if (zoomIn) 1.0f else small
+        fun pan() = random.nextFloat() * 2f - 1f
         return KenBurns(
             zoomStart = zStart,
             zoomEnd = zEnd,
