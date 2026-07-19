@@ -329,8 +329,9 @@ export default function App() {
             </Pressable>
           </View>
           <Text style={styles.hintRow}>
-            L'export Excel contient les formules dans les cellules : modifiez les entrées dans le
-            classeur pour recalculer.
+            Le classeur Excel est interactif : choix du profil et du matériau par listes
+            déroulantes, toutes les formules dans les cellules (y compris Qmax, régime bicritique
+            et les 2 taux de remplissage) et graphique natif — utilisable comme l'application.
           </Text>
         </Card>
 

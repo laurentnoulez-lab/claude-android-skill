@@ -33,11 +33,23 @@ hydraulique, `J` la pente, `A` la section mouillée et `P` le périmètre mouill
 **Exports :**
 - **Rapport PDF** : entrées, résultats (y compris régime bicritique) et courbes
   hydrauliques avec le(s) point(s) de fonctionnement
-- **Classeur Excel** avec les **formules inscrites dans les cellules**
-  (feuilles « Calcul » et « Courbe ») : modifier les cellules d'entrée dans le
-  classeur recalcule tous les résultats. Le point de fonctionnement est exporté
-  en valeur (résolution numérique, la courbe n'étant pas monotone) ; pour
-  l'ovoïde, A et P sont des valeurs exactes intégrées numériquement.
+- **Classeur Excel interactif** — le classeur reproduit l'application :
+  - feuille **« Calcul »** : profil et matériau par **listes déroulantes**
+    (validation de données), toutes les dimensions saisissables, et **tous les
+    résultats en formules** — section pleine (`A`, `P`, `Rh`, `Vc`, `Qc`),
+    `Qmax` (`=MAX` sur la courbe), régime (surface libre / **bicritique** /
+    en charge / débordement), **les deux taux de remplissage** et vitesses
+    (interpolation `MATCH`/`INDEX` sur la table à 1 %), pente minimale et
+    dimension minimale ;
+  - feuille **« Courbe »** : table hydraulique à pas de 1 %, un bloc de
+    colonnes par profil (l'**ovoïde en formules analytiques exactes** par
+    segments circulaires), bloc actif choisi par `CHOOSE` sur l'index profil ;
+  - **graphique Excel natif** V/Vc et Q/Qc vs remplissage avec le(s)
+    point(s) de fonctionnement dynamiques ;
+  - feuille **« Matériaux »** alimentant la liste déroulante et le `VLOOKUP`
+    du coefficient K.
+  Changer le profil, une dimension, K, J ou Q dans le classeur recalcule tout,
+  graphique compris — exactement comme dans l'application.
 
 > Le calcul s'adapte aux entrées disponibles : par exemple la pente minimale est
 > donnée même sans pente saisie, et la taille minimale même sans dimension saisie.
