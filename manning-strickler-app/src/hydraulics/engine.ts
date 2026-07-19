@@ -27,13 +27,19 @@ export interface FullState {
   A: number; // full area (m²)
   P: number; // full perimeter (m)
   R: number; // full hydraulic radius (m)
+  Qmax: number; // true maximum free-surface discharge (m³/s), ≈1.076·Q at ~94 % for a circle
+  fillAtQmax: number; // filling ratio (0..1) where Qmax occurs
 }
 
 export interface OperatingState {
-  fill: number; // filling ratio 0..1 (capped display done in UI)
+  fill: number; // filling ratio 0..1 (lowest solution)
   V: number; // flow velocity at the operating point (m/s)
   y: number; // water depth (m)
-  surcharged: boolean; // true if Q > Qc (pipe "en charge")
+  surcharged: boolean; // true if Q > Qmax (pipe "en charge" / channel overflowing)
+  bicritical: boolean; // true when a second free-surface solution exists (Qc < Q ≤ Qmax)
+  fillAlt?: number; // alternate (higher) filling ratio in the bicritical band
+  VAlt?: number; // velocity at the alternate operating point (m/s)
+  yAlt?: number; // alternate water depth (m)
 }
 
 export interface CurvePoint {
@@ -105,7 +111,19 @@ export function computeResults(inputs: EngineInputs): EngineResults {
     const Vc = K! * Math.pow(R_f, TWO_THIRDS) * Math.sqrt(J!);
     const Qc = Vc * A_f;
     if (Number.isFinite(Vc) && Number.isFinite(Qc)) {
-      out.full = { Q: Qc, V: Vc, A: A_f, P: P_f, R: R_f };
+      // True maximum free-surface discharge. For closed conduits Q(y) peaks
+      // below the crown (≈94 % for a circle) then falls back to Qc at 100 %:
+      // that non-monotonic stretch is the bicritical band [Qc, Qmax].
+      let Qmax = Qc;
+      let fillAtQmax = 1;
+      for (const row of rows) {
+        const qi = rowDischarge(row.A, row.P, K!, J!);
+        if (qi > Qmax) {
+          Qmax = qi;
+          fillAtQmax = row.y / geometry.yMax;
+        }
+      }
+      out.full = { Q: Qc, V: Vc, A: A_f, P: P_f, R: R_f, Qmax, fillAtQmax };
     }
   }
 
@@ -120,33 +138,52 @@ export function computeResults(inputs: EngineInputs): EngineResults {
   // --- Operating point + minimum size (needs K + slope + flow) ---
   if (isPos(K) && isPos(J) && isPos(Q) && out.full && out.full.Q > 0) {
     const Qfull = out.full.Q;
-    const surcharged = Q! > Qfull;
+    const surcharged = Q! > out.full.Qmax;
 
     if (surcharged) {
-      // Pressurised: water fills the section, velocity from full area.
-      out.operating = { fill: 1, V: A_f > 0 ? Q! / A_f : 0, y: geometry.yMax, surcharged: true };
+      // Beyond the true maximum: pressurised (closed) / overflowing (open).
+      out.operating = {
+        fill: 1,
+        V: A_f > 0 ? Q! / A_f : 0,
+        y: geometry.yMax,
+        surcharged: true,
+        bicritical: false,
+      };
     } else {
-      // Find the first (lowest) depth whose discharge reaches Q.
-      let yOp = geometry.yMax;
+      // Q(y) is non-monotonic for closed conduits, so collect EVERY depth
+      // where the discharge curve crosses Q. In the bicritical band
+      // (Qc < Q ≤ Qmax) this yields two solutions: one on the rising branch
+      // (~80–94 %) and one on the falling branch (94–100 %).
+      const sols: number[] = [];
       let prevQ = 0;
-      let prevY = 0;
       for (let i = 1; i < rows.length; i++) {
         const qi = rowDischarge(rows[i].A, rows[i].P, K!, J!);
-        if (qi >= Q!) {
+        if ((prevQ < Q! && qi >= Q!) || (prevQ >= Q! && qi < Q!)) {
           const t = qi === prevQ ? 0 : (Q! - prevQ) / (qi - prevQ);
-          yOp = prevY + t * (rows[i].y - prevY);
-          break;
+          sols.push(rows[i - 1].y + t * (rows[i].y - rows[i - 1].y));
         }
         prevQ = qi;
-        prevY = rows[i].y;
       }
+      const yOp = sols.length > 0 ? sols[0] : geometry.yMax;
+      const yAlt = sols.length > 1 ? sols[sols.length - 1] : undefined;
+      // Ignore a numerically-duplicated crossing right at the peak.
+      const distinctAlt =
+        yAlt !== undefined && Math.abs(yAlt - yOp) / geometry.yMax > 0.005 ? yAlt : undefined;
+
       const Aop = areaAtDepth(geometry, yOp);
       out.operating = {
         fill: clamp01(yOp / geometry.yMax),
         V: Aop > 0 ? Q! / Aop : 0,
         y: yOp,
         surcharged: false,
+        bicritical: distinctAlt !== undefined,
       };
+      if (distinctAlt !== undefined) {
+        const Aalt = areaAtDepth(geometry, distinctAlt);
+        out.operating.fillAlt = clamp01(distinctAlt / geometry.yMax);
+        out.operating.VAlt = Aalt > 0 ? Q! / Aalt : 0;
+        out.operating.yAlt = distinctAlt;
+      }
     }
 
     // Minimum size: scale all linear dimensions by s so the section runs full

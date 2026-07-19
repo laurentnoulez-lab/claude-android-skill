@@ -8,14 +8,19 @@ import {
   useWindowDimensions,
   StatusBar,
   Platform,
+  Pressable,
+  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Field, { parseNum } from './src/components/Field';
-import FlowChart from './src/components/FlowChart';
+import FlowChart, { OperatingChartPoint } from './src/components/FlowChart';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { MATERIALS } from './src/hydraulics/materials';
 import { ProfileId, ProfileParams } from './src/hydraulics/profiles';
 import { computeResults } from './src/hydraulics/engine';
+import { ExportData } from './src/export/exportData';
+import { exportPdf } from './src/export/pdf';
+import { exportExcel } from './src/export/excel';
 
 const PROFILES: { id: ProfileId; label: string }[] = [
   { id: 'circular', label: 'Circulaire fermé' },
@@ -86,15 +91,41 @@ export default function App() {
     ],
   );
 
-  const operatingForChart = (() => {
-    if (!results.operating || !results.full) return null;
-    if (!(results.full.V > 0) || !(results.full.Q > 0)) return null;
-    const fill = Math.min(Math.max(results.operating.fill, 0), 1);
-    const vRatio = results.operating.V / results.full.V;
-    const qRatio = (Q ?? 0) / results.full.Q;
-    if (!Number.isFinite(fill) || !Number.isFinite(vRatio) || !Number.isFinite(qRatio)) return null;
-    return { fill, vRatio, qRatio };
+  const operatingForChart: OperatingChartPoint[] = (() => {
+    const o = results.operating;
+    const f = results.full;
+    if (!o || !f || !(f.V > 0) || !(f.Q > 0)) return [];
+    const qRatio = (Q ?? 0) / f.Q;
+    const pts: OperatingChartPoint[] = [
+      { fill: Math.min(Math.max(o.fill, 0), 1), vRatio: o.V / f.V, qRatio },
+    ];
+    if (o.bicritical && o.fillAlt !== undefined && o.VAlt !== undefined) {
+      pts.push({ fill: o.fillAlt, vRatio: o.VAlt / f.V, qRatio, alt: true });
+    }
+    return pts.filter((p) =>
+      [p.fill, p.vRatio, p.qRatio].every(Number.isFinite),
+    );
   })();
+
+  const exportData: ExportData = {
+    profile,
+    profileLabel: PROFILES.find((p) => p.id === profile)?.label ?? profile,
+    params,
+    materialName: MATERIALS.find((m) => m.id === materialId)?.name ?? 'Personnalisé',
+    K,
+    slopePct,
+    Q_lps,
+    results,
+  };
+
+  const runExport = async (kind: 'pdf' | 'excel') => {
+    try {
+      if (kind === 'pdf') await exportPdf(exportData);
+      else await exportExcel(exportData);
+    } catch (e: any) {
+      Alert.alert('Export impossible', e?.message ?? 'Erreur inconnue');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -188,6 +219,13 @@ export default function App() {
                 value={`${fmt(results.full.Q * 1000, 1)} L/s`}
                 sub={`${fmt(results.full.Q, 4)} m³/s · Vc = ${fmt(results.full.V, 3)} m/s`}
               />
+              {results.geometry?.closed && (
+                <Result
+                  label={`Débit maximal Qmax (à ${fmt(results.full.fillAtQmax * 100, 1)} % de remplissage)`}
+                  value={`${fmt(results.full.Qmax * 1000, 1)} L/s`}
+                  sub={`zone bicritique entre Qc et Qmax : deux hauteurs possibles pour un même débit`}
+                />
+              )}
             </>
           )}
           {!results.full && results.geometry && (
@@ -196,20 +234,40 @@ export default function App() {
 
           {results.operating && (
             <>
-              <Result
-                label="Taux de remplissage (au débit Q)"
-                value={
-                  results.operating.surcharged
-                    ? '≥ 100 % (en charge)'
-                    : `${fmt(results.operating.fill * 100, 1)} %`
-                }
-                sub={`hauteur d'eau ≈ ${fmt(results.operating.y * 1000, 0)} mm`}
+              {results.operating.bicritical && results.operating.fillAlt !== undefined ? (
+                <>
+                  <Result
+                    label="Taux de remplissage (régime bicritique : 2 solutions)"
+                    value={`${fmt(results.operating.fill * 100, 1)} % ou ${fmt(results.operating.fillAlt * 100, 1)} %`}
+                    sub={`hauteurs d'eau ≈ ${fmt(results.operating.y * 1000, 0)} mm ou ${fmt((results.operating.yAlt ?? 0) * 1000, 0)} mm`}
+                  />
+                  <Result
+                    label="Vitesse d'écoulement (2 solutions)"
+                    value={`${fmt(results.operating.V, 3)} ou ${fmt(results.operating.VAlt ?? NaN, 3)} m/s`}
+                  />
+                </>
+              ) : (
+                <>
+                  <Result
+                    label="Taux de remplissage (au débit Q)"
+                    value={
+                      results.operating.surcharged
+                        ? '≥ 100 %'
+                        : `${fmt(results.operating.fill * 100, 1)} %`
+                    }
+                    sub={`hauteur d'eau ≈ ${fmt(results.operating.y * 1000, 0)} mm`}
+                  />
+                  <Result
+                    label="Vitesse d'écoulement"
+                    value={`${fmt(results.operating.V, 3)} m/s`}
+                  />
+                </>
+              )}
+              <Badge
+                surcharged={results.operating.surcharged}
+                bicritical={results.operating.bicritical}
+                closed={results.geometry?.closed ?? true}
               />
-              <Result
-                label="Vitesse d'écoulement"
-                value={`${fmt(results.operating.V, 3)} m/s`}
-              />
-              <Badge surcharged={results.operating.surcharged} />
             </>
           )}
           {!results.operating && results.geometry && (
@@ -252,8 +310,32 @@ export default function App() {
           )}
         </Card>
 
+        {/* --- Export --- */}
+        <Card title="Export">
+          <View style={styles.exportRow}>
+            <Pressable
+              style={[styles.exportBtn, !results.geometry && styles.exportBtnDisabled]}
+              disabled={!results.geometry}
+              onPress={() => runExport('pdf')}
+            >
+              <Text style={styles.exportBtnText}>📄 Rapport PDF</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.exportBtn, !results.geometry && styles.exportBtnDisabled]}
+              disabled={!results.geometry}
+              onPress={() => runExport('excel')}
+            >
+              <Text style={styles.exportBtnText}>📊 Classeur Excel</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.hintRow}>
+            L'export Excel contient les formules dans les cellules : modifiez les entrées dans le
+            classeur pour recalculer.
+          </Text>
+        </Card>
+
         <Text style={styles.footer}>
-          V = K · Rh^(2/3) · J^(1/2) · A.  Qc = débit à remplissage 100 %.
+          V = K · Rh^(2/3) · J^(1/2) · A.  Qc = débit à remplissage 100 %. Qmax = débit maximal réel.
         </Text>
       </ScrollView>
       </ErrorBoundary>
@@ -359,12 +441,29 @@ function Hint({ text }: { text: string }) {
   return <Text style={styles.hintRow}>ⓘ {text}</Text>;
 }
 
-function Badge({ surcharged }: { surcharged: boolean }) {
+function Badge({
+  surcharged,
+  bicritical,
+  closed,
+}: {
+  surcharged: boolean;
+  bicritical: boolean;
+  closed: boolean;
+}) {
+  let style = styles.badgeGood;
+  let text = '✓ Écoulement à surface libre';
+  if (surcharged) {
+    style = styles.badgeBad;
+    text = closed
+      ? '⚠ Canalisation EN CHARGE (débit maximal Qmax dépassé)'
+      : '⚠ DÉBORDEMENT (capacité du caniveau dépassée)';
+  } else if (bicritical) {
+    style = styles.badgeWarn;
+    text = '⚠ Régime BICRITIQUE (Qc < Q ≤ Qmax) : deux taux de remplissage possibles';
+  }
   return (
-    <View style={[styles.badge, surcharged ? styles.badgeBad : styles.badgeGood]}>
-      <Text style={styles.badgeText}>
-        {surcharged ? '⚠ Canalisation EN CHARGE (débit critique dépassé)' : '✓ Écoulement à surface libre'}
-      </Text>
+    <View style={[styles.badge, style]}>
+      <Text style={styles.badgeText}>{text}</Text>
     </View>
   );
 }
@@ -436,6 +535,18 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 8, padding: 10, marginTop: 8 },
   badgeGood: { backgroundColor: '#e3f4e8' },
   badgeBad: { backgroundColor: '#fbe4e6' },
+  badgeWarn: { backgroundColor: '#fdf3e7' },
   badgeText: { fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'center' },
+  exportRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  exportBtn: {
+    flex: 1,
+    backgroundColor: '#1f4e79',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  exportBtnDisabled: { backgroundColor: '#a9b6c4' },
+  exportBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   footer: { fontSize: 11, color: '#999', textAlign: 'center', marginTop: 4 },
 });

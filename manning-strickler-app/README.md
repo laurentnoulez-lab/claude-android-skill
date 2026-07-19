@@ -20,11 +20,24 @@ hydraulique, `J` la pente, `A` la section mouillée et `P` le périmètre mouill
 
 **Sorties :**
 - **Débit critique `Qc`** (remplissage 100 %) et vitesse à pleine section `Vc`
-- **Taux de remplissage** pour le débit `Q` saisi
-- **Vitesse d'écoulement** au point de fonctionnement
-- Indication **« en charge »** si le débit critique est dépassé
+- **Débit maximal `Qmax`** (≈ 1,076·Qc à ~94 % pour une conduite circulaire)
+- **Taux de remplissage** pour le débit `Q` saisi — avec gestion du **régime
+  bicritique** : pour `Qc < Q ≤ Qmax` (sections fermées, remplissage ~80–100 %),
+  la courbe de débit n'est pas monotone et l'application donne **les deux
+  hauteurs d'eau possibles** (et les deux vitesses)
+- **Vitesse d'écoulement** au(x) point(s) de fonctionnement
+- Indication **« en charge »** (fermé) / **« débordement »** (ouvert) si `Qmax` est dépassé
 - **Pente minimale** pour le profil indiqué (n'a pas besoin de la pente saisie)
 - **Diamètre / taille minimal(e)** pour la pente indiquée (n'a pas besoin de la dimension saisie)
+
+**Exports :**
+- **Rapport PDF** : entrées, résultats (y compris régime bicritique) et courbes
+  hydrauliques avec le(s) point(s) de fonctionnement
+- **Classeur Excel** avec les **formules inscrites dans les cellules**
+  (feuilles « Calcul » et « Courbe ») : modifier les cellules d'entrée dans le
+  classeur recalcule tous les résultats. Le point de fonctionnement est exporté
+  en valeur (résolution numérique, la courbe n'étant pas monotone) ; pour
+  l'ovoïde, A et P sont des valeurs exactes intégrées numériquement.
 
 > Le calcul s'adapte aux entrées disponibles : par exemple la pente minimale est
 > donnée même sans pente saisie, et la taille minimale même sans dimension saisie.

@@ -3,11 +3,18 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Line, Polyline, Circle, Text as SvgText, Rect } from 'react-native-svg';
 import { CurvePoint } from '../hydraulics/engine';
 
+export interface OperatingChartPoint {
+  fill: number; // 0..1
+  vRatio: number; // V / Vc
+  qRatio: number; // Q / Qc
+  alt?: boolean; // true for the second (bicritical) solution — drawn hollow
+}
+
 interface Props {
   width: number;
   curve: CurvePoint[];
-  /** Operating point as ratios, fill in 0..1; null when not computable. */
-  operating: { fill: number; vRatio: number; qRatio: number } | null;
+  /** Operating point(s) as ratios; empty when not computable. Two points in the bicritical band. */
+  operating: OperatingChartPoint[];
 }
 
 const V_COLOR = '#e07a3f'; // V/Vc curve
@@ -44,7 +51,7 @@ export default function FlowChart({ width, curve, operating }: Props) {
   // X axis range from data, capped so extreme inputs cannot explode the grid.
   let xMaxData = 1;
   for (const p of pts) xMaxData = Math.max(xMaxData, p.vRatio, p.qRatio);
-  if (operating) xMaxData = Math.max(xMaxData, fin(operating.vRatio), fin(operating.qRatio));
+  for (const op of operating) xMaxData = Math.max(xMaxData, fin(op.vRatio), fin(op.qRatio));
   const xMax = clamp(Math.ceil(xMaxData / 0.2) * 0.2, 1.2, 2.6);
 
   const sx = (r: number) => clamp(padL + (fin(r) / xMax) * plotW, padL, padL + plotW);
@@ -61,8 +68,8 @@ export default function FlowChart({ width, curve, operating }: Props) {
   }
   const yTicks = [0, 20, 40, 60, 80, 100];
 
-  // Operating point clamped onto the plot; flag when it lies beyond the axis.
-  const opBeyond = operating ? Math.max(operating.vRatio, operating.qRatio) > xMax + 1e-6 : false;
+  // Operating points clamped onto the plot; flag when one lies beyond the axis.
+  const opBeyond = operating.some((op) => Math.max(op.vRatio, op.qRatio) > xMax + 1e-6);
 
   return (
     <View>
@@ -95,21 +102,35 @@ export default function FlowChart({ width, curve, operating }: Props) {
         {qPts.length > 0 && <Polyline points={qPts} fill="none" stroke={Q_COLOR} strokeWidth={2} />}
         {vPts.length > 0 && <Polyline points={vPts} fill="none" stroke={V_COLOR} strokeWidth={2} />}
 
-        {operating && (
-          <>
+        {operating.map((op, i) => (
+          <React.Fragment key={`op${i}`}>
             <Line
               x1={padL}
-              y1={sy(operating.fill)}
+              y1={sy(op.fill)}
               x2={padL + plotW}
-              y2={sy(operating.fill)}
+              y2={sy(op.fill)}
               stroke={POINT_COLOR}
               strokeDasharray="5 3"
               strokeWidth={1}
             />
-            <Circle cx={sx(operating.qRatio)} cy={sy(operating.fill)} r={5} fill={Q_COLOR} stroke="#fff" />
-            <Circle cx={sx(operating.vRatio)} cy={sy(operating.fill)} r={5} fill={V_COLOR} stroke="#fff" />
-          </>
-        )}
+            <Circle
+              cx={sx(op.qRatio)}
+              cy={sy(op.fill)}
+              r={5}
+              fill={op.alt ? '#fff' : Q_COLOR}
+              stroke={op.alt ? Q_COLOR : '#fff'}
+              strokeWidth={2}
+            />
+            <Circle
+              cx={sx(op.vRatio)}
+              cy={sy(op.fill)}
+              r={5}
+              fill={op.alt ? '#fff' : V_COLOR}
+              stroke={op.alt ? V_COLOR : '#fff'}
+              strokeWidth={2}
+            />
+          </React.Fragment>
+        ))}
 
         <SvgText x={padL + plotW / 2} y={height - 4} fontSize={11} fill="#333" textAnchor="middle">
           V/Vc et Q/Qc
@@ -122,6 +143,11 @@ export default function FlowChart({ width, curve, operating }: Props) {
         <Legend color={POINT_COLOR} label="Point d'écoulement" />
       </View>
       <Text style={styles.axisNote}>Ordonnée : taux de remplissage (%)</Text>
+      {operating.length > 1 && (
+        <Text style={styles.axisNote}>
+          Régime bicritique : point plein = solution basse, point creux = solution haute
+        </Text>
+      )}
       {opBeyond && (
         <Text style={styles.axisNote}>
           (point d'écoulement au-delà de l'axe : débit critique largement dépassé)
