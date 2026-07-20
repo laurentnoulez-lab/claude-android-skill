@@ -581,12 +581,15 @@ async function injectValidationAndChart(base64: string, c: Caches): Promise<stri
     `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.PROFIL}"><formula1>"${PROFILE_NAMES.join(',')}"</formula1></dataValidation>` +
     `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.MAT}"><formula1>'Matériaux'!$A$2:$A$12</formula1></dataValidation>` +
     `</dataValidations>`;
-  // dataValidations must precede pageMargins (schema order); drawing goes last.
-  if (sheetXml.includes('<pageMargins')) {
-    sheetXml = sheetXml.replace('<pageMargins', `${validations}<pageMargins`);
-  } else {
-    sheetXml = sheetXml.replace('</worksheet>', `${validations}</worksheet>`);
+  // Schema order: dataValidations must precede hyperlinks/printOptions/
+  // pageMargins/…/ignoredErrors. Insert before the first such element present.
+  const followers = ['<hyperlinks', '<printOptions', '<pageMargins', '<pageSetup', '<headerFooter', '<rowBreaks', '<colBreaks', '<customProperties', '<cellWatches', '<ignoredErrors', '<smartTags', '<drawing', '</worksheet>'];
+  let anchorPos = sheetXml.length;
+  for (const tag of followers) {
+    const p = sheetXml.indexOf(tag);
+    if (p !== -1 && p < anchorPos) anchorPos = p;
   }
+  sheetXml = sheetXml.slice(0, anchorPos) + validations + sheetXml.slice(anchorPos);
   sheetXml = sheetXml.replace('</worksheet>', `<drawing r:id="rIdDrw1"/></worksheet>`);
   if (!sheetXml.includes('xmlns:r=')) {
     sheetXml = sheetXml.replace(
@@ -632,7 +635,16 @@ async function injectValidationAndChart(base64: string, c: Caches): Promise<stri
   // 4) Chart part
   zip.file('xl/charts/chart1.xml', buildChartXml(c));
 
-  // 5) Content types
+  // 5) Force a full recalculation when Excel opens the file, so every value
+  // (including profiles other than the one active at export time) is fresh.
+  const wbPath = 'xl/workbook.xml';
+  let wbXml = await zip.file(wbPath)!.async('string');
+  if (!wbXml.includes('<calcPr')) {
+    wbXml = wbXml.replace('</workbook>', `<calcPr calcId="171027" fullCalcOnLoad="1"/></workbook>`);
+    zip.file(wbPath, wbXml);
+  }
+
+  // 6) Content types
   const ctPath = '[Content_Types].xml';
   let ct = await zip.file(ctPath)!.async('string');
   ct = ct.replace(
@@ -692,7 +704,7 @@ function buildChartXml(c: Caches): string {
     `<c:valAx><c:axId val="111111111"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/>` +
     `<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>V/Vc et Q/Qc</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
     `<c:numFmt formatCode="0.0" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="222222222"/></c:valAx>` +
-    `<c:valAx><c:axId val="222222222"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/><c:max val="100"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>` +
+    `<c:valAx><c:axId val="222222222"/><c:scaling><c:orientation val="minMax"/><c:max val="100"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>` +
     `<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Taux de remplissage (%)</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
     `<c:numFmt formatCode="0" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="111111111"/></c:valAx>` +
     `</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`
