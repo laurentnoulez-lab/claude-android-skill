@@ -17,7 +17,7 @@ import FlowChart, { OperatingChartPoint } from './src/components/FlowChart';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { MATERIALS } from './src/hydraulics/materials';
 import { ProfileId, ProfileParams } from './src/hydraulics/profiles';
-import { computeResults } from './src/hydraulics/engine';
+import { computeResults, FlowRegime } from './src/hydraulics/engine';
 import { ExportData } from './src/export/exportData';
 import { exportPdf } from './src/export/pdf';
 import { exportExcel } from './src/export/excel';
@@ -157,6 +157,12 @@ export default function App() {
                 tone={op?.surcharged ? 'danger' : op?.bicritical ? 'warn' : 'ok'}
               />
               <Stat label="Vitesse" value={op ? fmt(op.V, 2) : '—'} unit="m/s" tone="ok" />
+              <Stat
+                label="Froude"
+                value={op?.froude !== undefined ? fmt(op.froude, 2) : '—'}
+                unit={op?.regime ? REGIME_SHORT[op.regime] : '—'}
+                tone={op?.regime === 'torrentiel' ? 'warn' : op?.regime === 'critique' ? 'danger' : 'ok'}
+              />
             </View>
           )}
 
@@ -282,6 +288,7 @@ export default function App() {
                     <Result label="Vitesse d'écoulement" value={`${fmt(op.V, 3)} m/s`} />
                   </>
                 )}
+                <FroudeRows op={op} />
                 <Banner
                   surcharged={op.surcharged}
                   bicritical={op.bicritical}
@@ -420,6 +427,83 @@ function ProfileInputs(props: any) {
     default:
       return null;
   }
+}
+
+const REGIME_SHORT: Record<FlowRegime, string> = {
+  fluvial: 'fluvial',
+  critique: 'critique',
+  torrentiel: 'torrent.',
+};
+const REGIME_LABEL: Record<FlowRegime, string> = {
+  fluvial: 'FLUVIAL (subcritique)',
+  critique: 'CRITIQUE',
+  torrentiel: 'TORRENTIEL (supercritique)',
+};
+
+/**
+ * Froude number and the resulting regime. Fr = V / sqrt(g·Dh) with Dh = A/T.
+ * Not shown for pressurised flow, nor when the free surface closes on itself
+ * at the crown of a closed conduit (T -> 0), where Fr is meaningless.
+ */
+function FroudeRows({ op }: { op: any }) {
+  if (op.froude === undefined) {
+    return (
+      <Hint
+        text={
+          op.surcharged
+            ? 'Nombre de Froude non défini : écoulement en charge (pas de surface libre).'
+            : 'Nombre de Froude non défini : la surface libre se referme (section pleine).'
+        }
+      />
+    );
+  }
+  const two = op.bicritical && op.froudeAlt !== undefined;
+  return (
+    <>
+      <Result
+        label="Nombre de Froude Fr"
+        hint={two ? '2 solutions' : 'Fr = V / √(g·A/T)'}
+        value={two ? `${fmt(op.froude, 3)}  ou  ${fmt(op.froudeAlt, 3)}` : fmt(op.froude, 3)}
+        sub={
+          two
+            ? `${REGIME_LABEL[op.regime as FlowRegime]} / ${REGIME_LABEL[op.regimeAlt as FlowRegime]}`
+            : undefined
+        }
+      />
+      {!two && (
+        <View
+          style={[
+            styles.banner,
+            {
+              backgroundColor:
+                op.regime === 'torrentiel' ? theme.warnBg : op.regime === 'critique' ? theme.dangerBg : theme.okBg,
+              borderLeftColor:
+                op.regime === 'torrentiel' ? theme.warn : op.regime === 'critique' ? theme.danger : theme.ok,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.bannerTitle,
+              {
+                color:
+                  op.regime === 'torrentiel' ? theme.warn : op.regime === 'critique' ? theme.danger : theme.ok,
+              },
+            ]}
+          >
+            Régime {REGIME_LABEL[op.regime as FlowRegime]}
+          </Text>
+          <Text style={styles.bannerDetail}>
+            {op.regime === 'fluvial'
+              ? 'Fr < 1 : écoulement lent, contrôlé par l’aval.'
+              : op.regime === 'torrentiel'
+                ? 'Fr > 1 : écoulement rapide, contrôlé par l’amont ; risque de ressaut hydraulique.'
+                : 'Fr ≈ 1 : régime critique, écoulement instable — à éviter en conception.'}
+          </Text>
+        </View>
+      )}
+    </>
+  );
 }
 
 // --- UI building blocks ----------------------------------------------------

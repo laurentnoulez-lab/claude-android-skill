@@ -40,9 +40,10 @@ const R = {
   SEC2: 16, MAT: 17, K: 18, JPCT: 19, J: 20, QL: 21, QM: 22,
   SEC3: 24, A: 25, P: 26, RHY: 27, VC: 28, QCM: 29, QCL: 30, QMAX: 31, FQMAX: 32,
   SEC4: 34, REGIME: 35, PEAK: 36, ILOW: 37, TLOW: 38, FLOW: 39, ALOW: 40, VLOW: 41,
-  BIC: 42, POSH: 43, IH: 44, TH2: 45, FH: 46, AH: 47, VH: 48,
-  SEC5: 50, MINJ: 51, MIND: 52,
-  SEC6: 54, NOTE1: 55, NOTE2: 56, CHART_TOP: 58, CHART_BOTTOM: 88,
+  TWLOW: 42, FRLOW: 43, REGFR: 44,
+  BIC: 45, POSH: 46, IH: 47, TH2: 48, FH: 49, AH: 50, VH: 51, TWH: 52, FRH: 53, REGFRH: 54,
+  SEC5: 56, MINJ: 57, MIND: 58,
+  SEC6: 60, NOTE1: 61, NOTE2: 62, CHART_TOP: 64, CHART_BOTTOM: 94,
 };
 /** Ovoid geometry constants: sheet "Constantes", labels in A, values in B. */
 const OV = { R: 5, r: 6, rho: 7, b: 8, a: 9, yb: 10, yt: 11, Ayb: 12, Ayt: 13, Pyb: 14, Pyt: 15, Afull: 16, Pfull: 17, S2yb: 18, S3yt: 19, As2: 20, As3: 21, mTrap: 22 };
@@ -106,6 +107,9 @@ interface Caches {
   rectA: number[]; rectP: number[]; trapA: number[]; trapP: number[];
   hSel: number[]; selA: number[]; selP: number[]; rh: number[]; v: number[]; q: number[];
   tFlag: number[]; uFlag: number[];
+  tCirc: number[]; tOv: number[]; tRect: number[]; tTrap: number[]; tSel: number[];
+  froude: (number | null)[];
+  twLow: number; frLow: number | null; twH: number; frH: number | null;
   qRatio: (number | null)[]; vRatio: (number | null)[];
   // operating point
   regime: string; peak: number; iLow: number; tLow: number; fillLow: number | null;
@@ -199,6 +203,8 @@ function computeCaches(data: ExportData): Caches {
   const circA: number[] = [], circP: number[] = [], theta: number[] = [];
   const ovA: number[] = [], ovP: number[] = [], hOv: number[] = [];
   const rectA: number[] = [], rectP: number[] = [], trapA: number[] = [], trapP: number[] = [];
+  const tCirc: number[] = [], tOv: number[] = [], tRect: number[] = [], tTrap: number[] = [];
+  const tSel: number[] = [], froude: (number | null)[] = [];
   const hSel: number[] = [], selA: number[] = [], selP: number[] = [];
   const rh: number[] = [], v: number[] = [], q: number[] = [];
   const qRatio: (number | null)[] = [], vRatio: (number | null)[] = [];
@@ -231,6 +237,19 @@ function computeCaches(data: ExportData): Caches {
     trapA.push((dims.TB + mTrap * ht) * ht);
     trapP.push(dims.TB + 2 * ht * Math.sqrt(1 + mTrap * mTrap));
     hSel.push(f * Hmax);
+    // Free-surface top width per profile (same geometry as the areas above).
+    tCirc.push(dims.D * Math.sin(th / 2));
+    const hh = ho;
+    let tw = 0;
+    if (dims.L > 0) {
+      const [Rr, rr, rho, bb, aa] = [ov[OV.R], ov[OV.r], ov[OV.rho], ov[OV.b], ov[OV.a]];
+      if (hh <= ov[OV.yb]) tw = 2 * sq(rr * rr - (hh - rr) * (hh - rr));
+      else if (hh <= ov[OV.yt]) tw = 2 * (aa + sq(rho * rho - (hh - bb) * (hh - bb)));
+      else tw = 2 * sq(Rr * Rr - (hh - 2 * Rr) * (hh - 2 * Rr));
+    }
+    tOv.push(tw);
+    tRect.push(dims.RB);
+    tTrap.push(dims.TB + 2 * mTrap * (f * dims.TH));
     const A = [0, circA[i - 1], ovA[i - 1], rectA[i - 1], trapA[i - 1]][pidx] ?? 0;
     const P = [0, circP[i - 1], ovP[i - 1], rectP[i - 1], trapP[i - 1]][pidx] ?? 0;
     selA.push(A);
@@ -242,7 +261,13 @@ function computeCaches(data: ExportData): Caches {
     q.push(vi * A * 1000);
     qRatio.push(QcL > 0 ? q[i - 1] / QcL : null);
     vRatio.push(Vc > 0 ? vi / Vc : null);
+    const T = [0, tCirc[i - 1], tOv[i - 1], tRect[i - 1], tTrap[i - 1]][pidx] ?? 0;
+    tSel.push(T);
+    froude.push(T > 0 && A > 0 ? vi / Math.sqrt(9.81 * (A / T)) : null);
   }
+  /** Interpolate a per-row column at the operating index/fraction. */
+  const interp = (col: number[], idx: number, t: number) =>
+    idx <= 0 ? col[0] : col[idx - 1] + t * ((col[Math.min(idx, N_ROWS - 1)] ?? col[idx - 1]) - col[idx - 1]);
 
   // Qmax and operating-point caches (mirrors the sheet formulas)
   let QmaxL = 0, peak = N_ROWS;
@@ -285,6 +310,15 @@ function computeCaches(data: ExportData): Caches {
     aH = selA[iH - 1] + tH * (selA[Math.min(iH, N_ROWS - 1)] - selA[iH - 1]);
     vH = aH > 0 ? QM / aH : 0;
   }
+  // Froude at the operating point(s): Fr = V / sqrt(g·A/T)
+  const twLow = surcharged ? 0 : interp(tSel, iLow, tLow);
+  const frLow =
+    !surcharged && hasQ && twLow > 0 && aLow > 0 && vLow !== null
+      ? vLow / Math.sqrt(9.81 * (aLow / twLow))
+      : null;
+  const twH = bic ? interp(tSel, iH, tH) : 0;
+  const frH = bic && twH > 0 && aH > 0 && vH !== null ? vH / Math.sqrt(9.81 * (aH / twH)) : null;
+
   const regime = !hasQ || Vc <= 0 ? '' : surcharged ? (closed ? 'EN CHARGE (Q > Qmax)' : 'DÉBORDEMENT (Q > Qmax)') : bic ? 'BICRITIQUE : 2 solutions' : 'Écoulement à surface libre';
   const minJ = hasQ && K > 0 && Afull > 0 && Rh > 0 ? Math.pow(QM / (K * Afull * Math.pow(Rh, 2 / 3)), 2) * 100 : null;
   const dimPrincipal = [0, dims.D, dims.L, dims.RH, dims.TH][pidx] ?? 0;
@@ -295,6 +329,7 @@ function computeCaches(data: ExportData): Caches {
     Afull, Pfull, Rh, Vc, QcM, QcL, QmaxL, fillQmax: peak,
     circA, circP, theta, ovA, ovP, hOv, rectA, rectP, trapA, trapP,
     hSel, selA, selP, rh, v, q, qRatio, vRatio, tFlag, uFlag,
+    tCirc, tOv, tRect, tTrap, tSel, froude, twLow, frLow, twH, frH,
     regime, peak, iLow, tLow, fillLow, aLow, vLow, bic, posH, iH, tH, fillH, aH, vH,
     minJ, minDim,
     gq1: hasQ && QcL > 0 ? QL / QcL : null, gq2: bic && QcL > 0 ? QL / QcL : null,
@@ -586,6 +621,20 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   ), ST.AUX);
   label(R.VLOW, 'Vitesse d’écoulement — solution basse', 'm/s', true);
   s.put('B', R.VLOW, FN(`IF(OR(B${R.QL}="",B${R.ALOW}=0),NA(),B${R.QM}/B${R.ALOW})`, c.vLow), ST.KEY);
+  // --- Froude number and hydraulic regime (low solution) ---
+  label(R.TWLOW, '(aux.) largeur au miroir T', 'm');
+  s.put('B', R.TWLOW, F(
+    `IF(OR(B${R.QL}="",B${R.QL}>B${R.QMAX}),0,IF(B${R.ILOW}=0,${CIDX('Z', 1)},${CIDX('Z', `B${R.ILOW}`)}+B${R.TLOW}*(${CIDX('Z', `MIN(B${R.ILOW}+1,${N_ROWS})`)}-${CIDX('Z', `B${R.ILOW}`)})))`,
+    c.twLow,
+  ), ST.AUX);
+  label(R.FRLOW, 'Nombre de Froude Fr', '—', true);
+  s.put('B', R.FRLOW, FN(
+    `IF(OR(B${R.QL}="",B${R.VC}=0,B${R.QL}>B${R.QMAX},B${R.TWLOW}<=0,B${R.ALOW}<=0),NA(),B${R.VLOW}/SQRT(9.81*B${R.ALOW}/B${R.TWLOW}))`,
+    c.frLow,
+  ), ST.KEY);
+  label(R.REGFR, 'Régime hydraulique', '', true);
+  const regFrF = `IF(ISNA(B${R.FRLOW}),"",IF(B${R.FRLOW}>1.02,"TORRENTIEL (supercritique)",IF(B${R.FRLOW}<0.98,"FLUVIAL (subcritique)","CRITIQUE")))`;
+
   label(R.BIC, '(aux.) régime bicritique ?');
   s.put('B', R.BIC, F(`IF(AND(B${R.PIDX}<=2,B${R.QL}<>"",B${R.QL}>B${R.QCL},B${R.QL}<=B${R.QMAX}),1,0)`, c.bic ? 1 : 0), ST.AUX);
   label(R.POSH, '(aux.) i haute brut');
@@ -607,6 +656,19 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   label(R.VH, 'Vitesse d’écoulement — solution haute', 'm/s', true);
   s.put('B', R.VH, FN(`IF(OR(B${R.BIC}=0,B${R.AH}=0),NA(),B${R.QM}/B${R.AH})`, c.vH), ST.KEY);
 
+  label(R.TWH, '(aux.) largeur au miroir T (haute)', 'm');
+  s.put('B', R.TWH, F(
+    `IF(B${R.BIC}=1,${CIDX('Z', `B${R.IH}`)}+B${R.TH2}*(${CIDX('Z', `MIN(B${R.IH}+1,${N_ROWS})`)}-${CIDX('Z', `B${R.IH}`)}),0)`,
+    c.twH,
+  ), ST.AUX);
+  label(R.FRH, 'Nombre de Froude Fr — solution haute', '—', true);
+  s.put('B', R.FRH, FN(
+    `IF(OR(B${R.BIC}=0,B${R.TWH}<=0,B${R.AH}<=0),NA(),B${R.VH}/SQRT(9.81*B${R.AH}/B${R.TWH}))`,
+    c.frH,
+  ), ST.KEY);
+  label(R.REGFRH, 'Régime hydraulique — solution haute', '', true);
+  const regFrHF = `IF(ISNA(B${R.FRH}),"",IF(B${R.FRH}>1.02,"TORRENTIEL (supercritique)",IF(B${R.FRH}<0.98,"FLUVIAL (subcritique)","CRITIQUE")))`;
+
   // --- 5) Sizing ---
   section(R.SEC5, '5 · DIMENSIONNEMENT');
   label(R.MINJ, 'Pente minimale (Q à pleine section)', '%', true);
@@ -624,7 +686,7 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   s.put(
     'A',
     R.NOTE2,
-    'Zone bicritique (sections fermées) : entre Qc et Qmax, deux hauteurs d’eau transitent le même débit.',
+    'Fr = V / √(g·A/T) : fluvial si Fr < 1, critique si Fr ≈ 1, torrentiel si Fr > 1. Zone bicritique : entre Qc et Qmax, deux hauteurs d’eau transitent le même débit.',
     ST.SUBTITLE,
   );
   s.merge(`A${R.NOTE2}:C${R.NOTE2}`);
@@ -635,6 +697,12 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   // Regime is a string-valued formula: cache as a formula-string cell
   ws[`B${R.REGIME}`] = { t: 'str', v: c.regime, f: regimeF } as any;
   (ws as any)._st.set(`B${R.REGIME}`, ST.REGIME);
+  const regLabel = (fr: number | null) =>
+    fr === null ? '' : fr > 1.02 ? 'TORRENTIEL (supercritique)' : fr < 0.98 ? 'FLUVIAL (subcritique)' : 'CRITIQUE';
+  ws[`B${R.REGFR}`] = { t: 'str', v: regLabel(c.frLow), f: regFrF } as any;
+  (ws as any)._st.set(`B${R.REGFR}`, ST.REGIME);
+  ws[`B${R.REGFRH}`] = { t: 'str', v: regLabel(c.frH), f: regFrHF } as any;
+  (ws as any)._st.set(`B${R.REGFRH}`, ST.REGIME);
   return ws;
 }
 
@@ -652,7 +720,7 @@ function buildCurveSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   s.put('D', 3, 'J (m/m)', ST.LABEL_B);
   s.put('D', 4, F(`Calcul!$B$${R.J}`, c.J), ST.N4);
 
-  const headers = ['Remplissage (%)', 'h (m)', 'θ circ (rad)', 'A circ', 'P circ', 'h ovoïde', 'A ovoïde', 'P ovoïde', 'A rect', 'P rect', 'A trap', 'P trap', 'A (m²)', 'P (m)', 'Rh (m)', 'V (m/s)', 'Q (L/s)', 'Q/Qc', 'V/Vc', 'idx bas', 'idx haut'];
+  const headers = ['Remplissage (%)', 'h (m)', 'θ circ (rad)', 'A circ', 'P circ', 'h ovoïde', 'A ovoïde', 'P ovoïde', 'A rect', 'P rect', 'A trap', 'P trap', 'A (m²)', 'P (m)', 'Rh (m)', 'V (m/s)', 'Q (L/s)', 'Q/Qc', 'V/Vc', 'idx bas', 'idx haut', 'T circ', 'T ovoïde', 'T rect', 'T trap', 'T (m)', 'Froude'];
   headers.forEach((h, i) => s.put(XLSX.utils.encode_col(i), 5, h, ST.THEAD));
 
   const Ca = (row: number) => `${CONST_SHEET}!$B$${row}`; // ovoid constants
@@ -705,8 +773,26 @@ function buildCurveSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
       `IF(OR(Calcul!$B$${R.QL}="",A${n}<Calcul!$B$${R.PEAK},Q${n}<Calcul!$B$${R.QL}),0,A${n})`,
       c.uFlag[k],
     ), ST.N0);
+    // Free-surface top width T per profile, the active one, and the Froude
+    // number Fr = V / sqrt(g·A/T). T -> 0 at the crown of a closed conduit, so
+    // Fr is left blank there (no meaningful free surface).
+    s.put('V', n, F(`Calcul!$B$${R.D}*SIN(C${n}/2)`, c.tCirc[k]), ST.N4);
+    s.put('W', n, F(
+      `IFERROR(IF(${Ca(OV.R)}=0,0,IF(${h}<=${Ca(OV.yb)},2*SQRT(MAX(0,${Ca(OV.r)}^2-(${h}-${Ca(OV.r)})^2)),IF(${h}<=${Ca(OV.yt)},2*(${Ca(OV.a)}+SQRT(MAX(0,${Ca(OV.rho)}^2-(${h}-${Ca(OV.b)})^2))),2*SQRT(MAX(0,${Ca(OV.R)}^2-(${h}-2*${Ca(OV.R)})^2))))),0)`,
+      c.tOv[k],
+    ), ST.N4);
+    s.put('X', n, F(`Calcul!$B$${R.RB}`, c.tRect[k]), ST.N4);
+    s.put('Y', n, F(
+      `Calcul!$B$${R.TB}+2*${CONST_SHEET}!$B$${OV.mTrap}*(A${n}/100*Calcul!$B$${R.TH})`,
+      c.tTrap[k],
+    ), ST.N4);
+    s.put('Z', n, F(`CHOOSE($A$4,V${n},W${n},X${n},Y${n})`, c.tSel[k]), ST.N4);
+    s.put('AA', n, FN(
+      `IF(OR(Z${n}<=0,M${n}<=0),NA(),P${n}/SQRT(9.81*M${n}/Z${n}))`,
+      c.froude[k],
+    ), ST.N3);
   }
-  return s.toSheet([13, 9, 10, 10, 9, 9, 10, 9, 10, 9, 10, 9, 10, 9, 9, 9, 10, 8, 8, 8, 8]);
+  return s.toSheet([13, 9, 10, 10, 9, 9, 10, 9, 10, 9, 10, 9, 10, 9, 9, 9, 10, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9]);
 }
 
 // ---------------------------------------------------------------------------
@@ -945,7 +1031,7 @@ async function injectValidationAndChart(
   const zip = await JSZip.loadAsync(base64, { base64: true });
 
   // Auxiliary rows on "Calcul" are hidden so the printed note stays readable.
-  const auxRows = [R.PIDX, R.PEAK, R.ILOW, R.TLOW, R.ALOW, R.BIC, R.POSH, R.IH, R.TH2, R.AH];
+  const auxRows = [R.PIDX, R.PEAK, R.ILOW, R.TLOW, R.ALOW, R.TWLOW, R.BIC, R.POSH, R.IH, R.TH2, R.AH, R.TWH];
   const prints: PrintCfg[] = [
     {
       landscape: false,

@@ -31,6 +31,9 @@ export interface FullState {
   fillAtQmax: number; // filling ratio (0..1) where Qmax occurs
 }
 
+/** Free-surface flow regime from the Froude number. */
+export type FlowRegime = 'fluvial' | 'critique' | 'torrentiel';
+
 export interface OperatingState {
   fill: number; // filling ratio 0..1 (lowest solution)
   V: number; // flow velocity at the operating point (m/s)
@@ -40,6 +43,15 @@ export interface OperatingState {
   fillAlt?: number; // alternate (higher) filling ratio in the bicritical band
   VAlt?: number; // velocity at the alternate operating point (m/s)
   yAlt?: number; // alternate water depth (m)
+  // Froude number Fr = V / sqrt(g·Dh) with Dh = A/T the hydraulic (mean) depth
+  // and T the free-surface top width. Undefined when there is no free surface
+  // (pressurised flow) or when the surface closes on itself (T -> 0 at the
+  // crown of a closed conduit), where Fr is not meaningful.
+  froude?: number;
+  regime?: FlowRegime;
+  topWidth?: number; // T at the operating point (m)
+  froudeAlt?: number; // Froude of the alternate (bicritical) solution
+  regimeAlt?: FlowRegime;
 }
 
 export interface CurvePoint {
@@ -58,6 +70,17 @@ export interface EngineResults {
 }
 
 const TWO_THIRDS = 2 / 3;
+/** Standard gravity (m/s²). */
+const G = 9.81;
+/** Half-width of the band around Fr = 1 reported as "critique". */
+const CRITICAL_BAND = 0.02;
+
+/** Classify a Froude number into the usual French open-channel regimes. */
+export function regimeOf(fr: number): FlowRegime {
+  if (fr > 1 + CRITICAL_BAND) return 'torrentiel';
+  if (fr < 1 - CRITICAL_BAND) return 'fluvial';
+  return 'critique';
+}
 
 /** True for a finite, strictly-positive number. */
 function isPos(x: number | undefined): x is number {
@@ -171,18 +194,27 @@ export function computeResults(inputs: EngineInputs): EngineResults {
         yAlt !== undefined && Math.abs(yAlt - yOp) / geometry.yMax > 0.005 ? yAlt : undefined;
 
       const Aop = areaAtDepth(geometry, yOp);
+      const Vop = Aop > 0 ? Q! / Aop : 0;
+      const fLow = froudeAt(geometry, yOp, Aop, Vop);
       out.operating = {
         fill: clamp01(yOp / geometry.yMax),
-        V: Aop > 0 ? Q! / Aop : 0,
+        V: Vop,
         y: yOp,
         surcharged: false,
         bicritical: distinctAlt !== undefined,
+        topWidth: fLow.T,
+        froude: fLow.fr,
+        regime: fLow.fr !== undefined ? regimeOf(fLow.fr) : undefined,
       };
       if (distinctAlt !== undefined) {
         const Aalt = areaAtDepth(geometry, distinctAlt);
+        const Valt = Aalt > 0 ? Q! / Aalt : 0;
+        const fAlt = froudeAt(geometry, distinctAlt, Aalt, Valt);
         out.operating.fillAlt = clamp01(distinctAlt / geometry.yMax);
-        out.operating.VAlt = Aalt > 0 ? Q! / Aalt : 0;
+        out.operating.VAlt = Valt;
         out.operating.yAlt = distinctAlt;
+        out.operating.froudeAlt = fAlt.fr;
+        out.operating.regimeAlt = fAlt.fr !== undefined ? regimeOf(fAlt.fr) : undefined;
       }
     }
 
@@ -199,6 +231,29 @@ export function computeResults(inputs: EngineInputs): EngineResults {
   }
 
   return out;
+}
+
+/** Interpolate the free-surface top width at an arbitrary depth. */
+function topWidthAtDepth(geometry: GeomTable, y: number): number {
+  const rows = geometry.rows;
+  if (y <= 0) return rows[0].T;
+  if (y >= geometry.yMax) return rows[rows.length - 1].T;
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].y >= y) {
+      const t = (y - rows[i - 1].y) / (rows[i].y - rows[i - 1].y);
+      return rows[i - 1].T + t * (rows[i].T - rows[i - 1].T);
+    }
+  }
+  return rows[rows.length - 1].T;
+}
+
+/** Froude number at a given depth, or undefined where it is not meaningful. */
+function froudeAt(geometry: GeomTable, y: number, A: number, V: number) {
+  const T = topWidthAtDepth(geometry, y);
+  if (!(T > 1e-9) || !(A > 0) || !Number.isFinite(V)) return { T, fr: undefined };
+  const Dh = A / T;
+  const fr = V / Math.sqrt(G * Dh);
+  return { T, fr: Number.isFinite(fr) ? fr : undefined };
 }
 
 /** Interpolate flow area at an arbitrary depth from the geometry table. */

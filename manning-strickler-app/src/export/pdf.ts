@@ -78,6 +78,25 @@ function buildHtml(data: ExportData): string {
       resRows.push(row('Vitesse d’écoulement', fnum(o.V, 3), 'm/s'));
     }
   }
+  if (r.operating) {
+    const o = r.operating;
+    const lab = (g?: string) =>
+      g === 'torrentiel' ? 'TORRENTIEL (supercritique)' : g === 'critique' ? 'CRITIQUE' : 'FLUVIAL (subcritique)';
+    if (o.froude === undefined) {
+      resRows.push(
+        row(
+          'Nombre de Froude Fr',
+          o.surcharged ? 'non défini — écoulement en charge' : 'non défini — section pleine',
+        ),
+      );
+    } else if (o.bicritical && o.froudeAlt !== undefined) {
+      resRows.push(row('Nombre de Froude Fr (2 solutions)', `${fnum(o.froude, 3)} ou ${fnum(o.froudeAlt, 3)}`));
+      resRows.push(row('Régime hydraulique', `${lab(o.regime)} / ${lab(o.regimeAlt)}`));
+    } else {
+      resRows.push(row('Nombre de Froude Fr', fnum(o.froude, 3)));
+      resRows.push(row('Régime hydraulique', lab(o.regime)));
+    }
+  }
   if (r.minSlope !== undefined) resRows.push(row('Pente minimale', fnum(r.minSlope * 100, 4), '%'));
   if (r.minSize) resRows.push(row(`${r.minSize.label} minimal(e)`, fnum(r.minSize.value * 1000, 0), 'mm'));
 
@@ -120,7 +139,7 @@ function buildHtml(data: ExportData): string {
       <span style="color:${Q_COLOR}">■</span> Q/Qc (débit) &nbsp;
       <span style="color:${POINT_COLOR}">●</span> Point(s) d'écoulement — ordonnée : taux de remplissage (%)
     </div>
-    <div class="formula">V = K · Rh^(2/3) · J^(1/2) &nbsp;·&nbsp; Q = V · A &nbsp;·&nbsp; Rh = A / P</div>
+    <div class="formula">V = K · Rh^(2/3) · J^(1/2) &nbsp;·&nbsp; Q = V · A &nbsp;·&nbsp; Rh = A / P &nbsp;·&nbsp; Fr = V / √(g·A/T)</div>
   </body></html>`;
 }
 
