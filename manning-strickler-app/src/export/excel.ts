@@ -436,6 +436,12 @@ function buildConstantesSheet(c: Caches): XLSX.WorkSheet {
     c.ov[OV.mTrap],
   ), ST.N4);
 
+  // Profile list as real cells: a literal array constant inside MATCH is not
+  // reliably evaluated, which silently fell back to profile 1 and froze the
+  // whole workbook (results and chart) on the circular profile.
+  s.put('E', 1, 'Liste des profils', ST.LABEL_B);
+  PROFILE_NAMES.forEach((n, i) => s.put('E', 2 + i, n, ST.LABEL));
+
   // Chart operating points: x = ratio, y = filling ratio (%).
   s.put('A', CH.HEAD, 'Points du graphique', ST.SECTION);
   s.put('B', CH.HEAD, '', ST.SECTION);
@@ -457,7 +463,7 @@ function buildConstantesSheet(c: Caches): XLSX.WorkSheet {
   s.put('B', CH.GV2, FN(`IF(${cb(R.BIC)}=1,${cb(R.VH)}/${cb(R.VC)},NA())`, c.gv2), ST.N3);
   s.put('C', CH.GV2, FN(`IF(${cb(R.BIC)}=1,${cb(R.FH)},NA())`, c.gy2), ST.N1);
 
-  return s.toSheet([34, 16, 18]);
+  return s.toSheet([34, 16, 18, 2, 30]);
 }
 
 // Range helpers on sheet "Courbe"
@@ -495,7 +501,14 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   label(R.PROFIL, 'Profil (liste déroulante)', '', true);
   s.put('B', R.PROFIL, PROFILE_NAMES[c.pidx - 1], ST.INPUT_TEXT);
   label(R.PIDX, 'Index du profil (auto)');
-  s.put('B', R.PIDX, F(`IFERROR(MATCH(B${R.PROFIL},{"${PROFILE_NAMES.join('","')}"},0),1)`, c.pidx), ST.AUX);
+  // Plain nested text comparisons rather than MATCH over a range or an array
+  // literal: MATCH silently fell back to profile 1 (via IFERROR), which froze
+  // the entire workbook — results and chart — on the circular profile.
+  const E = (i: number) => `${CONST_SHEET}!$E$${i}`;
+  s.put('B', R.PIDX, F(
+    `IF(B${R.PROFIL}=${E(3)},2,IF(B${R.PROFIL}=${E(4)},3,IF(B${R.PROFIL}=${E(5)},4,1)))`,
+    c.pidx,
+  ), ST.AUX);
   label(R.D, 'D — diamètre intérieur (circulaire)', 'm');
   s.put('B', R.D, c.dims.D > 0 ? c.dims.D : null, ST.INPUT_NUM);
   label(R.L, 'L — largeur (ovoïde ; hauteur = 1,5·L)', 'm');
@@ -964,7 +977,7 @@ async function injectValidationAndChart(
     if (i === 0) {
       const validations =
         `<dataValidations count="2">` +
-        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.PROFIL}"><formula1>"${PROFILE_NAMES.join(',')}"</formula1></dataValidation>` +
+        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.PROFIL}"><formula1>${CONST_SHEET}!$E$2:$E$5</formula1></dataValidation>` +
         `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.MAT}"><formula1>'Matériaux'!$A$2:$A$12</formula1></dataValidation>` +
         `</dataValidations>`;
       xml = insertBefore(xml, validations, [
@@ -1103,11 +1116,13 @@ function scatterSeries(
 
 function buildChartXml(c: Caches): string {
   const fills = Array.from({ length: N_ROWS }, (_, i) => i + 1);
+  // Operating-point coordinates live on the "Constantes" sheet (x in B, y in C)
+  // so that they follow every input change, profile switch included.
   const series =
     scatterSeries(0, 'Q/Qc (débit)', `Courbe!$R$${CURVE_FIRST}:$R$${CURVE_LAST}`, `Courbe!$A$${CURVE_FIRST}:$A$${CURVE_LAST}`, c.qRatio, fills, '2F7DD1', false) +
     scatterSeries(1, 'V/Vc (vitesse)', `Courbe!$S$${CURVE_FIRST}:$S$${CURVE_LAST}`, `Courbe!$A$${CURVE_FIRST}:$A$${CURVE_LAST}`, c.vRatio, fills, 'E07A3F', false) +
-    scatterSeries(2, 'Point Q/Qc', `Calcul!$H$${R.GQ1}:$H$${R.GQ2}`, `Calcul!$I$${R.GQ1}:$I$${R.GQ2}`, [c.gq1, c.gq2], [c.gy1, c.gy2], '2F7DD1', true) +
-    scatterSeries(3, 'Point V/Vc', `Calcul!$H$${R.GV1}:$H$${R.GV2}`, `Calcul!$I$${R.GV1}:$I$${R.GV2}`, [c.gv1, c.gv2], [c.gy1, c.gy2], 'D12F4F', true);
+    scatterSeries(2, 'Point Q/Qc', `${CONST_SHEET}!$B$${CH.GQ1}:$B$${CH.GQ2}`, `${CONST_SHEET}!$C$${CH.GQ1}:$C$${CH.GQ2}`, [c.gq1, c.gq2], [c.gy1, c.gy2], '2F7DD1', true) +
+    scatterSeries(3, 'Point V/Vc', `${CONST_SHEET}!$B$${CH.GV1}:$B$${CH.GV2}`, `${CONST_SHEET}!$C$${CH.GV1}:$C$${CH.GV2}`, [c.gv1, c.gv2], [c.gy1, c.gy2], 'D12F4F', true);
 
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +

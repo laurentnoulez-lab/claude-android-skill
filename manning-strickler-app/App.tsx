@@ -522,8 +522,8 @@ function Notice({ tone, text }: { tone: 'warn' | 'ok'; text: string }) {
 }
 
 function Banner({ surcharged, bicritical, closed }: { surcharged: boolean; bicritical: boolean; closed: boolean }) {
-  let bg = theme.okBg;
-  let fg = theme.ok;
+  let bg: string = theme.okBg;
+  let fg: string = theme.ok;
   let title = 'Écoulement à surface libre';
   let detail = 'Le débit reste inférieur à la capacité de la section.';
   if (surcharged) {
@@ -560,7 +560,7 @@ function ExportButton({
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [
+      style={({ pressed }: { pressed: boolean }) => [
         styles.exportBtn,
         disabled && styles.exportBtnDisabled,
         pressed && !disabled && styles.exportBtnPressed,
