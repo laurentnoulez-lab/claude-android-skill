@@ -1,0 +1,59 @@
+name: Build Android APK
+
+# Builds a standalone, installable Android APK for the Manning-Strickler app.
+# Runs on GitHub-hosted runners (open internet + preinstalled Android SDK), so
+# no Expo account is required. The APK is published as a downloadable artifact.
+
+on:
+  workflow_dispatch: # manual trigger from the Actions tab
+  push:
+    branches:
+      - claude/manning-strickler-android-app-ohfyus
+    paths:
+      - manning-strickler-app/**
+      - .github/workflows/build-apk.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: manning-strickler-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: manning-strickler-app/android
+        # The React Native / Expo template signs the release build with the
+        # bundled debug keystore, producing a standalone APK that bundles the JS
+        # and installs directly on a device (enable "install unknown apps").
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk manning-strickler.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manning-strickler-apk
+          path: manning-strickler-app/manning-strickler.apk
+          if-no-files-found: error
+          retention-days: 30
