@@ -42,10 +42,13 @@ const R = {
   SEC4: 34, REGIME: 35, PEAK: 36, ILOW: 37, TLOW: 38, FLOW: 39, ALOW: 40, VLOW: 41,
   BIC: 42, POSH: 43, IH: 44, TH2: 45, FH: 46, AH: 47, VH: 48,
   SEC5: 50, MINJ: 51, MIND: 52,
-  SEC6: 54, GQ1: 55, GQ2: 56, GV1: 57, GV2: 58,
+  SEC6: 54, NOTE1: 55, NOTE2: 56, CHART_TOP: 58, CHART_BOTTOM: 88,
 };
-// Ovoid geometry constants live in Calcul column F (labels in E)
+/** Ovoid geometry constants: sheet "Constantes", labels in A, values in B. */
 const OV = { R: 5, r: 6, rho: 7, b: 8, a: 9, yb: 10, yt: 11, Ayb: 12, Ayt: 13, Pyb: 14, Pyt: 15, Afull: 16, Pfull: 17, S2yb: 18, S3yt: 19, As2: 20, As3: 21, mTrap: 22 };
+/** Chart operating points: sheet "Constantes", x in B, y in C. */
+const CH = { HEAD: 24, GQ1: 26, GQ2: 27, GV1: 28, GV2: 29 };
+const CONST_SHEET = `'Constantes'`;
 
 const PROFILE_NAMES = ['Circulaire fermé', 'Ovoïde fermé', 'Caniveau rectangulaire', 'Caniveau trapézoïdal'];
 const PROFILE_INDEX: Record<ProfileId, number> = { circular: 1, ovoid: 2, rectangular: 3, trapezoidal: 4 };
@@ -61,12 +64,20 @@ type CellVal = string | number | { f: string; v?: number; na?: boolean };
 export async function exportExcel(data: ExportData): Promise<void> {
   const caches = computeCaches(data);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, buildCalcSheet(data, caches), 'Calcul');
-  XLSX.utils.book_append_sheet(wb, buildCurveSheet(data, caches), 'Courbe');
-  XLSX.utils.book_append_sheet(wb, buildMaterialsSheet(), 'Matériaux');
+  // Sheet order defines the sheetN.xml file names used by the injection step.
+  const sheets = [
+    buildCalcSheet(data, caches), // sheet1
+    buildCurveSheet(data, caches), // sheet2
+    buildMaterialsSheet(), // sheet3
+    buildConstantesSheet(caches), // sheet4
+  ];
+  ['Calcul', 'Courbe', 'Matériaux', 'Constantes'].forEach((name, i) =>
+    XLSX.utils.book_append_sheet(wb, sheets[i], name),
+  );
+  const styleMaps = sheets.map((ws) => ((ws as any)._st as Map<string, number>) ?? new Map());
 
   const base = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-  const b64 = await injectValidationAndChart(base, caches);
+  const b64 = await injectValidationAndChart(base, caches, styleMaps);
 
   const uri = `${FileSystem.cacheDirectory}manning-strickler.xlsx`;
   await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
@@ -285,15 +296,55 @@ function computeCaches(data: ExportData): Caches {
 // ---------------------------------------------------------------------------
 // Sheet builders
 // ---------------------------------------------------------------------------
+/**
+ * Style indices into the hand-written xl/styles.xml (see buildStylesXml).
+ * SheetJS's community build does not write cell styles, so the indices are
+ * injected into the sheet XML afterwards (see applyStyles).
+ */
+const ST = {
+  DEFAULT: 0,
+  TITLE: 1,
+  SUBTITLE: 2,
+  SECTION: 3,
+  LABEL: 4,
+  INPUT_NUM: 5,
+  INPUT_TEXT: 6,
+  RESULT: 7,
+  UNIT: 8,
+  THEAD: 9,
+  N3: 10,
+  N1: 11,
+  N0: 12,
+  REGIME: 13,
+  AUX: 14,
+  N4: 15,
+  LABEL_B: 16,
+  N2: 17,
+  KEY: 18,
+} as const;
+
 class SheetMap {
   cells = new Map<string, CellVal>();
+  styles = new Map<string, number>();
+  merges: string[] = [];
   maxR = 0;
   maxC = 0;
-  put(col: string, row: number, val: CellVal | null | undefined) {
-    if (val === null || val === undefined || val === '') return;
+  put(col: string, row: number, val: CellVal | null | undefined, style?: number) {
+    if (val === null || val === undefined || val === '') {
+      // Still allow an empty styled cell (e.g. a coloured input cell left blank).
+      if (style === undefined) return;
+      this.styles.set(`${col}${row}`, style);
+      this.maxR = Math.max(this.maxR, row);
+      this.maxC = Math.max(this.maxC, XLSX.utils.decode_col(col));
+      return;
+    }
     this.cells.set(`${col}${row}`, val);
+    if (style !== undefined) this.styles.set(`${col}${row}`, style);
     this.maxR = Math.max(this.maxR, row);
     this.maxC = Math.max(this.maxC, XLSX.utils.decode_col(col));
+  }
+  merge(range: string) {
+    this.merges.push(range);
   }
   toSheet(colWidths: number[]): XLSX.WorkSheet {
     const ws: XLSX.WorkSheet = {};
@@ -308,6 +359,11 @@ class SheetMap {
     }
     ws['!ref'] = `A1:${XLSX.utils.encode_col(this.maxC)}${this.maxR}`;
     ws['!cols'] = colWidths.map((wch) => ({ wch }));
+    if (this.merges.length) {
+      ws['!merges'] = this.merges.map((r) => XLSX.utils.decode_range(r));
+    }
+    // Carried through to the OOXML post-processing step.
+    (ws as any)._st = this.styles;
     return ws;
   }
 }
@@ -319,13 +375,79 @@ const FN = (f: string, v?: number | null): CellVal => ({ f, v: v ?? undefined, n
 
 function buildMaterialsSheet(): XLSX.WorkSheet {
   const s = new SheetMap();
-  s.put('A', 1, 'Matériau');
-  s.put('B', 1, 'K (m^(1/3)/s)');
+  s.put('A', 1, 'Matériau', ST.THEAD);
+  s.put('B', 1, 'K (m^(1/3)/s)', ST.THEAD);
   MATERIALS.filter((m) => m.id !== 'custom').forEach((m, i) => {
-    s.put('A', 2 + i, m.name);
-    s.put('B', 2 + i, m.K);
+    s.put('A', 2 + i, m.name, ST.LABEL);
+    s.put('B', 2 + i, m.K, ST.N0);
   });
-  return s.toSheet([26, 14]);
+  return s.toSheet([30, 16]);
+}
+
+/**
+ * Auxiliary sheet: ovoid geometry constants, the trapezoid wall slope and the
+ * chart's operating-point coordinates. Kept off the printable "Calcul" sheet so
+ * that one prints cleanly on A4. Row numbers match the OV.* map.
+ */
+function buildConstantesSheet(c: Caches): XLSX.WorkSheet {
+  const s = new SheetMap();
+  s.put('A', 1, 'Valeurs auxiliaires (calculées automatiquement — ne pas modifier)', ST.TITLE);
+  s.put('A', 3, 'Géométrie ovoïde et trapèze', ST.SECTION);
+  s.put('B', 3, '', ST.SECTION);
+
+  const B = (row: number) => `$B$${row}`;
+  const put = (row: number, lab: string, f: string) => {
+    s.put('A', row, lab, ST.LABEL);
+    s.put('B', row, F(f, c.ov[row]), ST.N4);
+  };
+  // Ovoid: three-centre profile (invert r = R/3, haunches ρ = 3R, crown R).
+  put(OV.R, 'Ovoïde R = L/2', `IF(Calcul!$B$${R.L}="",0,Calcul!$B$${R.L}/2)`);
+  put(OV.r, 'r = R/3', `${B(OV.R)}/3`);
+  put(OV.rho, 'ρ = 3R', `3*${B(OV.R)}`);
+  put(OV.b, 'b (ordonnée centre flancs) = 2,1R', `21*${B(OV.R)}/10`);
+  put(OV.a, 'a (abscisse centre flancs)', `-SQRT(MAX(0,4*${B(OV.R)}^2-(${B(OV.b)}-2*${B(OV.R)})^2))`);
+  put(OV.yb, 'y jonction radier/flanc', `IF(${B(OV.R)}=0,0,${B(OV.b)}+${B(OV.rho)}*(${B(OV.r)}-${B(OV.b)})/SQRT(${B(OV.a)}^2+(${B(OV.r)}-${B(OV.b)})^2))`);
+  put(OV.yt, 'y jonction flanc/voûte', `IF(${B(OV.R)}=0,0,${B(OV.b)}+${B(OV.rho)}*(2*${B(OV.R)}-${B(OV.b)})/SQRT(${B(OV.a)}^2+(2*${B(OV.R)}-${B(OV.b)})^2))`);
+  const S = (cc: string, yc: string, y: string) =>
+    `(${y}-${yc})*SQRT(MAX(0,${cc}^2-(${y}-${yc})^2))+${cc}^2*ASIN(MAX(-1,MIN(1,IF(${cc}=0,0,(${y}-${yc})/${cc}))))`;
+  put(OV.Ayb, 'A(yb)', `${S(B(OV.r), B(OV.r), B(OV.yb))}+${B(OV.r)}^2*PI()/2`);
+  put(OV.S2yb, 'S2(yb) auxiliaire', S(B(OV.rho), B(OV.b), B(OV.yb)));
+  put(OV.Ayt, 'A(yt)', `${B(OV.Ayb)}+2*${B(OV.a)}*(${B(OV.yt)}-${B(OV.yb)})+${S(B(OV.rho), B(OV.b), B(OV.yt))}-${B(OV.S2yb)}`);
+  put(OV.Pyb, 'P(yb)', `2*${B(OV.r)}*(ASIN(MAX(-1,MIN(1,IF(${B(OV.r)}=0,0,(${B(OV.yb)}-${B(OV.r)})/${B(OV.r)}))))+PI()/2)`);
+  put(OV.As2, 'asin2(yb) auxiliaire', `ASIN(MAX(-1,MIN(1,IF(${B(OV.rho)}=0,0,(${B(OV.yb)}-${B(OV.b)})/${B(OV.rho)}))))`);
+  put(OV.Pyt, 'P(yt)', `${B(OV.Pyb)}+2*${B(OV.rho)}*(ASIN(MAX(-1,MIN(1,IF(${B(OV.rho)}=0,0,(${B(OV.yt)}-${B(OV.b)})/${B(OV.rho)}))))-${B(OV.As2)})`);
+  put(OV.S3yt, 'S3(yt) auxiliaire', S(B(OV.R), `2*${B(OV.R)}`, B(OV.yt)));
+  put(OV.As3, 'asin3(yt) auxiliaire', `ASIN(MAX(-1,MIN(1,IF(${B(OV.R)}=0,0,(${B(OV.yt)}-2*${B(OV.R)})/${B(OV.R)}))))`);
+  put(OV.Afull, 'A pleine section ovoïde', `${B(OV.Ayt)}+${B(OV.R)}^2*PI()/2-${B(OV.S3yt)}`);
+  put(OV.Pfull, 'P plein ovoïde', `${B(OV.Pyt)}+2*${B(OV.R)}*(PI()/2-${B(OV.As3)})`);
+  s.put('A', OV.mTrap, 'm trapèze = (B−b)/(2H)', ST.LABEL);
+  s.put('B', OV.mTrap, F(
+    `IF(Calcul!$B$${R.TH}="",0,IF(Calcul!$B$${R.TH}=0,0,(Calcul!$B$${R.TT}-Calcul!$B$${R.TB})/(2*Calcul!$B$${R.TH})))`,
+    c.ov[OV.mTrap],
+  ), ST.N4);
+
+  // Chart operating points: x = ratio, y = filling ratio (%).
+  s.put('A', CH.HEAD, 'Points du graphique', ST.SECTION);
+  s.put('B', CH.HEAD, '', ST.SECTION);
+  s.put('C', CH.HEAD, '', ST.SECTION);
+  s.put('A', CH.HEAD + 1, 'Série', ST.THEAD);
+  s.put('B', CH.HEAD + 1, 'x (ratio)', ST.THEAD);
+  s.put('C', CH.HEAD + 1, 'y (remplissage %)', ST.THEAD);
+  const cb = (row: number) => `Calcul!$B$${row}`;
+  s.put('A', CH.GQ1, 'Q/Qc — solution basse', ST.LABEL);
+  s.put('B', CH.GQ1, FN(`IF(OR(${cb(R.QL)}="",${cb(R.QCL)}=0),NA(),${cb(R.QL)}/${cb(R.QCL)})`, c.gq1), ST.N3);
+  s.put('C', CH.GQ1, FN(`${cb(R.FLOW)}`, c.gy1), ST.N1);
+  s.put('A', CH.GQ2, 'Q/Qc — solution haute', ST.LABEL);
+  s.put('B', CH.GQ2, FN(`IF(${cb(R.BIC)}=1,${cb(R.QL)}/${cb(R.QCL)},NA())`, c.gq2), ST.N3);
+  s.put('C', CH.GQ2, FN(`IF(${cb(R.BIC)}=1,${cb(R.FH)},NA())`, c.gy2), ST.N1);
+  s.put('A', CH.GV1, 'V/Vc — solution basse', ST.LABEL);
+  s.put('B', CH.GV1, FN(`IF(OR(${cb(R.QL)}="",${cb(R.VC)}=0),NA(),${cb(R.VLOW)}/${cb(R.VC)})`, c.gv1), ST.N3);
+  s.put('C', CH.GV1, FN(`${cb(R.FLOW)}`, c.gy1), ST.N1);
+  s.put('A', CH.GV2, 'V/Vc — solution haute', ST.LABEL);
+  s.put('B', CH.GV2, FN(`IF(${cb(R.BIC)}=1,${cb(R.VH)}/${cb(R.VC)},NA())`, c.gv2), ST.N3);
+  s.put('C', CH.GV2, FN(`IF(${cb(R.BIC)}=1,${cb(R.FH)},NA())`, c.gy2), ST.N1);
+
+  return s.toSheet([34, 16, 18]);
 }
 
 // Range helpers on sheet "Courbe"
@@ -335,271 +457,530 @@ const CIDX = (col: string, i: string | number) => `INDEX(${CR(col)},${i})`;
 function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   const s = new SheetMap();
   const B = (row: number) => `B${row}`;
-  const label = (row: number, text: string, unit?: string) => {
-    s.put('A', row, text);
-    if (unit) s.put('C', row, unit);
+  const Fo = (row: number) => `${CONST_SHEET}!$B$${row}`;
+  const section = (row: number, text: string) => {
+    s.put('A', row, text, ST.SECTION);
+    s.put('B', row, '', ST.SECTION);
+    s.put('C', row, '', ST.SECTION);
+    s.merge(`A${row}:C${row}`);
+  };
+  /** Label in A (+ unit in C); the value cell in B is written by the caller. */
+  const label = (row: number, text: string, unit?: string, bold = false) => {
+    s.put('A', row, text, bold ? ST.LABEL_B : ST.LABEL);
+    s.put('C', row, unit ?? '', ST.UNIT);
   };
 
-  s.put('A', R.TITLE, 'Manning–Strickler — Classeur de calcul interactif');
-  s.put('A', R.DATE, `Généré le ${new Date().toLocaleDateString('fr-FR')} — modifiez les cellules jaunes conceptuelles (B5, B7–B13, B17–B21) : tout recalcule, graphique compris.`);
+  s.put('A', R.TITLE, 'MANNING–STRICKLER — Note de calcul hydraulique', ST.TITLE);
+  s.merge(`A${R.TITLE}:C${R.TITLE}`);
+  s.put(
+    'A',
+    R.DATE,
+    `Écoulement à surface libre · généré le ${new Date().toLocaleDateString('fr-FR')} · les cellules sur fond jaune sont modifiables`,
+    ST.SUBTITLE,
+  );
+  s.merge(`A${R.DATE}:C${R.DATE}`);
 
-  label(R.SEC1, '1) PROFIL ET GÉOMÉTRIE (liste déroulante en B5 ; renseignez les dimensions du profil choisi)');
-  label(R.PROFIL, 'Profil (liste déroulante)');
-  s.put('B', R.PROFIL, PROFILE_NAMES[c.pidx - 1]);
+  // --- 1) Profile and geometry ---
+  section(R.SEC1, '1 · PROFIL ET GÉOMÉTRIE');
+  label(R.PROFIL, 'Profil (liste déroulante)', '', true);
+  s.put('B', R.PROFIL, PROFILE_NAMES[c.pidx - 1], ST.INPUT_TEXT);
   label(R.PIDX, 'Index du profil (auto)');
-  s.put('B', R.PIDX, F(`IFERROR(MATCH(B${R.PROFIL},{"${PROFILE_NAMES.join('","')}"},0),1)`, c.pidx));
+  s.put('B', R.PIDX, F(`IFERROR(MATCH(B${R.PROFIL},{"${PROFILE_NAMES.join('","')}"},0),1)`, c.pidx), ST.AUX);
   label(R.D, 'D — diamètre intérieur (circulaire)', 'm');
-  if (c.dims.D > 0) s.put('B', R.D, c.dims.D);
-  label(R.L, 'L — largeur (ovoïde, hauteur = 1,5·L)', 'm');
-  if (c.dims.L > 0) s.put('B', R.L, c.dims.L);
-  label(R.RB, 'B — base (rectangulaire)', 'm');
-  if (c.dims.RB > 0) s.put('B', R.RB, c.dims.RB);
-  label(R.RH, 'H — hauteur (rectangulaire)', 'm');
-  if (c.dims.RH > 0) s.put('B', R.RH, c.dims.RH);
+  s.put('B', R.D, c.dims.D > 0 ? c.dims.D : null, ST.INPUT_NUM);
+  label(R.L, 'L — largeur (ovoïde ; hauteur = 1,5·L)', 'm');
+  s.put('B', R.L, c.dims.L > 0 ? c.dims.L : null, ST.INPUT_NUM);
+  label(R.RB, 'B — base (caniveau rectangulaire)', 'm');
+  s.put('B', R.RB, c.dims.RB > 0 ? c.dims.RB : null, ST.INPUT_NUM);
+  label(R.RH, 'H — hauteur (caniveau rectangulaire)', 'm');
+  s.put('B', R.RH, c.dims.RH > 0 ? c.dims.RH : null, ST.INPUT_NUM);
   label(R.TB, 'b — petite base (trapèze)', 'm');
-  if (c.dims.TB > 0) s.put('B', R.TB, c.dims.TB);
+  s.put('B', R.TB, c.dims.TB > 0 ? c.dims.TB : null, ST.INPUT_NUM);
   label(R.TT, 'B — grande base (trapèze)', 'm');
-  if (c.dims.TT > 0) s.put('B', R.TT, c.dims.TT);
+  s.put('B', R.TT, c.dims.TT > 0 ? c.dims.TT : null, ST.INPUT_NUM);
   label(R.TH, 'H — hauteur (trapèze)', 'm');
-  if (c.dims.TH > 0) s.put('B', R.TH, c.dims.TH);
+  s.put('B', R.TH, c.dims.TH > 0 ? c.dims.TH : null, ST.INPUT_NUM);
   label(R.HMAX, 'Hauteur de la section pleine Hmax', 'm');
-  s.put('B', R.HMAX, F(`CHOOSE(B${R.PIDX},B${R.D},1.5*B${R.L},B${R.RH},B${R.TH})`, c.Hmax));
+  s.put('B', R.HMAX, F(`CHOOSE(B${R.PIDX},B${R.D},1.5*B${R.L},B${R.RH},B${R.TH})`, c.Hmax), ST.N3);
 
-  label(R.SEC2, '2) MATÉRIAU (liste déroulante) ET PARAMÈTRES HYDRAULIQUES');
-  label(R.MAT, 'Matériau (liste déroulante)');
-  s.put('B', R.MAT, data.materialName);
-  label(R.K, 'Coefficient de Strickler K (modifiable)', 'm^(1/3)/s');
-  s.put('B', R.K, F(`IFERROR(VLOOKUP(B${R.MAT},'Matériaux'!$A$2:$B$12,2,0),${c.K || 80})`, c.K || 80));
-  label(R.JPCT, 'Pente J', '%');
-  if (data.slopePct !== undefined) s.put('B', R.JPCT, data.slopePct);
-  label(R.J, 'Pente J (ratio m/m)', 'm/m');
-  s.put('B', R.J, F(`IF(B${R.JPCT}="",0,B${R.JPCT}/100)`, c.J));
-  label(R.QL, 'Débit Q', 'L/s');
-  if (data.Q_lps !== undefined) s.put('B', R.QL, data.Q_lps);
-  label(R.QM, 'Débit Q (m³/s)', 'm³/s');
-  s.put('B', R.QM, F(`IF(B${R.QL}="",0,B${R.QL}/1000)`, c.QM));
+  // --- 2) Material and hydraulic parameters ---
+  section(R.SEC2, '2 · MATÉRIAU ET PARAMÈTRES HYDRAULIQUES');
+  label(R.MAT, 'Matériau (liste déroulante)', '', true);
+  s.put('B', R.MAT, data.materialName, ST.INPUT_TEXT);
+  label(R.K, 'Coefficient de Strickler K', 'm^(1/3)/s');
+  s.put('B', R.K, F(`IFERROR(VLOOKUP(B${R.MAT},'Matériaux'!$A$2:$B$12,2,0),${c.K || 80})`, c.K || 80), ST.N1);
+  label(R.JPCT, 'Pente J', '%', true);
+  s.put('B', R.JPCT, data.slopePct !== undefined ? data.slopePct : null, ST.INPUT_NUM);
+  label(R.J, 'Pente J (ratio)', 'm/m');
+  s.put('B', R.J, F(`IF(B${R.JPCT}="",0,B${R.JPCT}/100)`, c.J), ST.N4);
+  label(R.QL, 'Débit Q', 'L/s', true);
+  s.put('B', R.QL, data.Q_lps !== undefined ? data.Q_lps : null, ST.INPUT_NUM);
+  label(R.QM, 'Débit Q', 'm³/s');
+  s.put('B', R.QM, F(`IF(B${R.QL}="",0,B${R.QL}/1000)`, c.QM), ST.N4);
 
-  // --- Ovoid constants + trapezoid helper (columns E/F) ---
-  s.put('E', 4, 'Constantes géométrie (auto)');
-  const ovPut = (row: number, lab: string, f: string) => {
-    s.put('E', row, lab);
-    s.put('F', row, F(f, c.ov[row]));
-  };
-  const Fo = (row: number) => `F${row}`;
-  ovPut(OV.R, 'Ovoïde R = L/2', `IF(B${R.L}="",0,B${R.L}/2)`);
-  ovPut(OV.r, 'r = R/3', `${Fo(OV.R)}/3`);
-  ovPut(OV.rho, 'ρ = 3R', `3*${Fo(OV.R)}`);
-  ovPut(OV.b, 'b centre flancs = 2,1R', `21*${Fo(OV.R)}/10`);
-  ovPut(OV.a, 'a centre flancs', `-SQRT(MAX(0,4*${Fo(OV.R)}^2-(${Fo(OV.b)}-2*${Fo(OV.R)})^2))`);
-  ovPut(OV.yb, 'y jonction radier', `IF(${Fo(OV.R)}=0,0,${Fo(OV.b)}+${Fo(OV.rho)}*(${Fo(OV.r)}-${Fo(OV.b)})/SQRT(${Fo(OV.a)}^2+(${Fo(OV.r)}-${Fo(OV.b)})^2))`);
-  ovPut(OV.yt, 'y jonction voûte', `IF(${Fo(OV.R)}=0,0,${Fo(OV.b)}+${Fo(OV.rho)}*(2*${Fo(OV.R)}-${Fo(OV.b)})/SQRT(${Fo(OV.a)}^2+(2*${Fo(OV.R)}-${Fo(OV.b)})^2))`);
-  const S = (cc: string, yc: string, y: string) =>
-    `(${y}-${yc})*SQRT(MAX(0,${cc}^2-(${y}-${yc})^2))+${cc}^2*ASIN(MAX(-1,MIN(1,IF(${cc}=0,0,(${y}-${yc})/${cc}))))`;
-  ovPut(OV.Ayb, 'A(yb)', `${S(Fo(OV.r), Fo(OV.r), Fo(OV.yb))}+${Fo(OV.r)}^2*PI()/2`);
-  ovPut(OV.S2yb, 'S2(yb) aux.', S(Fo(OV.rho), Fo(OV.b), Fo(OV.yb)));
-  ovPut(OV.Ayt, 'A(yt)', `${Fo(OV.Ayb)}+2*${Fo(OV.a)}*(${Fo(OV.yt)}-${Fo(OV.yb)})+${S(Fo(OV.rho), Fo(OV.b), Fo(OV.yt))}-${Fo(OV.S2yb)}`);
-  ovPut(OV.Pyb, 'P(yb)', `2*${Fo(OV.r)}*(ASIN(MAX(-1,MIN(1,IF(${Fo(OV.r)}=0,0,(${Fo(OV.yb)}-${Fo(OV.r)})/${Fo(OV.r)}))))+PI()/2)`);
-  ovPut(OV.As2, 'asin2(yb) aux.', `ASIN(MAX(-1,MIN(1,IF(${Fo(OV.rho)}=0,0,(${Fo(OV.yb)}-${Fo(OV.b)})/${Fo(OV.rho)}))))`);
-  ovPut(OV.Pyt, 'P(yt)', `${Fo(OV.Pyb)}+2*${Fo(OV.rho)}*(ASIN(MAX(-1,MIN(1,IF(${Fo(OV.rho)}=0,0,(${Fo(OV.yt)}-${Fo(OV.b)})/${Fo(OV.rho)}))))-${Fo(OV.As2)})`);
-  ovPut(OV.S3yt, 'S3(yt) aux.', S(Fo(OV.R), `2*${Fo(OV.R)}`, Fo(OV.yt)));
-  ovPut(OV.As3, 'asin3(yt) aux.', `ASIN(MAX(-1,MIN(1,IF(${Fo(OV.R)}=0,0,(${Fo(OV.yt)}-2*${Fo(OV.R)})/${Fo(OV.R)}))))`);
-  ovPut(OV.Afull, 'A pleine ovoïde', `${Fo(OV.Ayt)}+${Fo(OV.R)}^2*PI()/2-${Fo(OV.S3yt)}`);
-  ovPut(OV.Pfull, 'P plein ovoïde', `${Fo(OV.Pyt)}+2*${Fo(OV.R)}*(PI()/2-${Fo(OV.As3)})`);
-  s.put('E', OV.mTrap, 'm trapèze = (B−b)/(2H)');
-  s.put('F', OV.mTrap, F(`IF(B${R.TH}=0,0,IF(B${R.TH}="",0,(B${R.TT}-B${R.TB})/(2*B${R.TH})))`, c.ov[OV.mTrap]));
-
-  // --- Full section ---
-  label(R.SEC3, '3) SECTION PLEINE (remplissage 100 %)');
+  // --- 3) Full section ---
+  section(R.SEC3, '3 · SECTION PLEINE (remplissage 100 %)');
   label(R.A, 'Aire mouillée pleine A', 'm²');
-  s.put('B', R.A, F(`CHOOSE(B${R.PIDX},PI()*B${R.D}^2/4,${Fo(OV.Afull)},B${R.RB}*B${R.RH},(B${R.TB}+B${R.TT})/2*B${R.TH})`, c.Afull));
+  s.put('B', R.A, F(`CHOOSE(B${R.PIDX},PI()*B${R.D}^2/4,${Fo(OV.Afull)},B${R.RB}*B${R.RH},(B${R.TB}+B${R.TT})/2*B${R.TH})`, c.Afull), ST.N4);
   label(R.P, 'Périmètre mouillé plein P', 'm');
-  s.put('B', R.P, F(`CHOOSE(B${R.PIDX},PI()*B${R.D},${Fo(OV.Pfull)},B${R.RB}+2*B${R.RH},B${R.TB}+2*SQRT(((B${R.TT}-B${R.TB})/2)^2+B${R.TH}^2))`, c.Pfull));
-  label(R.RHY, 'Rayon hydraulique Rh = A/P', 'm');
-  s.put('B', R.RHY, F(`IF(B${R.P}=0,0,B${R.A}/B${R.P})`, c.Rh));
+  s.put('B', R.P, F(`CHOOSE(B${R.PIDX},PI()*B${R.D},${Fo(OV.Pfull)},B${R.RB}+2*B${R.RH},B${R.TB}+2*SQRT(((B${R.TT}-B${R.TB})/2)^2+B${R.TH}^2))`, c.Pfull), ST.N3);
+  label(R.RHY, 'Rayon hydraulique Rh = A / P', 'm');
+  s.put('B', R.RHY, F(`IF(B${R.P}=0,0,B${R.A}/B${R.P})`, c.Rh), ST.N4);
   label(R.VC, 'Vitesse pleine section Vc = K·Rh^(2/3)·√J', 'm/s');
-  s.put('B', R.VC, F(`B${R.K}*B${R.RHY}^(2/3)*SQRT(B${R.J})`, c.Vc));
+  s.put('B', R.VC, F(`B${R.K}*B${R.RHY}^(2/3)*SQRT(B${R.J})`, c.Vc), ST.N3);
   label(R.QCM, 'Débit critique Qc = Vc·A', 'm³/s');
-  s.put('B', R.QCM, F(`B${R.VC}*B${R.A}`, c.QcM));
-  label(R.QCL, 'Débit critique Qc', 'L/s');
-  s.put('B', R.QCL, F(`B${R.QCM}*1000`, c.QcL));
-  label(R.QMAX, 'Débit maximal Qmax (max de la courbe)', 'L/s');
-  s.put('B', R.QMAX, F(`MAX(${CR('Q')})`, c.QmaxL));
+  s.put('B', R.QCM, F(`B${R.VC}*B${R.A}`, c.QcM), ST.N4);
+  label(R.QCL, 'Débit critique Qc', 'L/s', true);
+  s.put('B', R.QCL, F(`B${R.QCM}*1000`, c.QcL), ST.KEY);
+  label(R.QMAX, 'Débit maximal Qmax (maximum de la courbe)', 'L/s', true);
+  s.put('B', R.QMAX, F(`MAX(${CR('Q')})`, c.QmaxL), ST.KEY);
   label(R.FQMAX, 'Remplissage à Qmax', '%');
-  s.put('B', R.FQMAX, F(`IFERROR(${CIDX('A', `MATCH(B${R.QMAX},${CR('Q')},0)`)},100)`, c.peak));
+  s.put('B', R.FQMAX, F(`IFERROR(${CIDX('A', `MATCH(B${R.QMAX},${CR('Q')},0)`)},100)`, c.peak), ST.N0);
 
-  // --- Operating point ---
-  label(R.SEC4, '4) POINT DE FONCTIONNEMENT (interpolation sur la feuille Courbe, pas de 1 %)');
-  label(R.REGIME, 'Régime');
-  // String-valued formula: set directly on the worksheet after toSheet (below).
+  // --- 4) Operating point ---
+  section(R.SEC4, '4 · POINT DE FONCTIONNEMENT');
+  label(R.REGIME, 'Régime d’écoulement', '', true);
+  // String-valued formula: written directly on the worksheet after toSheet().
   const regimeF = `IF(OR(B${R.QL}="",B${R.VC}=0),"",IF(B${R.QL}>B${R.QMAX},IF(B${R.PIDX}<=2,"EN CHARGE (Q > Qmax)","DÉBORDEMENT (Q > Qmax)"),IF(AND(B${R.PIDX}<=2,B${R.QL}>B${R.QCL}),"BICRITIQUE : 2 solutions","Écoulement à surface libre")))`;
   label(R.PEAK, '(aux.) ligne du pic');
-  s.put('B', R.PEAK, F(`IFERROR(MATCH(B${R.QMAX},${CR('Q')},0),${N_ROWS})`, c.peak));
+  s.put('B', R.PEAK, F(`IFERROR(MATCH(B${R.QMAX},${CR('Q')},0),${N_ROWS})`, c.peak), ST.AUX);
   label(R.ILOW, '(aux.) i solution basse');
-  s.put('B', R.ILOW, F(`IF(B${R.QL}="",0,IFERROR(MATCH(B${R.QL},Courbe!$Q$${CURVE_FIRST}:INDEX(${CR('Q')},B${R.PEAK}),1),0))`, c.iLow));
+  s.put('B', R.ILOW, F(`IF(B${R.QL}="",0,IFERROR(MATCH(B${R.QL},Courbe!$Q$${CURVE_FIRST}:INDEX(${CR('Q')},B${R.PEAK}),1),0))`, c.iLow), ST.AUX);
   label(R.TLOW, '(aux.) t interpolation basse');
   s.put('B', R.TLOW, F(
     `IF(OR(B${R.ILOW}=0,B${R.ILOW}>=B${R.PEAK}),0,(B${R.QL}-${CIDX('Q', `B${R.ILOW}`)})/(${CIDX('Q', `B${R.ILOW}+1`)}-${CIDX('Q', `B${R.ILOW}`)}))`,
     c.tLow,
-  ));
-  label(R.FLOW, 'Taux de remplissage — solution basse', '%');
+  ), ST.AUX);
+  label(R.FLOW, 'Taux de remplissage — solution basse', '%', true);
   s.put('B', R.FLOW, FN(
     `IF(OR(B${R.QL}="",B${R.VC}=0),NA(),IF(B${R.QL}>B${R.QMAX},100,IF(B${R.ILOW}=0,IFERROR(B${R.QL}/${CIDX('Q', 1)},0),${CIDX('A', `B${R.ILOW}`)}+B${R.TLOW})))`,
     c.fillLow,
-  ));
+  ), ST.KEY);
   label(R.ALOW, '(aux.) aire mouillée basse', 'm²');
   s.put('B', R.ALOW, F(
     `IF(B${R.QL}="",0,IF(B${R.QL}>B${R.QMAX},B${R.A},IF(B${R.ILOW}=0,${CIDX('M', 1)}*IFERROR(B${R.QL}/${CIDX('Q', 1)},0),${CIDX('M', `B${R.ILOW}`)}+B${R.TLOW}*(${CIDX('M', `MIN(B${R.ILOW}+1,${N_ROWS})`)}-${CIDX('M', `B${R.ILOW}`)}))))`,
     c.aLow,
-  ));
-  label(R.VLOW, 'Vitesse d’écoulement — solution basse', 'm/s');
-  s.put('B', R.VLOW, FN(`IF(OR(B${R.QL}="",B${R.ALOW}=0),NA(),B${R.QM}/B${R.ALOW})`, c.vLow));
-  label(R.BIC, 'Régime bicritique ?');
-  s.put('B', R.BIC, F(`IF(AND(B${R.PIDX}<=2,B${R.QL}<>"",B${R.QL}>B${R.QCL},B${R.QL}<=B${R.QMAX}),1,0)`, c.bic ? 1 : 0));
+  ), ST.AUX);
+  label(R.VLOW, 'Vitesse d’écoulement — solution basse', 'm/s', true);
+  s.put('B', R.VLOW, FN(`IF(OR(B${R.QL}="",B${R.ALOW}=0),NA(),B${R.QM}/B${R.ALOW})`, c.vLow), ST.KEY);
+  label(R.BIC, '(aux.) régime bicritique ?');
+  s.put('B', R.BIC, F(`IF(AND(B${R.PIDX}<=2,B${R.QL}<>"",B${R.QL}>B${R.QCL},B${R.QL}<=B${R.QMAX}),1,0)`, c.bic ? 1 : 0), ST.AUX);
   label(R.POSH, '(aux.) position haute');
   s.put('B', R.POSH, F(
     `IF(B${R.BIC}=1,IFERROR(MATCH(B${R.QL},INDEX(${CR('Q')},B${R.PEAK}):Courbe!$Q$${CURVE_LAST},-1),1),1)`,
     c.posH,
-  ));
+  ), ST.AUX);
   label(R.IH, '(aux.) i solution haute');
-  s.put('B', R.IH, F(`B${R.PEAK}-1+B${R.POSH}`, c.iH));
+  s.put('B', R.IH, F(`B${R.PEAK}-1+B${R.POSH}`, c.iH), ST.AUX);
   label(R.TH2, '(aux.) t interpolation haute');
   s.put('B', R.TH2, F(
     `IF(OR(B${R.BIC}=0,B${R.IH}>=${N_ROWS}),0,IFERROR((${CIDX('Q', `B${R.IH}`)}-B${R.QL})/(${CIDX('Q', `B${R.IH}`)}-${CIDX('Q', `B${R.IH}+1`)}),0))`,
     c.tH,
-  ));
-  label(R.FH, 'Taux de remplissage — solution haute (bicritique)', '%');
-  s.put('B', R.FH, FN(`IF(B${R.BIC}=1,${CIDX('A', `B${R.IH}`)}+B${R.TH2},NA())`, c.fillH));
+  ), ST.AUX);
+  label(R.FH, 'Taux de remplissage — solution haute (bicritique)', '%', true);
+  s.put('B', R.FH, FN(`IF(B${R.BIC}=1,${CIDX('A', `B${R.IH}`)}+B${R.TH2},NA())`, c.fillH), ST.KEY);
   label(R.AH, '(aux.) aire mouillée haute', 'm²');
   s.put('B', R.AH, F(
     `IF(B${R.BIC}=1,${CIDX('M', `B${R.IH}`)}+B${R.TH2}*(${CIDX('M', `MIN(B${R.IH}+1,${N_ROWS})`)}-${CIDX('M', `B${R.IH}`)}),0)`,
     c.aH,
-  ));
-  label(R.VH, 'Vitesse d’écoulement — solution haute', 'm/s');
-  s.put('B', R.VH, FN(`IF(OR(B${R.BIC}=0,B${R.AH}=0),NA(),B${R.QM}/B${R.AH})`, c.vH));
+  ), ST.AUX);
+  label(R.VH, 'Vitesse d’écoulement — solution haute', 'm/s', true);
+  s.put('B', R.VH, FN(`IF(OR(B${R.BIC}=0,B${R.AH}=0),NA(),B${R.QM}/B${R.AH})`, c.vH), ST.KEY);
 
-  // --- Sizing ---
-  label(R.SEC5, '5) DIMENSIONNEMENT');
-  label(R.MINJ, 'Pente minimale (Q à pleine section)', '%');
-  s.put('B', R.MINJ, FN(`IF(OR(B${R.QL}="",B${R.A}=0,B${R.K}=0),NA(),(B${R.QM}/(B${R.K}*B${R.A}*B${R.RHY}^(2/3)))^2*100)`, c.minJ));
-  label(R.MIND, 'Dimension minimale D/L/H (pente indiquée)', 'm');
+  // --- 5) Sizing ---
+  section(R.SEC5, '5 · DIMENSIONNEMENT');
+  label(R.MINJ, 'Pente minimale (Q à pleine section)', '%', true);
+  s.put('B', R.MINJ, FN(`IF(OR(B${R.QL}="",B${R.A}=0,B${R.K}=0),NA(),(B${R.QM}/(B${R.K}*B${R.A}*B${R.RHY}^(2/3)))^2*100)`, c.minJ), ST.KEY);
+  label(R.MIND, 'Dimension minimale D / L / H (pente indiquée)', 'm', true);
   s.put('B', R.MIND, FN(
     `IF(OR(B${R.QL}="",B${R.QCM}=0),NA(),CHOOSE(B${R.PIDX},B${R.D},B${R.L},B${R.RH},B${R.TH})*(B${R.QM}/B${R.QCM})^(3/8))`,
     c.minDim,
-  ));
+  ), ST.KEY);
 
-  // --- Chart data block ---
-  label(R.SEC6, 'Données du graphique (aux.) — x = ratio, y = remplissage %');
-  s.put('A', R.GQ1, 'Q/Qc — point bas');
-  s.put('H', R.GQ1, FN(`IF(OR(B${R.QL}="",B${R.QCL}=0),NA(),B${R.QL}/B${R.QCL})`, c.gq1));
-  s.put('I', R.GQ1, FN(`B${R.FLOW}`, c.gy1));
-  s.put('A', R.GQ2, 'Q/Qc — point haut');
-  s.put('H', R.GQ2, FN(`IF(B${R.BIC}=1,B${R.QL}/B${R.QCL},NA())`, c.gq2));
-  s.put('I', R.GQ2, FN(`IF(B${R.BIC}=1,B${R.FH},NA())`, c.gy2));
-  s.put('A', R.GV1, 'V/Vc — point bas');
-  s.put('H', R.GV1, FN(`IF(OR(B${R.QL}="",B${R.VC}=0),NA(),B${R.VLOW}/B${R.VC})`, c.gv1));
-  s.put('I', R.GV1, FN(`B${R.FLOW}`, c.gy1));
-  s.put('A', R.GV2, 'V/Vc — point haut');
-  s.put('H', R.GV2, FN(`IF(B${R.BIC}=1,B${R.VH}/B${R.VC},NA())`, c.gv2));
-  s.put('I', R.GV2, FN(`IF(B${R.BIC}=1,B${R.FH},NA())`, c.gy2));
+  // --- Notes + chart area ---
+  section(R.SEC6, '6 · COURBES HYDRAULIQUES');
+  s.put('A', R.NOTE1, 'V = K · Rh^(2/3) · J^(1/2)     Q = V · A     Rh = A / P', ST.SUBTITLE);
+  s.merge(`A${R.NOTE1}:C${R.NOTE1}`);
+  s.put(
+    'A',
+    R.NOTE2,
+    'Zone bicritique (sections fermées) : entre Qc et Qmax, deux hauteurs d’eau transitent le même débit.',
+    ST.SUBTITLE,
+  );
+  s.merge(`A${R.NOTE2}:C${R.NOTE2}`);
+  // Reserve the chart rows so the print area covers them.
+  s.put('A', R.CHART_BOTTOM, '', ST.DEFAULT);
 
-  const ws = s.toSheet([46, 16, 12, 2, 22, 14, 2, 10, 10]);
+  const ws = s.toSheet([46, 17, 12]);
   // Regime is a string-valued formula: cache as a formula-string cell
   ws[`B${R.REGIME}`] = { t: 'str', v: c.regime, f: regimeF } as any;
+  (ws as any)._st.set(`B${R.REGIME}`, ST.REGIME);
   return ws;
 }
 
 function buildCurveSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   const s = new SheetMap();
-  s.put('A', 1, 'Courbes hydrauliques — table à pas de 1 % (toutes formules ; blocs par profil, bloc actif choisi via l’index B6 de la feuille Calcul)');
-  // Local helper row
-  s.put('A', 2, 'pidx');
-  s.put('A', 3, F(`Calcul!$B$${R.PIDX}`, c.pidx));
-  s.put('B', 2, 'Hmax (m)');
-  s.put('B', 3, F(`Calcul!$B$${R.HMAX}`, c.Hmax));
-  s.put('C', 2, 'K');
-  s.put('C', 3, F(`Calcul!$B$${R.K}`, c.K));
-  s.put('D', 2, 'J (m/m)');
-  s.put('D', 3, F(`Calcul!$B$${R.J}`, c.J));
+  s.put('A', 1, 'COURBES HYDRAULIQUES — table à pas de 1 %', ST.TITLE);
+  s.put('A', 2, 'Toutes les valeurs sont des formules ; un bloc de colonnes par profil, le bloc actif est choisi par l’index de profil.', ST.SUBTITLE);
+  // Local parameter row, linked to the Calcul sheet
+  s.put('A', 3, 'pidx', ST.LABEL_B);
+  s.put('A', 4, F(`Calcul!$B$${R.PIDX}`, c.pidx), ST.N0);
+  s.put('B', 3, 'Hmax (m)', ST.LABEL_B);
+  s.put('B', 4, F(`Calcul!$B$${R.HMAX}`, c.Hmax), ST.N3);
+  s.put('C', 3, 'K', ST.LABEL_B);
+  s.put('C', 4, F(`Calcul!$B$${R.K}`, c.K), ST.N1);
+  s.put('D', 3, 'J (m/m)', ST.LABEL_B);
+  s.put('D', 4, F(`Calcul!$B$${R.J}`, c.J), ST.N4);
 
   const headers = ['Remplissage (%)', 'h (m)', 'θ circ (rad)', 'A circ', 'P circ', 'h ovoïde', 'A ovoïde', 'P ovoïde', 'A rect', 'P rect', 'A trap', 'P trap', 'A (m²)', 'P (m)', 'Rh (m)', 'V (m/s)', 'Q (L/s)', 'Q/Qc', 'V/Vc'];
-  headers.forEach((h, i) => s.put(XLSX.utils.encode_col(i), 5, h));
+  headers.forEach((h, i) => s.put(XLSX.utils.encode_col(i), 5, h, ST.THEAD));
 
-  const Ca = (row: number) => `Calcul!$F$${row}`; // ovoid constants
+  const Ca = (row: number) => `${CONST_SHEET}!$B$${row}`; // ovoid constants
   const S = (cc: string, yc: string, y: string) =>
     `(${y}-${yc})*SQRT(MAX(0,${cc}^2-(${y}-${yc})^2))+${cc}^2*ASIN(MAX(-1,MIN(1,IF(${cc}=0,0,(${y}-${yc})/${cc}))))`;
 
   for (let i = 1; i <= N_ROWS; i++) {
     const n = CURVE_FIRST + i - 1;
     const k = i - 1;
-    s.put('A', n, i);
-    s.put('B', n, F(`A${n}/100*$B$3`, c.hSel[k]));
-    s.put('C', n, F(`2*ACOS(1-A${n}/50)`, c.theta[k]));
-    s.put('D', n, F(`Calcul!$B$${R.D}^2/8*(C${n}-SIN(C${n}))`, c.circA[k]));
-    s.put('E', n, F(`Calcul!$B$${R.D}*C${n}/2`, c.circP[k]));
-    s.put('F', n, F(`A${n}/100*1.5*Calcul!$B$${R.L}`, c.hOv[k]));
+    s.put('A', n, i, ST.N0);
+    s.put('B', n, F(`A${n}/100*$B$4`, c.hSel[k]), ST.N3);
+    s.put('C', n, F(`2*ACOS(1-A${n}/50)`, c.theta[k]), ST.N3);
+    s.put('D', n, F(`Calcul!$B$${R.D}^2/8*(C${n}-SIN(C${n}))`, c.circA[k]), ST.N4);
+    s.put('E', n, F(`Calcul!$B$${R.D}*C${n}/2`, c.circP[k]), ST.N3);
+    s.put('F', n, F(`A${n}/100*1.5*Calcul!$B$${R.L}`, c.hOv[k]), ST.N3);
     const h = `F${n}`;
     s.put('G', n, F(
       `IFERROR(IF(${Ca(OV.R)}=0,0,IF(${h}<=${Ca(OV.yb)},${S(Ca(OV.r), Ca(OV.r), h)}+${Ca(OV.r)}^2*PI()/2,IF(${h}<=${Ca(OV.yt)},${Ca(OV.Ayb)}+2*${Ca(OV.a)}*(${h}-${Ca(OV.yb)})+${S(Ca(OV.rho), Ca(OV.b), h)}-${Ca(OV.S2yb)},${Ca(OV.Ayt)}+${S(Ca(OV.R), `2*${Ca(OV.R)}`, h)}-${Ca(OV.S3yt)}))),0)`,
       c.ovA[k],
-    ));
+    ), ST.N4);
     s.put('H', n, F(
       `IFERROR(IF(${Ca(OV.R)}=0,0,IF(${h}<=${Ca(OV.yb)},2*${Ca(OV.r)}*(ASIN(MAX(-1,MIN(1,IF(${Ca(OV.r)}=0,0,(${h}-${Ca(OV.r)})/${Ca(OV.r)}))))+PI()/2),IF(${h}<=${Ca(OV.yt)},${Ca(OV.Pyb)}+2*${Ca(OV.rho)}*(ASIN(MAX(-1,MIN(1,(${h}-${Ca(OV.b)})/${Ca(OV.rho)})))-${Ca(OV.As2)}),${Ca(OV.Pyt)}+2*${Ca(OV.R)}*(ASIN(MAX(-1,MIN(1,(${h}-2*${Ca(OV.R)})/${Ca(OV.R)})))-${Ca(OV.As3)})))),0)`,
       c.ovP[k],
-    ));
-    s.put('I', n, F(`Calcul!$B$${R.RB}*(A${n}/100*Calcul!$B$${R.RH})`, c.rectA[k]));
-    s.put('J', n, F(`Calcul!$B$${R.RB}+2*(A${n}/100*Calcul!$B$${R.RH})`, c.rectP[k]));
+    ), ST.N3);
+    s.put('I', n, F(`Calcul!$B$${R.RB}*(A${n}/100*Calcul!$B$${R.RH})`, c.rectA[k]), ST.N4);
+    s.put('J', n, F(`Calcul!$B$${R.RB}+2*(A${n}/100*Calcul!$B$${R.RH})`, c.rectP[k]), ST.N3);
     s.put('K', n, F(
-      `(Calcul!$B$${R.TB}+Calcul!$F$${OV.mTrap}*(A${n}/100*Calcul!$B$${R.TH}))*(A${n}/100*Calcul!$B$${R.TH})`,
+      `(Calcul!$B$${R.TB}+${CONST_SHEET}!$B$${OV.mTrap}*(A${n}/100*Calcul!$B$${R.TH}))*(A${n}/100*Calcul!$B$${R.TH})`,
       c.trapA[k],
-    ));
+    ), ST.N4);
     s.put('L', n, F(
-      `Calcul!$B$${R.TB}+2*(A${n}/100*Calcul!$B$${R.TH})*SQRT(1+Calcul!$F$${OV.mTrap}^2)`,
+      `Calcul!$B$${R.TB}+2*(A${n}/100*Calcul!$B$${R.TH})*SQRT(1+${CONST_SHEET}!$B$${OV.mTrap}^2)`,
       c.trapP[k],
-    ));
-    s.put('M', n, F(`CHOOSE($A$3,D${n},G${n},I${n},K${n})`, c.selA[k]));
-    s.put('N', n, F(`CHOOSE($A$3,E${n},H${n},J${n},L${n})`, c.selP[k]));
-    s.put('O', n, F(`IF(N${n}=0,0,M${n}/N${n})`, c.rh[k]));
-    s.put('P', n, F(`$C$3*O${n}^(2/3)*SQRT($D$3)`, c.v[k]));
-    s.put('Q', n, F(`P${n}*M${n}*1000`, c.q[k]));
-    s.put('R', n, FN(`IFERROR(IF(Calcul!$B$${R.QCL}=0,NA(),Q${n}/Calcul!$B$${R.QCL}),NA())`, c.qRatio[k]));
-    s.put('S', n, FN(`IFERROR(IF(Calcul!$B$${R.VC}=0,NA(),P${n}/Calcul!$B$${R.VC}),NA())`, c.vRatio[k]));
+    ), ST.N3);
+    s.put('M', n, F(`CHOOSE($A$4,D${n},G${n},I${n},K${n})`, c.selA[k]), ST.N4);
+    s.put('N', n, F(`CHOOSE($A$4,E${n},H${n},J${n},L${n})`, c.selP[k]), ST.N3);
+    s.put('O', n, F(`IF(N${n}=0,0,M${n}/N${n})`, c.rh[k]), ST.N4);
+    s.put('P', n, F(`$C$4*O${n}^(2/3)*SQRT($D$4)`, c.v[k]), ST.N3);
+    s.put('Q', n, F(`P${n}*M${n}*1000`, c.q[k]), ST.N2);
+    s.put('R', n, FN(`IFERROR(IF(Calcul!$B$${R.QCL}=0,NA(),Q${n}/Calcul!$B$${R.QCL}),NA())`, c.qRatio[k]), ST.N3);
+    s.put('S', n, FN(`IFERROR(IF(Calcul!$B$${R.VC}=0,NA(),P${n}/Calcul!$B$${R.VC}),NA())`, c.vRatio[k]), ST.N3);
   }
-  return s.toSheet([14, 9, 10, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 9, 9, 10, 8, 8]);
+  return s.toSheet([13, 9, 10, 10, 9, 9, 10, 9, 10, 9, 10, 9, 10, 9, 9, 9, 10, 8, 8]);
 }
 
 // ---------------------------------------------------------------------------
-// OOXML post-processing: data validations + native chart
+// OOXML post-processing: styles, print setup, data validations, native chart
 // ---------------------------------------------------------------------------
-async function injectValidationAndChart(base64: string, c: Caches): Promise<string> {
-  const zip = await JSZip.loadAsync(base64, { base64: true });
 
-  // 1) Data validations + drawing reference on sheet1 (Calcul)
-  const sheetPath = 'xl/worksheets/sheet1.xml';
-  let sheetXml = await zip.file(sheetPath)!.async('string');
-  const validations =
-    `<dataValidations count="2">` +
-    `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.PROFIL}"><formula1>"${PROFILE_NAMES.join(',')}"</formula1></dataValidation>` +
-    `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.MAT}"><formula1>'Matériaux'!$A$2:$A$12</formula1></dataValidation>` +
-    `</dataValidations>`;
-  // Schema order: dataValidations must precede hyperlinks/printOptions/
-  // pageMargins/…/ignoredErrors. Insert before the first such element present.
-  const followers = ['<hyperlinks', '<printOptions', '<pageMargins', '<pageSetup', '<headerFooter', '<rowBreaks', '<colBreaks', '<customProperties', '<cellWatches', '<ignoredErrors', '<smartTags', '<drawing', '</worksheet>'];
-  let anchorPos = sheetXml.length;
+/** Per-sheet print configuration (A4). */
+interface PrintCfg {
+  landscape: boolean;
+  printArea?: string; // e.g. "Calcul!$A$1:$C$88"
+  printTitles?: string; // e.g. "Courbe!$5:$5"
+  hiddenRows?: number[];
+  rowHeights?: Record<number, number>;
+  footerLeft: string;
+}
+
+/** Cells of a parsed <sheetData> row. */
+interface PRow {
+  open: string; // the full <row ...> opening tag
+  cells: Map<number, string>; // column index -> cell XML
+}
+
+const colOf = (ref: string) => XLSX.utils.decode_cell(ref).c;
+
+/**
+ * Rewrite <sheetData>: attach style indices to existing cells, materialise
+ * styled-but-empty cells (e.g. blank input cells that must still show their
+ * yellow fill), hide auxiliary rows and set row heights.
+ */
+function applyStyles(
+  sheetXml: string,
+  styles: Map<string, number>,
+  hiddenRows: number[] = [],
+  rowHeights: Record<number, number> = {},
+): string {
+  const sdOpen = sheetXml.indexOf('<sheetData');
+  if (sdOpen === -1) return sheetXml;
+  const selfClosed = /^<sheetData\s*\/>/.test(sheetXml.slice(sdOpen));
+  const sdEnd = selfClosed
+    ? sheetXml.indexOf('>', sdOpen) + 1
+    : sheetXml.indexOf('</sheetData>', sdOpen) + '</sheetData>'.length;
+  const inner = selfClosed
+    ? ''
+    : sheetXml.slice(sheetXml.indexOf('>', sdOpen) + 1, sheetXml.indexOf('</sheetData>', sdOpen));
+
+  const rows = new Map<number, PRow>();
+  const rowRe = /<row\s([^>]*?)\/>|<row\s([^>]*?)>([\s\S]*?)<\/row>/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(inner)) !== null) {
+    const attrs = m[1] ?? m[2];
+    const body = m[3] ?? '';
+    const rNum = Number(/\br="(\d+)"/.exec(attrs)?.[1] ?? 0);
+    if (!rNum) continue;
+    const cells = new Map<number, string>();
+    const cellRe = /<c\s[^>]*?\/>|<c\s[^>]*?>[\s\S]*?<\/c>/g;
+    let cm: RegExpExecArray | null;
+    while ((cm = cellRe.exec(body)) !== null) {
+      const ref = /\br="([A-Z]+\d+)"/.exec(cm[0])?.[1];
+      if (ref) cells.set(colOf(ref), cm[0]);
+    }
+    rows.set(rNum, { open: `<row ${attrs}>`, cells });
+  }
+
+  // Apply / create styled cells.
+  for (const [addr, st] of styles) {
+    if (st === ST.DEFAULT) continue;
+    const { r, c } = XLSX.utils.decode_cell(addr);
+    const rNum = r + 1;
+    let row = rows.get(rNum);
+    if (!row) {
+      row = { open: `<row r="${rNum}">`, cells: new Map() };
+      rows.set(rNum, row);
+    }
+    const existing = row.cells.get(c);
+    if (existing) {
+      const withoutStyle = existing.replace(/\ss="\d+"/, '');
+      row.cells.set(c, withoutStyle.replace(/^<c\s/, `<c s="${st}" `));
+    } else {
+      row.cells.set(c, `<c r="${addr}" s="${st}"/>`);
+    }
+  }
+
+  // Row attributes: hidden + custom heights.
+  const hidden = new Set(hiddenRows);
+  for (const rNum of new Set([...hidden, ...Object.keys(rowHeights).map(Number)])) {
+    let row = rows.get(rNum);
+    if (!row) {
+      row = { open: `<row r="${rNum}">`, cells: new Map() };
+      rows.set(rNum, row);
+    }
+    let open = row.open.replace(/\shidden="\d"/, '').replace(/\sht="[\d.]+"/, '').replace(/\scustomHeight="\d"/, '');
+    const extra =
+      (hidden.has(rNum) ? ' hidden="1"' : '') +
+      (rowHeights[rNum] ? ` ht="${rowHeights[rNum]}" customHeight="1"` : '');
+    row.open = open.replace(/>$/, `${extra}>`);
+  }
+
+  const rebuilt = [...rows.keys()]
+    .sort((a, b) => a - b)
+    .map((rNum) => {
+      const row = rows.get(rNum)!;
+      const body = [...row.cells.keys()].sort((a, b) => a - b).map((cc) => row.cells.get(cc)).join('');
+      return body ? `${row.open}${body}</row>` : `${row.open}</row>`;
+    })
+    .join('');
+
+  return sheetXml.slice(0, sdOpen) + `<sheetData>${rebuilt}</sheetData>` + sheetXml.slice(sdEnd);
+}
+
+/** Insert a block respecting CT_Worksheet's element order. */
+function insertBefore(sheetXml: string, block: string, followers: string[]): string {
+  let anchor = sheetXml.length;
   for (const tag of followers) {
     const p = sheetXml.indexOf(tag);
-    if (p !== -1 && p < anchorPos) anchorPos = p;
+    if (p !== -1 && p < anchor) anchor = p;
   }
-  sheetXml = sheetXml.slice(0, anchorPos) + validations + sheetXml.slice(anchorPos);
-  sheetXml = sheetXml.replace('</worksheet>', `<drawing r:id="rIdDrw1"/></worksheet>`);
-  if (!sheetXml.includes('xmlns:r=')) {
-    sheetXml = sheetXml.replace(
-      '<worksheet ',
-      '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ',
-    );
-  }
-  zip.file(sheetPath, sheetXml);
+  return sheetXml.slice(0, anchor) + block + sheetXml.slice(anchor);
+}
 
-  // 2) Sheet1 relationships -> drawing
+/** A4 page setup, margins and header/footer for one worksheet. */
+function applyPrintSetup(sheetXml: string, cfg: PrintCfg): string {
+  let xml = sheetXml.replace(/<pageMargins[^>]*\/>/g, '').replace(/<pageSetup[^>]*\/>/g, '');
+  // <sheetPr> must be the first child of <worksheet>.
+  if (!xml.includes('<sheetPr')) {
+    xml = xml.replace(/(<worksheet[^>]*>)/, `$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>`);
+  }
+  const block =
+    `<printOptions horizontalCentered="1"/>` +
+    `<pageMargins left="0.55" right="0.4" top="0.7" bottom="0.65" header="0.3" footer="0.3"/>` +
+    `<pageSetup paperSize="9" orientation="${cfg.landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0" horizontalDpi="300" verticalDpi="300"/>` +
+    `<headerFooter><oddHeader>&amp;L&amp;"Calibri,Bold"&amp;12Manning–Strickler&amp;R&amp;9&amp;D</oddHeader>` +
+    `<oddFooter>&amp;L&amp;9${cfg.footerLeft}&amp;R&amp;9Page &amp;P / &amp;N</oddFooter></headerFooter>`;
+  return insertBefore(xml, block, [
+    '<rowBreaks',
+    '<colBreaks',
+    '<customProperties',
+    '<cellWatches',
+    '<ignoredErrors',
+    '<smartTags',
+    '<drawing',
+    '</worksheet>',
+  ]);
+}
+
+/** Hand-written styles.xml matching the ST.* indices. */
+function buildStylesXml(): string {
+  const numFmts =
+    `<numFmts count="5">` +
+    `<numFmt numFmtId="164" formatCode="0.000"/>` +
+    `<numFmt numFmtId="165" formatCode="0.0"/>` +
+    `<numFmt numFmtId="166" formatCode="0"/>` +
+    `<numFmt numFmtId="167" formatCode="0.0000"/>` +
+    `<numFmt numFmtId="168" formatCode="0.00"/>` +
+    `</numFmts>`;
+  const fonts =
+    `<fonts count="9">` +
+    `<font><sz val="11"/><color theme="1"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="11"/><color rgb="FF1F4E79"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="16"/><color rgb="FF1F4E79"/><name val="Calibri"/></font>` +
+    `<font><i/><sz val="9"/><color rgb="FF767676"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="12"/><color rgb="FF1F4E79"/><name val="Calibri"/></font>` +
+    `<font><i/><sz val="9"/><color rgb="FF767676"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
+    `<font><b/><sz val="11"/><color rgb="FF9C2A2A"/><name val="Calibri"/></font>` +
+    `</fonts>`;
+  const fills =
+    `<fills count="8">` +
+    `<fill><patternFill patternType="none"/></fill>` +
+    `<fill><patternFill patternType="gray125"/></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E79"/><bgColor indexed="64"/></patternFill></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F1"/><bgColor indexed="64"/></patternFill></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FFFDF3E7"/><bgColor indexed="64"/></patternFill></fill>` +
+    `<fill><patternFill patternType="solid"><fgColor rgb="FFEAF3FB"/><bgColor indexed="64"/></patternFill></fill>` +
+    `</fills>`;
+  const thin = `<left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom>`;
+  const borders =
+    `<borders count="3">` +
+    `<border><left/><right/><top/><bottom/><diagonal/></border>` +
+    `<border>${thin}<diagonal/></border>` +
+    `<border><left/><right/><top/><bottom style="medium"><color rgb="FF1F4E79"/></bottom><diagonal/></border>` +
+    `</borders>`;
+  // cellXfs — index order must match ST.*
+  const xf = (
+    numFmtId: number,
+    fontId: number,
+    fillId: number,
+    borderId: number,
+    align?: string,
+  ) =>
+    `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"${align ? ` applyAlignment="1"><alignment ${align}/></xf>` : '/>'}`;
+  const cellXfs =
+    `<cellXfs count="19">` +
+    xf(0, 0, 0, 0) + // 0 DEFAULT
+    xf(0, 2, 0, 2, 'vertical="center"') + // 1 TITLE
+    xf(0, 3, 0, 0, 'vertical="center" wrapText="1"') + // 2 SUBTITLE
+    xf(0, 4, 2, 0, 'vertical="center"') + // 3 SECTION
+    xf(0, 0, 0, 1, 'vertical="center" wrapText="1"') + // 4 LABEL
+    xf(164, 1, 4, 1, 'horizontal="right" vertical="center"') + // 5 INPUT_NUM
+    xf(0, 1, 4, 1, 'vertical="center"') + // 6 INPUT_TEXT
+    xf(164, 5, 3, 1, 'horizontal="right" vertical="center"') + // 7 RESULT
+    xf(0, 6, 0, 1, 'horizontal="center" vertical="center"') + // 8 UNIT
+    xf(0, 7, 2, 1, 'horizontal="center" vertical="center" wrapText="1"') + // 9 THEAD
+    xf(164, 0, 0, 1, 'horizontal="right"') + // 10 N3
+    xf(165, 0, 0, 1, 'horizontal="right"') + // 11 N1
+    xf(166, 0, 0, 1, 'horizontal="right"') + // 12 N0
+    xf(0, 8, 6, 1, 'vertical="center" wrapText="1"') + // 13 REGIME
+    xf(167, 3, 5, 1, 'horizontal="right"') + // 14 AUX
+    xf(167, 0, 0, 1, 'horizontal="right"') + // 15 N4
+    xf(0, 1, 0, 1, 'vertical="center" wrapText="1"') + // 16 LABEL_B
+    xf(168, 0, 0, 1, 'horizontal="right"') + // 17 N2
+    xf(164, 5, 7, 1, 'horizontal="right" vertical="center"') + // 18 KEY
+    `</cellXfs>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    numFmts +
+    fonts +
+    fills +
+    borders +
+    `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+    cellXfs +
+    `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+    `<dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium9"/>` +
+    `</styleSheet>`
+  );
+}
+
+async function injectValidationAndChart(
+  base64: string,
+  c: Caches,
+  styleMaps: Map<string, number>[],
+): Promise<string> {
+  const zip = await JSZip.loadAsync(base64, { base64: true });
+
+  // Auxiliary rows on "Calcul" are hidden so the printed note stays readable.
+  const auxRows = [R.PIDX, R.PEAK, R.ILOW, R.TLOW, R.ALOW, R.BIC, R.POSH, R.IH, R.TH2, R.AH];
+  const prints: PrintCfg[] = [
+    {
+      landscape: false,
+      printArea: `Calcul!$A$1:$C$${R.CHART_BOTTOM}`,
+      hiddenRows: auxRows,
+      rowHeights: { [R.TITLE]: 26, [R.DATE]: 26, [R.SEC1]: 20, [R.SEC2]: 20, [R.SEC3]: 20, [R.SEC4]: 20, [R.SEC5]: 20, [R.SEC6]: 20, [R.REGIME]: 20 },
+      footerLeft: 'Note de calcul — écoulement à surface libre',
+    },
+    {
+      landscape: true,
+      printArea: `Courbe!$A$1:$S$${CURVE_LAST}`,
+      printTitles: `Courbe!$5:$5`,
+      rowHeights: { 5: 30 },
+      footerLeft: 'Table hydraulique (pas de 1 %)',
+    },
+    { landscape: false, printArea: `Matériaux!$A$1:$B$12`, footerLeft: 'Coefficients de Strickler' },
+    { landscape: false, footerLeft: 'Valeurs auxiliaires' },
+  ];
+
+  for (let i = 0; i < 4; i++) {
+    const path = `xl/worksheets/sheet${i + 1}.xml`;
+    const file = zip.file(path);
+    if (!file) continue;
+    let xml = await file.async('string');
+    const cfg = prints[i];
+    xml = applyStyles(xml, styleMaps[i] ?? new Map(), cfg.hiddenRows, cfg.rowHeights);
+
+    // Data validations (dropdowns) belong to the Calcul sheet only.
+    if (i === 0) {
+      const validations =
+        `<dataValidations count="2">` +
+        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.PROFIL}"><formula1>"${PROFILE_NAMES.join(',')}"</formula1></dataValidation>` +
+        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B${R.MAT}"><formula1>'Matériaux'!$A$2:$A$12</formula1></dataValidation>` +
+        `</dataValidations>`;
+      xml = insertBefore(xml, validations, [
+        '<hyperlinks',
+        '<printOptions',
+        '<pageMargins',
+        '<pageSetup',
+        '<headerFooter',
+        '<rowBreaks',
+        '<colBreaks',
+        '<customProperties',
+        '<cellWatches',
+        '<ignoredErrors',
+        '<smartTags',
+        '<drawing',
+        '</worksheet>',
+      ]);
+    }
+
+    xml = applyPrintSetup(xml, cfg);
+
+    if (i === 0) {
+      xml = xml.replace('</worksheet>', `<drawing r:id="rIdDrw1"/></worksheet>`);
+      if (!xml.includes('xmlns:r=')) {
+        xml = xml.replace(
+          '<worksheet ',
+          '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ',
+        );
+      }
+    }
+    zip.file(path, xml);
+  }
+
+  // Sheet1 relationships -> drawing
   const relPath = 'xl/worksheets/_rels/sheet1.xml.rels';
   const relFile = zip.file(relPath);
   const drawingRel = `<Relationship Id="rIdDrw1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`;
@@ -613,13 +994,13 @@ async function injectValidationAndChart(base64: string, c: Caches): Promise<stri
     );
   }
 
-  // 3) Drawing part (anchors the chart on Calcul, columns H..S, rows 4..32)
+  // Drawing part: the chart sits under the table, inside the A4 print width.
   zip.file(
     'xl/drawings/drawing1.xml',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
-      `<xdr:twoCellAnchor><xdr:from><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
-      `<xdr:to><xdr:col>18</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>32</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
+      `<xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${R.CHART_TOP - 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
+      `<xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${R.CHART_BOTTOM - 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
       `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Courbes hydrauliques"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>` +
       `<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>` +
       `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
@@ -632,19 +1013,34 @@ async function injectValidationAndChart(base64: string, c: Caches): Promise<stri
       `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>`,
   );
 
-  // 4) Chart part
+  // Chart part
   zip.file('xl/charts/chart1.xml', buildChartXml(c));
 
-  // 5) Force a full recalculation when Excel opens the file, so every value
-  // (including profiles other than the one active at export time) is fresh.
+  // Custom styles (SheetJS's community build writes a minimal styles.xml).
+  zip.file('xl/styles.xml', buildStylesXml());
+
+  // Workbook: print areas / repeated header rows, then force a full recalc so
+  // no cached value can be stale when Excel opens the file.
   const wbPath = 'xl/workbook.xml';
   let wbXml = await zip.file(wbPath)!.async('string');
+  const defs: string[] = [];
+  prints.forEach((cfg, i) => {
+    if (cfg.printArea) {
+      defs.push(`<definedName name="_xlnm.Print_Area" localSheetId="${i}">${cfg.printArea}</definedName>`);
+    }
+    if (cfg.printTitles) {
+      defs.push(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">${cfg.printTitles}</definedName>`);
+    }
+  });
+  if (defs.length && !wbXml.includes('<definedNames')) {
+    wbXml = wbXml.replace('</sheets>', `</sheets><definedNames>${defs.join('')}</definedNames>`);
+  }
   if (!wbXml.includes('<calcPr')) {
     wbXml = wbXml.replace('</workbook>', `<calcPr calcId="171027" fullCalcOnLoad="1"/></workbook>`);
-    zip.file(wbPath, wbXml);
   }
+  zip.file(wbPath, wbXml);
 
-  // 6) Content types
+  // Content types
   const ctPath = '[Content_Types].xml';
   let ct = await zip.file(ctPath)!.async('string');
   ct = ct.replace(

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Line, Polyline, Circle, Text as SvgText, Rect } from 'react-native-svg';
 import { CurvePoint } from '../hydraulics/engine';
+import { theme } from '../theme';
 
 export interface OperatingChartPoint {
   fill: number; // 0..1
@@ -17,9 +18,9 @@ interface Props {
   operating: OperatingChartPoint[];
 }
 
-const V_COLOR = '#e07a3f'; // V/Vc curve
-const Q_COLOR = '#2f7dd1'; // Q/Qc curve
-const POINT_COLOR = '#d12f4f';
+const V_COLOR = theme.seriesV; // V/Vc curve
+const Q_COLOR = theme.seriesQ; // Q/Qc curve
+const POINT_COLOR = theme.point;
 
 const fin = (x: number) => (Number.isFinite(x) ? x : 0);
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, fin(x)));
@@ -74,7 +75,7 @@ export default function FlowChart({ width, curve, operating }: Props) {
   return (
     <View>
       <Svg width={width} height={height}>
-        <Rect x={padL} y={padT} width={plotW} height={plotH} fill="#fafafa" stroke="#ddd" />
+        <Rect x={padL} y={padT} width={plotW} height={plotH} fill="#FBFCFD" stroke={theme.border} rx={6} />
 
         {xTicks.map((t) => (
           <React.Fragment key={`x${t}`}>

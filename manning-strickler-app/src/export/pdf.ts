@@ -8,6 +8,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { CurvePoint } from '../hydraulics/engine';
 import { ExportData, dimensionRows, fnum } from './exportData';
+import { APP_VERSION } from '../theme';
 
 const V_COLOR = '#e07a3f';
 const Q_COLOR = '#2f7dd1';
@@ -90,7 +91,10 @@ function buildHtml(data: ExportData): string {
 
   return `
   <html><head><meta charset="utf-8"><style>
-    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a1a; margin: 28px; }
+    @page { size: A4 portrait; margin: 16mm 14mm 14mm 16mm; }
+    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #16212B; margin: 0; }
+    table, svg { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
     h1 { color: #1f4e79; font-size: 21px; margin-bottom: 2px; }
     .sub { color: #666; font-size: 12px; margin-bottom: 18px; }
     h2 { color: #1f4e79; font-size: 15px; margin: 18px 0 6px; border-bottom: 1px solid #dfe6ee; padding-bottom: 3px; }
@@ -102,8 +106,8 @@ function buildHtml(data: ExportData): string {
     .formula { font-size: 11px; color: #888; margin-top: 16px; }
     .legend { font-size: 10px; color: #444; margin-top: 4px; }
   </style></head><body>
-    <h1>Manning–Strickler — Rapport de calcul</h1>
-    <div class="sub">Écoulement à surface libre · ${new Date().toLocaleDateString('fr-FR')}</div>
+    <h1>Manning–Strickler — Note de calcul hydraulique</h1>
+    <div class="sub">Écoulement à surface libre · ${new Date().toLocaleDateString('fr-FR')} · version ${APP_VERSION}</div>
     <h2>Données d'entrée</h2>
     <table>${inputRows}</table>
     <h2>Résultats</h2>

@@ -21,12 +21,13 @@ import { computeResults } from './src/hydraulics/engine';
 import { ExportData } from './src/export/exportData';
 import { exportPdf } from './src/export/pdf';
 import { exportExcel } from './src/export/excel';
+import { theme, APP_VERSION } from './src/theme';
 
-const PROFILES: { id: ProfileId; label: string }[] = [
-  { id: 'circular', label: 'Circulaire fermé' },
-  { id: 'ovoid', label: 'Ovoïde fermé (classique)' },
-  { id: 'rectangular', label: 'Caniveau rectangulaire (ciel ouvert)' },
-  { id: 'trapezoidal', label: 'Caniveau trapézoïdal (ciel ouvert)' },
+const PROFILES: { id: ProfileId; label: string; short: string }[] = [
+  { id: 'circular', label: 'Circulaire fermé', short: 'Circulaire' },
+  { id: 'ovoid', label: 'Ovoïde fermé (classique)', short: 'Ovoïde' },
+  { id: 'rectangular', label: 'Caniveau rectangulaire (ciel ouvert)', short: 'Rectangulaire' },
+  { id: 'trapezoidal', label: 'Caniveau trapézoïdal (ciel ouvert)', short: 'Trapézoïdal' },
 ];
 
 export default function App() {
@@ -41,11 +42,11 @@ export default function App() {
   const [ovoidWidth, setOvoidWidth] = useState(''); // mm
   const [rectWidth, setRectWidth] = useState(''); // m
   const [rectHeight, setRectHeight] = useState(''); // m
-  const [trapBottom, setTrapBottom] = useState(''); // m (petite base)
-  const [trapTop, setTrapTop] = useState(''); // m (grande base)
+  const [trapBottom, setTrapBottom] = useState(''); // m
+  const [trapTop, setTrapTop] = useState(''); // m
   const [trapHeight, setTrapHeight] = useState(''); // m
 
-  const [slope, setSlope] = useState(''); // m/m
+  const [slope, setSlope] = useState(''); // %
   const [flow, setFlow] = useState(''); // L/s
 
   const onMaterialChange = (id: string) => {
@@ -64,31 +65,20 @@ export default function App() {
     trapTop: parseNum(trapTop),
     trapHeight: parseNum(trapHeight),
   };
+
   // Only finite, strictly-positive physical inputs are accepted; anything else
   // (empty, negative, non-numeric) is treated as "not provided" so no NaN can
   // ever propagate into the calculations or the chart.
   const K = pos(parseNum(kText));
-  const slopePct = pos(parseNum(slope)); // pente saisie en %
-  const J = slopePct !== undefined ? slopePct / 100 : undefined; // ratio (m/m) pour le calcul
+  const slopePct = pos(parseNum(slope));
+  const J = slopePct !== undefined ? slopePct / 100 : undefined;
   const Q_lps = pos(parseNum(flow));
   const Q = Q_lps !== undefined ? Q_lps / 1000 : undefined;
 
   const results = useMemo(
     () => computeResults({ profile, params, K, slope: J, flow: Q }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      profile,
-      diameter,
-      ovoidWidth,
-      rectWidth,
-      rectHeight,
-      trapBottom,
-      trapTop,
-      trapHeight,
-      kText,
-      slope,
-      flow,
-    ],
+    [profile, diameter, ovoidWidth, rectWidth, rectHeight, trapBottom, trapTop, trapHeight, kText, slope, flow],
   );
 
   const operatingForChart: OperatingChartPoint[] = (() => {
@@ -102,9 +92,7 @@ export default function App() {
     if (o.bicritical && o.fillAlt !== undefined && o.VAlt !== undefined) {
       pts.push({ fill: o.fillAlt, vRatio: o.VAlt / f.V, qRatio, alt: true });
     }
-    return pts.filter((p) =>
-      [p.fill, p.vRatio, p.qRatio].every(Number.isFinite),
-    );
+    return pts.filter((p) => [p.fill, p.vRatio, p.qRatio].every(Number.isFinite));
   })();
 
   const exportData: ExportData = {
@@ -118,227 +106,259 @@ export default function App() {
     results,
   };
 
+  const [busy, setBusy] = useState<'pdf' | 'excel' | null>(null);
   const runExport = async (kind: 'pdf' | 'excel') => {
     try {
+      setBusy(kind);
       if (kind === 'pdf') await exportPdf(exportData);
       else await exportExcel(exportData);
     } catch (e: any) {
       Alert.alert('Export impossible', e?.message ?? 'Erreur inconnue');
+    } finally {
+      setBusy(null);
     }
   };
 
+  const op = results.operating;
+  const full = results.full;
+
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#1f4e79" />
+      <StatusBar barStyle="light-content" backgroundColor={theme.navyDeep} />
       <ErrorBoundary>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Manning–Strickler</Text>
-          <Text style={styles.subtitle}>Écoulement à surface libre</Text>
-        </View>
-
-        {/* --- Profil --- */}
-        <Card title="Profil de la section">
-          <PickerBox
-            selectedValue={profile}
-            onValueChange={(v) => setProfile(v as ProfileId)}
-            items={PROFILES.map((p) => ({ label: p.label, value: p.id }))}
-          />
-          <ProfileInputs
-            profile={profile}
-            diameter={diameter}
-            setDiameter={setDiameter}
-            ovoidWidth={ovoidWidth}
-            setOvoidWidth={setOvoidWidth}
-            rectWidth={rectWidth}
-            setRectWidth={setRectWidth}
-            rectHeight={rectHeight}
-            setRectHeight={setRectHeight}
-            trapBottom={trapBottom}
-            setTrapBottom={setTrapBottom}
-            trapTop={trapTop}
-            setTrapTop={setTrapTop}
-            trapHeight={trapHeight}
-            setTrapHeight={setTrapHeight}
-          />
-        </Card>
-
-        {/* --- Matériau / K --- */}
-        <Card title="Matériau (coefficient de Strickler K)">
-          <PickerBox
-            selectedValue={materialId}
-            onValueChange={(v) => onMaterialChange(String(v))}
-            items={MATERIALS.map((m) => ({
-              label: m.id === 'custom' ? m.name : `${m.name}  —  K = ${m.K}`,
-              value: m.id,
-            }))}
-          />
-          <Field
-            label="Coefficient K"
-            unit="m^⅓/s"
-            value={kText}
-            onChangeText={(t) => {
-              setKText(t);
-              setMaterialId('custom');
-            }}
-            placeholder="ex. 100"
-            hint="K = 1/n (Manning). Modifiable manuellement."
-          />
-        </Card>
-
-        {/* --- Paramètres hydrauliques --- */}
-        <Card title="Paramètres hydrauliques">
-          <Field
-            label="Pente J"
-            unit="%"
-            value={slope}
-            onChangeText={setSlope}
-            placeholder="ex. 0.5"
-            hint="En pourcentage. Facultatif pour certaines sorties (ex. pente minimale)."
-          />
-          <Field
-            label="Débit Q"
-            unit="L/s"
-            value={flow}
-            onChangeText={setFlow}
-            placeholder="ex. 50"
-            hint="Facultatif pour certaines sorties (ex. débit critique)."
-          />
-        </Card>
-
-        {/* --- Résultats --- */}
-        <Card title="Résultats">
-          {!results.geometry && (
-            <Text style={styles.warn}>Renseignez les dimensions du profil pour calculer.</Text>
-          )}
-
-          {results.full && (
-            <>
-              <Result
-                label="Débit critique Qc (remplissage 100 %)"
-                value={`${fmt(results.full.Q * 1000, 1)} L/s`}
-                sub={`${fmt(results.full.Q, 4)} m³/s · Vc = ${fmt(results.full.V, 3)} m/s`}
-              />
-              {results.geometry?.closed && (
-                <Result
-                  label={`Débit maximal Qmax (à ${fmt(results.full.fillAtQmax * 100, 1)} % de remplissage)`}
-                  value={`${fmt(results.full.Qmax * 1000, 1)} L/s`}
-                  sub={`zone bicritique entre Qc et Qmax : deux hauteurs possibles pour un même débit`}
-                />
-              )}
-            </>
-          )}
-          {!results.full && results.geometry && (
-            <Hint text="Pente J et coefficient K requis pour le débit critique." />
-          )}
-
-          {results.operating && (
-            <>
-              {results.operating.bicritical && results.operating.fillAlt !== undefined ? (
-                <>
-                  <Result
-                    label="Taux de remplissage (régime bicritique : 2 solutions)"
-                    value={`${fmt(results.operating.fill * 100, 1)} % ou ${fmt(results.operating.fillAlt * 100, 1)} %`}
-                    sub={`hauteurs d'eau ≈ ${fmt(results.operating.y * 1000, 0)} mm ou ${fmt((results.operating.yAlt ?? 0) * 1000, 0)} mm`}
-                  />
-                  <Result
-                    label="Vitesse d'écoulement (2 solutions)"
-                    value={`${fmt(results.operating.V, 3)} ou ${fmt(results.operating.VAlt ?? NaN, 3)} m/s`}
-                  />
-                </>
-              ) : (
-                <>
-                  <Result
-                    label="Taux de remplissage (au débit Q)"
-                    value={
-                      results.operating.surcharged
-                        ? '≥ 100 %'
-                        : `${fmt(results.operating.fill * 100, 1)} %`
-                    }
-                    sub={`hauteur d'eau ≈ ${fmt(results.operating.y * 1000, 0)} mm`}
-                  />
-                  <Result
-                    label="Vitesse d'écoulement"
-                    value={`${fmt(results.operating.V, 3)} m/s`}
-                  />
-                </>
-              )}
-              <Badge
-                surcharged={results.operating.surcharged}
-                bicritical={results.operating.bicritical}
-                closed={results.geometry?.closed ?? true}
-              />
-            </>
-          )}
-          {!results.operating && results.geometry && (
-            <Hint text="Pente J, coefficient K et débit Q requis pour le point d'écoulement." />
-          )}
-
-          {results.minSlope !== undefined && (
-            <Result
-              label="Pente minimale (pour le profil indiqué)"
-              value={`${fmt(results.minSlope * 100, 3)} %`}
-              sub="pour faire passer Q à pleine section"
-            />
-          )}
-          {results.minSlope === undefined && results.geometry && (
-            <Hint text="Coefficient K et débit Q requis pour la pente minimale." />
-          )}
-
-          {results.minSize && (
-            <Result
-              label={`${minSizeLabel(profile, results.minSize.label)} minimal(e)`}
-              value={minSizeValue(profile, results.minSize.value)}
-              sub={
-                profile === 'circular' || profile === 'ovoid'
-                  ? 'pour faire passer Q à la pente indiquée'
-                  : `dimensions × ${fmt(results.minSize.scale, 3)} — pour faire passer Q à la pente indiquée`
-              }
-            />
-          )}
-          {!results.minSize && results.geometry && (
-            <Hint text="Pente J, coefficient K et débit Q requis pour la taille minimale." />
-          )}
-        </Card>
-
-        {/* --- Graphique --- */}
-        <Card title="Courbes hydrauliques">
-          {results.curve.length > 0 ? (
-            <FlowChart width={width - 56} curve={results.curve} operating={operatingForChart} />
-          ) : (
-            <Text style={styles.warn}>Renseignez le profil pour afficher le graphique.</Text>
-          )}
-        </Card>
-
-        {/* --- Export --- */}
-        <Card title="Export">
-          <View style={styles.exportRow}>
-            <Pressable
-              style={[styles.exportBtn, !results.geometry && styles.exportBtnDisabled]}
-              disabled={!results.geometry}
-              onPress={() => runExport('pdf')}
-            >
-              <Text style={styles.exportBtnText}>📄 Rapport PDF</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.exportBtn, !results.geometry && styles.exportBtnDisabled]}
-              disabled={!results.geometry}
-              onPress={() => runExport('excel')}
-            >
-              <Text style={styles.exportBtnText}>📊 Classeur Excel</Text>
-            </Pressable>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {/* ---------- Header ---------- */}
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Manning–Strickler</Text>
+                <Text style={styles.subtitle}>Écoulement à surface libre</Text>
+              </View>
+              <View style={styles.versionBadge}>
+                <Text style={styles.versionText}>v{APP_VERSION}</Text>
+              </View>
+            </View>
+            <View style={styles.formulaStrip}>
+              <Text style={styles.formulaText}>V = K · Rh^⅔ · J^½    ·    Q = V · A</Text>
+            </View>
           </View>
-          <Text style={styles.hintRow}>
-            Le classeur Excel est interactif : choix du profil et du matériau par listes
-            déroulantes, toutes les formules dans les cellules (y compris Qmax, régime bicritique
-            et les 2 taux de remplissage) et graphique natif — utilisable comme l'application.
-          </Text>
-        </Card>
 
-        <Text style={styles.footer}>
-          V = K · Rh^(2/3) · J^(1/2) · A.  Qc = débit à remplissage 100 %. Qmax = débit maximal réel.
-        </Text>
-      </ScrollView>
+          {/* ---------- Key results summary ---------- */}
+          {full && (
+            <View style={styles.summaryRow}>
+              <Stat label="Qc" value={fmt(full.Q * 1000, 1)} unit="L/s" tone="accent" />
+              {results.geometry?.closed && (
+                <Stat label="Qmax" value={fmt(full.Qmax * 1000, 1)} unit="L/s" tone="accent" />
+              )}
+              <Stat
+                label="Remplissage"
+                value={op ? (op.surcharged ? '≥100' : fmt(op.fill * 100, 1)) : '—'}
+                unit="%"
+                tone={op?.surcharged ? 'danger' : op?.bicritical ? 'warn' : 'ok'}
+              />
+              <Stat label="Vitesse" value={op ? fmt(op.V, 2) : '—'} unit="m/s" tone="ok" />
+            </View>
+          )}
+
+          {/* ---------- 1. Profile ---------- */}
+          <Card step="1" title="Profil de la section">
+            <SelectRow
+              label="Type de profil"
+              selectedValue={profile}
+              onValueChange={(v) => setProfile(v as ProfileId)}
+              items={PROFILES.map((p) => ({ label: p.label, value: p.id }))}
+            />
+            <ProfileInputs
+              profile={profile}
+              diameter={diameter}
+              setDiameter={setDiameter}
+              ovoidWidth={ovoidWidth}
+              setOvoidWidth={setOvoidWidth}
+              rectWidth={rectWidth}
+              setRectWidth={setRectWidth}
+              rectHeight={rectHeight}
+              setRectHeight={setRectHeight}
+              trapBottom={trapBottom}
+              setTrapBottom={setTrapBottom}
+              trapTop={trapTop}
+              setTrapTop={setTrapTop}
+              trapHeight={trapHeight}
+              setTrapHeight={setTrapHeight}
+            />
+          </Card>
+
+          {/* ---------- 2. Material ---------- */}
+          <Card step="2" title="Matériau et rugosité">
+            <SelectRow
+              label="Matériau"
+              selectedValue={materialId}
+              onValueChange={(v) => onMaterialChange(String(v))}
+              items={MATERIALS.map((m) => ({
+                label: m.id === 'custom' ? m.name : `${m.name} — K = ${m.K}`,
+                value: m.id,
+              }))}
+            />
+            <Field
+              label="Coefficient de Strickler K"
+              unit="m^⅓/s"
+              value={kText}
+              onChangeText={(t) => {
+                setKText(t);
+                setMaterialId('custom');
+              }}
+              placeholder="ex. 100"
+              hint="K = 1/n (Manning). Modifiable manuellement."
+            />
+          </Card>
+
+          {/* ---------- 3. Hydraulic parameters ---------- */}
+          <Card step="3" title="Paramètres hydrauliques">
+            <Field
+              label="Pente J"
+              unit="%"
+              value={slope}
+              onChangeText={setSlope}
+              placeholder="ex. 0.5"
+              hint="Facultative : sans elle, la pente minimale reste calculée."
+            />
+            <Field
+              label="Débit Q"
+              unit="L/s"
+              value={flow}
+              onChangeText={setFlow}
+              placeholder="ex. 50"
+              hint="Facultatif : sans lui, le débit critique reste calculé."
+            />
+          </Card>
+
+          {/* ---------- 4. Results ---------- */}
+          <Card step="4" title="Résultats">
+            {!results.geometry && <Notice tone="warn" text="Renseignez les dimensions du profil pour lancer le calcul." />}
+
+            {full && (
+              <>
+                <Result
+                  label="Débit critique Qc"
+                  hint="remplissage 100 %"
+                  value={`${fmt(full.Q * 1000, 1)} L/s`}
+                  sub={`${fmt(full.Q, 4)} m³/s · Vc = ${fmt(full.V, 3)} m/s`}
+                />
+                {results.geometry?.closed && (
+                  <Result
+                    label="Débit maximal Qmax"
+                    hint={`à ${fmt(full.fillAtQmax * 100, 1)} % de remplissage`}
+                    value={`${fmt(full.Qmax * 1000, 1)} L/s`}
+                    sub="entre Qc et Qmax : zone bicritique (deux hauteurs possibles)"
+                  />
+                )}
+              </>
+            )}
+            {!full && results.geometry && <Hint text="Pente J et coefficient K requis pour le débit critique." />}
+
+            {op && (
+              <>
+                {op.bicritical && op.fillAlt !== undefined ? (
+                  <>
+                    <Result
+                      label="Taux de remplissage"
+                      hint="régime bicritique — 2 solutions"
+                      value={`${fmt(op.fill * 100, 1)} %  ou  ${fmt(op.fillAlt * 100, 1)} %`}
+                      sub={`hauteurs d'eau ≈ ${fmt(op.y * 1000, 0)} mm ou ${fmt((op.yAlt ?? 0) * 1000, 0)} mm`}
+                    />
+                    <Result
+                      label="Vitesse d'écoulement"
+                      hint="2 solutions"
+                      value={`${fmt(op.V, 3)}  ou  ${fmt(op.VAlt ?? NaN, 3)} m/s`}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Result
+                      label="Taux de remplissage"
+                      hint="au débit Q indiqué"
+                      value={op.surcharged ? '≥ 100 %' : `${fmt(op.fill * 100, 1)} %`}
+                      sub={`hauteur d'eau ≈ ${fmt(op.y * 1000, 0)} mm`}
+                    />
+                    <Result label="Vitesse d'écoulement" value={`${fmt(op.V, 3)} m/s`} />
+                  </>
+                )}
+                <Banner
+                  surcharged={op.surcharged}
+                  bicritical={op.bicritical}
+                  closed={results.geometry?.closed ?? true}
+                />
+              </>
+            )}
+            {!op && results.geometry && (
+              <Hint text="Pente J, coefficient K et débit Q requis pour le point de fonctionnement." />
+            )}
+
+            {results.minSlope !== undefined && (
+              <Result
+                label="Pente minimale"
+                hint="pour le profil indiqué"
+                value={`${fmt(results.minSlope * 100, 3)} %`}
+                sub="pour faire passer Q à pleine section"
+              />
+            )}
+            {results.minSlope === undefined && results.geometry && (
+              <Hint text="Coefficient K et débit Q requis pour la pente minimale." />
+            )}
+
+            {results.minSize && (
+              <Result
+                label={`${minSizeLabel(profile, results.minSize.label)} minimal(e)`}
+                hint="pour la pente indiquée"
+                value={minSizeValue(profile, results.minSize.value)}
+                sub={
+                  profile === 'circular' || profile === 'ovoid'
+                    ? 'pour faire passer Q'
+                    : `dimensions × ${fmt(results.minSize.scale, 3)}`
+                }
+              />
+            )}
+            {!results.minSize && results.geometry && (
+              <Hint text="Pente J, coefficient K et débit Q requis pour la taille minimale." />
+            )}
+          </Card>
+
+          {/* ---------- 5. Chart ---------- */}
+          <Card step="5" title="Courbes hydrauliques">
+            {results.curve.length > 0 ? (
+              <FlowChart width={width - 60} curve={results.curve} operating={operatingForChart} />
+            ) : (
+              <Notice tone="warn" text="Renseignez le profil pour afficher le graphique." />
+            )}
+          </Card>
+
+          {/* ---------- 6. Export ---------- */}
+          <Card step="6" title="Export">
+            <View style={styles.exportRow}>
+              <ExportButton
+                icon="PDF"
+                label="Rapport PDF"
+                disabled={!results.geometry || busy !== null}
+                loading={busy === 'pdf'}
+                onPress={() => runExport('pdf')}
+              />
+              <ExportButton
+                icon="XLS"
+                label="Classeur Excel"
+                disabled={!results.geometry || busy !== null}
+                loading={busy === 'excel'}
+                onPress={() => runExport('excel')}
+              />
+            </View>
+            <Text style={styles.exportNote}>
+              Les deux exports sont mis en page pour l'impression A4. Le classeur Excel est
+              interactif : listes déroulantes, formules dans les cellules et graphique natif.
+            </Text>
+          </Card>
+
+          <Text style={styles.footer}>
+            Qc = débit à remplissage 100 %  ·  Qmax = débit maximal réel  ·  v{APP_VERSION}
+          </Text>
+        </ScrollView>
       </ErrorBoundary>
     </SafeAreaView>
   );
@@ -360,21 +380,25 @@ function ProfileInputs(props: any) {
   switch (profile) {
     case 'circular':
       return (
-        <Field label="Diamètre intérieur" unit="mm" value={diameter} onChangeText={setDiameter} placeholder="ex. 300" />
+        <Field label="Diamètre intérieur D" unit="mm" value={diameter} onChangeText={setDiameter} placeholder="ex. 300" />
       );
     case 'ovoid':
       return (
         <>
           <Field
-            label="Largeur de l'ovoïde"
+            label="Largeur de l'ovoïde L"
             unit="mm"
             value={ovoidWidth}
             onChangeText={setOvoidWidth}
             placeholder="ex. 400"
-            hint="Ovoïde normalisé : hauteur = 1,5 × largeur (auto)."
+            hint="Ovoïde normalisé : hauteur = 1,5 × largeur."
           />
           {parseNum(ovoidWidth) ? (
-            <Text style={styles.info}>Hauteur ≈ {fmt((parseNum(ovoidWidth) as number) * 1.5, 0)} mm</Text>
+            <View style={styles.derived}>
+              <Text style={styles.derivedText}>
+                Hauteur calculée : {fmt((parseNum(ovoidWidth) as number) * 1.5, 0)} mm
+              </Text>
+            </View>
           ) : null}
         </>
       );
@@ -398,40 +422,82 @@ function ProfileInputs(props: any) {
   }
 }
 
-// --- Small UI helpers ------------------------------------------------------
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+// --- UI building blocks ----------------------------------------------------
+function Card({ step, title, children }: { step: string; title: string; children: React.ReactNode }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      {children}
+      <View style={styles.cardHeader}>
+        <View style={styles.stepBadge}>
+          <Text style={styles.stepText}>{step}</Text>
+        </View>
+        <Text style={styles.cardTitle}>{title}</Text>
+      </View>
+      <View style={styles.cardBody}>{children}</View>
     </View>
   );
 }
 
-function PickerBox({
+function SelectRow({
+  label,
   selectedValue,
   onValueChange,
   items,
 }: {
+  label: string;
   selectedValue: any;
   onValueChange: (v: any) => void;
   items: { label: string; value: any }[];
 }) {
   return (
-    <View style={styles.pickerWrap}>
-      <Picker selectedValue={selectedValue} onValueChange={onValueChange} dropdownIconColor="#1f4e79">
-        {items.map((it) => (
-          <Picker.Item key={String(it.value)} label={it.label} value={it.value} />
-        ))}
-      </Picker>
+    <View style={{ marginBottom: 14 }}>
+      <Text style={styles.selectLabel}>{label}</Text>
+      <View style={styles.pickerWrap}>
+        <Picker
+          selectedValue={selectedValue}
+          onValueChange={onValueChange}
+          dropdownIconColor={theme.navy}
+          style={styles.picker}
+        >
+          {items.map((it) => (
+            <Picker.Item key={String(it.value)} label={it.label} value={it.value} />
+          ))}
+        </Picker>
+      </View>
     </View>
   );
 }
 
-function Result({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({
+  label,
+  value,
+  unit,
+  tone,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  tone: 'accent' | 'ok' | 'warn' | 'danger';
+}) {
+  const color =
+    tone === 'danger' ? theme.danger : tone === 'warn' ? theme.warn : tone === 'ok' ? theme.ok : theme.accent;
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      <Text style={styles.statUnit}>{unit}</Text>
+    </View>
+  );
+}
+
+function Result({ label, value, sub, hint }: { label: string; value: string; sub?: string; hint?: string }) {
   return (
     <View style={styles.result}>
-      <Text style={styles.resultLabel}>{label}</Text>
+      <View style={styles.resultLabelRow}>
+        <Text style={styles.resultLabel}>{label}</Text>
+        {hint ? <Text style={styles.resultHint}>{hint}</Text> : null}
+      </View>
       <Text style={styles.resultValue}>{value}</Text>
       {sub ? <Text style={styles.resultSub}>{sub}</Text> : null}
     </View>
@@ -439,33 +505,74 @@ function Result({ label, value, sub }: { label: string; value: string; sub?: str
 }
 
 function Hint({ text }: { text: string }) {
-  return <Text style={styles.hintRow}>ⓘ {text}</Text>;
+  return (
+    <View style={styles.hintRow}>
+      <Text style={styles.hintIcon}>ⓘ</Text>
+      <Text style={styles.hintText}>{text}</Text>
+    </View>
+  );
 }
 
-function Badge({
-  surcharged,
-  bicritical,
-  closed,
-}: {
-  surcharged: boolean;
-  bicritical: boolean;
-  closed: boolean;
-}) {
-  let style = styles.badgeGood;
-  let text = '✓ Écoulement à surface libre';
+function Notice({ tone, text }: { tone: 'warn' | 'ok'; text: string }) {
+  return (
+    <View style={[styles.notice, { backgroundColor: tone === 'warn' ? theme.warnBg : theme.okBg }]}>
+      <Text style={[styles.noticeText, { color: tone === 'warn' ? theme.warn : theme.ok }]}>{text}</Text>
+    </View>
+  );
+}
+
+function Banner({ surcharged, bicritical, closed }: { surcharged: boolean; bicritical: boolean; closed: boolean }) {
+  let bg = theme.okBg;
+  let fg = theme.ok;
+  let title = 'Écoulement à surface libre';
+  let detail = 'Le débit reste inférieur à la capacité de la section.';
   if (surcharged) {
-    style = styles.badgeBad;
-    text = closed
-      ? '⚠ Canalisation EN CHARGE (débit maximal Qmax dépassé)'
-      : '⚠ DÉBORDEMENT (capacité du caniveau dépassée)';
+    bg = theme.dangerBg;
+    fg = theme.danger;
+    title = closed ? 'Canalisation en charge' : 'Débordement du caniveau';
+    detail = 'Le débit maximal Qmax est dépassé.';
   } else if (bicritical) {
-    style = styles.badgeWarn;
-    text = '⚠ Régime BICRITIQUE (Qc < Q ≤ Qmax) : deux taux de remplissage possibles';
+    bg = theme.warnBg;
+    fg = theme.warn;
+    title = 'Régime bicritique';
+    detail = 'Qc < Q ≤ Qmax : deux taux de remplissage sont possibles pour ce débit.';
   }
   return (
-    <View style={[styles.badge, style]}>
-      <Text style={styles.badgeText}>{text}</Text>
+    <View style={[styles.banner, { backgroundColor: bg, borderLeftColor: fg }]}>
+      <Text style={[styles.bannerTitle, { color: fg }]}>{title}</Text>
+      <Text style={styles.bannerDetail}>{detail}</Text>
     </View>
+  );
+}
+
+function ExportButton({
+  icon,
+  label,
+  disabled,
+  loading,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  disabled: boolean;
+  loading: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.exportBtn,
+        disabled && styles.exportBtnDisabled,
+        pressed && !disabled && styles.exportBtnPressed,
+      ]}
+      disabled={disabled}
+      onPress={onPress}
+    >
+      <View style={styles.exportIcon}>
+        <Text style={styles.exportIconText}>{icon}</Text>
+      </View>
+      <Text style={styles.exportBtnText}>{loading ? 'Export…' : label}</Text>
+    </Pressable>
   );
 }
 
@@ -479,8 +586,7 @@ function pos(x: number | undefined): number | undefined {
 }
 /**
  * Safe French number formatting WITHOUT relying on Intl/toLocaleString, whose
- * behaviour is inconsistent across React Native (Hermes) builds. Uses a thin
- * space for thousands and a comma decimal separator.
+ * behaviour is inconsistent across React Native (Hermes) builds.
  */
 function fmt(n: number, d: number) {
   if (!Number.isFinite(n)) return '—';
@@ -489,7 +595,7 @@ function fmt(n: number, d: number) {
   let [intPart, decPart = ''] = fixed.split('.');
   const neg = intPart.startsWith('-');
   if (neg) intPart = intPart.slice(1);
-  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   decPart = decPart.replace(/0+$/, '');
   const body = decPart ? `${intPart},${decPart}` : intPart;
   return neg ? `-${body}` : body;
@@ -504,50 +610,147 @@ function minSizeValue(profile: ProfileId, valueM: number) {
   return `${fmt(valueM, 3)} m (hauteur)`;
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#eef1f4' },
-  container: { padding: 12, paddingBottom: 40 },
-  header: { backgroundColor: '#1f4e79', borderRadius: 12, padding: 16, marginBottom: 12 },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  subtitle: { color: '#cfe0f0', fontSize: 14, marginTop: 2 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    ...Platform.select({ android: { elevation: 2 }, default: {} }),
+const shadow = Platform.select({
+  android: { elevation: 2 },
+  default: {
+    shadowColor: '#0C2438',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1f4e79', marginBottom: 10 },
+}) as object;
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: theme.bg },
+  container: { padding: 14, paddingBottom: 44 },
+
+  // Header
+  header: { backgroundColor: theme.navy, borderRadius: 16, padding: 18, marginBottom: 14, ...shadow },
+  headerTop: { flexDirection: 'row', alignItems: 'flex-start' },
+  title: { color: theme.onDark, fontSize: 25, fontWeight: '800', letterSpacing: -0.4 },
+  subtitle: { color: theme.onDarkMuted, fontSize: 13.5, marginTop: 3, letterSpacing: 0.2 },
+  versionBadge: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  versionText: { color: theme.onDark, fontSize: 12, fontWeight: '700' },
+  formulaStrip: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.14)',
+  },
+  formulaText: { color: theme.onDarkMuted, fontSize: 12.5, letterSpacing: 0.3 },
+
+  // Summary stats
+  summaryRow: { flexDirection: 'row', marginBottom: 14, gap: 8 },
+  stat: {
+    flex: 1,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    ...shadow,
+  },
+  statLabel: { fontSize: 10.5, color: theme.textFaint, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  statValue: { fontSize: 18, fontWeight: '800', marginTop: 3, fontVariant: ['tabular-nums'] },
+  statUnit: { fontSize: 10.5, color: theme.textFaint, marginTop: 1 },
+
+  // Cards
+  card: { backgroundColor: theme.surface, borderRadius: 14, marginBottom: 14, overflow: 'hidden', ...shadow },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.divider,
+  },
+  stepBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  stepText: { color: theme.accent, fontSize: 12.5, fontWeight: '800' },
+  cardTitle: { fontSize: 15.5, fontWeight: '700', color: theme.textStrong, letterSpacing: -0.2 },
+  cardBody: { padding: 14 },
+
+  // Select
+  selectLabel: { fontSize: 13.5, color: theme.textStrong, fontWeight: '600', marginBottom: 6 },
   pickerWrap: {
-    borderWidth: 1,
-    borderColor: '#cfcfcf',
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: theme.border,
+    borderRadius: 10,
+    backgroundColor: theme.inputBg,
     overflow: 'hidden',
   },
-  warn: { color: '#a05a00', fontSize: 14 },
-  info: { color: '#1f4e79', fontSize: 13, marginTop: -6, marginBottom: 10 },
-  result: { borderTopWidth: 1, borderTopColor: '#eee', paddingVertical: 8 },
-  resultLabel: { fontSize: 13, color: '#666' },
-  resultValue: { fontSize: 19, fontWeight: '700', color: '#1a1a1a', marginTop: 2 },
-  resultSub: { fontSize: 12, color: '#888', marginTop: 2 },
-  hintRow: { fontSize: 12, color: '#999', paddingVertical: 6, fontStyle: 'italic' },
-  badge: { borderRadius: 8, padding: 10, marginTop: 8 },
-  badgeGood: { backgroundColor: '#e3f4e8' },
-  badgeBad: { backgroundColor: '#fbe4e6' },
-  badgeWarn: { backgroundColor: '#fdf3e7' },
-  badgeText: { fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'center' },
-  exportRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  picker: { color: theme.textStrong },
+  derived: {
+    backgroundColor: theme.accentSoft,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  derivedText: { color: theme.accent, fontSize: 12.5, fontWeight: '600' },
+
+  // Results
+  result: { borderTopWidth: 1, borderTopColor: theme.divider, paddingVertical: 11 },
+  resultLabelRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap' },
+  resultLabel: { fontSize: 13, color: theme.textMuted, fontWeight: '600' },
+  resultHint: { fontSize: 11.5, color: theme.textFaint, marginLeft: 6, fontStyle: 'italic' },
+  resultValue: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: theme.textStrong,
+    marginTop: 3,
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+  },
+  resultSub: { fontSize: 12, color: theme.textFaint, marginTop: 3, lineHeight: 16 },
+
+  hintRow: { flexDirection: 'row', paddingVertical: 7, alignItems: 'flex-start' },
+  hintIcon: { fontSize: 12, color: theme.textFaint, marginRight: 6, marginTop: 1 },
+  hintText: { flex: 1, fontSize: 12, color: theme.textFaint, fontStyle: 'italic', lineHeight: 16 },
+
+  notice: { borderRadius: 10, padding: 12 },
+  noticeText: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+
+  banner: { borderRadius: 10, borderLeftWidth: 4, padding: 12, marginTop: 12 },
+  bannerTitle: { fontSize: 14, fontWeight: '800', letterSpacing: -0.1 },
+  bannerDetail: { fontSize: 12.5, color: theme.textMuted, marginTop: 3, lineHeight: 17 },
+
+  // Export
+  exportRow: { flexDirection: 'row', gap: 10 },
   exportBtn: {
     flex: 1,
-    backgroundColor: '#1f4e79',
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginHorizontal: 4,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.navy,
+    borderRadius: 11,
+    paddingVertical: 13,
   },
-  exportBtnDisabled: { backgroundColor: '#a9b6c4' },
-  exportBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  footer: { fontSize: 11, color: '#999', textAlign: 'center', marginTop: 4 },
+  exportBtnPressed: { backgroundColor: theme.navyDeep },
+  exportBtnDisabled: { backgroundColor: theme.borderStrong },
+  exportIcon: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  exportIconText: { color: theme.onDark, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.3 },
+  exportBtnText: { color: theme.onDark, fontSize: 14, fontWeight: '700' },
+  exportNote: { fontSize: 11.5, color: theme.textFaint, marginTop: 11, lineHeight: 16 },
+
+  footer: { fontSize: 11, color: theme.textFaint, textAlign: 'center', marginTop: 6, lineHeight: 15 },
 });
