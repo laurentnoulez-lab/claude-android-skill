@@ -105,6 +105,7 @@ interface Caches {
   ovA: number[]; ovP: number[]; hOv: number[];
   rectA: number[]; rectP: number[]; trapA: number[]; trapP: number[];
   hSel: number[]; selA: number[]; selP: number[]; rh: number[]; v: number[]; q: number[];
+  tFlag: number[]; uFlag: number[];
   qRatio: (number | null)[]; vRatio: (number | null)[];
   // operating point
   regime: string; peak: number; iLow: number; tLow: number; fillLow: number | null;
@@ -249,8 +250,17 @@ function computeCaches(data: ExportData): Caches {
   const hasQ = QL > 0;
   const closed = pidx <= 2;
   const surcharged = hasQ && QmaxL > 0 && QL > QmaxL;
-  let iLow = 0;
-  if (hasQ) for (let i = 0; i < peak; i++) { if (q[i] <= QL) iLow = i + 1; else break; }
+  // Helper flags mirroring the Courbe sheet's T/U columns: the largest index
+  // on the rising branch whose discharge is still <= Q, and the largest index
+  // on the falling branch whose discharge is still >= Q.
+  const tFlag: number[] = [];
+  const uFlag: number[] = [];
+  for (let i = 1; i <= N_ROWS; i++) {
+    tFlag.push(hasQ && i <= peak && q[i - 1] <= QL ? i : 0);
+    uFlag.push(hasQ && i >= peak && q[i - 1] >= QL ? i : 0);
+  }
+  const iLow = tFlag.reduce((a, b) => Math.max(a, b), 0);
+  const uMax = uFlag.reduce((a, b) => Math.max(a, b), 0);
   const tLow = iLow === 0 || iLow >= peak ? 0 : (QL - q[iLow - 1]) / (q[iLow] - q[iLow - 1]);
   let fillLow: number | null = null, aLow = 0, vLow: number | null = null;
   if (hasQ && Vc > 0) {
@@ -266,10 +276,10 @@ function computeCaches(data: ExportData): Caches {
     }
   }
   const bic = closed && hasQ && QcL > 0 && QL > QcL && QL <= QmaxL;
-  let posH = 1, iH = peak, tH = 0, fillH: number | null = null, aH = 0, vH: number | null = null;
+  const posH = uMax;
+  let iH = peak, tH = 0, fillH: number | null = null, aH = 0, vH: number | null = null;
   if (bic) {
-    for (let i = peak - 1; i < N_ROWS; i++) { if (q[i] >= QL) posH = i - (peak - 1) + 1; else break; }
-    iH = peak - 1 + posH;
+    iH = uMax > 0 ? uMax : peak;
     tH = iH >= N_ROWS ? 0 : (q[iH - 1] - QL) / (q[iH - 1] - q[iH]);
     fillH = iH + tH;
     aH = selA[iH - 1] + tH * (selA[Math.min(iH, N_ROWS - 1)] - selA[iH - 1]);
@@ -284,7 +294,7 @@ function computeCaches(data: ExportData): Caches {
     pidx, dims, Hmax, K, J, QL, QM, ov,
     Afull, Pfull, Rh, Vc, QcM, QcL, QmaxL, fillQmax: peak,
     circA, circP, theta, ovA, ovP, hOv, rectA, rectP, trapA, trapP,
-    hSel, selA, selP, rh, v, q, qRatio, vRatio,
+    hSel, selA, selP, rh, v, q, qRatio, vRatio, tFlag, uFlag,
     regime, peak, iLow, tLow, fillLow, aLow, vLow, bic, posH, iH, tH, fillH, aH, vH,
     minJ, minDim,
     gq1: hasQ && QcL > 0 ? QL / QcL : null, gq2: bic && QcL > 0 ? QL / QcL : null,
@@ -545,7 +555,7 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   label(R.PEAK, '(aux.) ligne du pic');
   s.put('B', R.PEAK, F(`IFERROR(MATCH(B${R.QMAX},${CR('Q')},0),${N_ROWS})`, c.peak), ST.AUX);
   label(R.ILOW, '(aux.) i solution basse');
-  s.put('B', R.ILOW, F(`IF(B${R.QL}="",0,IFERROR(MATCH(B${R.QL},Courbe!$Q$${CURVE_FIRST}:INDEX(${CR('Q')},B${R.PEAK}),1),0))`, c.iLow), ST.AUX);
+  s.put('B', R.ILOW, F(`MAX(${CR('T')})`, c.iLow), ST.AUX);
   label(R.TLOW, '(aux.) t interpolation basse');
   s.put('B', R.TLOW, F(
     `IF(OR(B${R.ILOW}=0,B${R.ILOW}>=B${R.PEAK}),0,(B${R.QL}-${CIDX('Q', `B${R.ILOW}`)})/(${CIDX('Q', `B${R.ILOW}+1`)}-${CIDX('Q', `B${R.ILOW}`)}))`,
@@ -565,13 +575,10 @@ function buildCalcSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   s.put('B', R.VLOW, FN(`IF(OR(B${R.QL}="",B${R.ALOW}=0),NA(),B${R.QM}/B${R.ALOW})`, c.vLow), ST.KEY);
   label(R.BIC, '(aux.) régime bicritique ?');
   s.put('B', R.BIC, F(`IF(AND(B${R.PIDX}<=2,B${R.QL}<>"",B${R.QL}>B${R.QCL},B${R.QL}<=B${R.QMAX}),1,0)`, c.bic ? 1 : 0), ST.AUX);
-  label(R.POSH, '(aux.) position haute');
-  s.put('B', R.POSH, F(
-    `IF(B${R.BIC}=1,IFERROR(MATCH(B${R.QL},INDEX(${CR('Q')},B${R.PEAK}):Courbe!$Q$${CURVE_LAST},-1),1),1)`,
-    c.posH,
-  ), ST.AUX);
+  label(R.POSH, '(aux.) i haute brut');
+  s.put('B', R.POSH, F(`MAX(${CR('U')})`, c.posH), ST.AUX);
   label(R.IH, '(aux.) i solution haute');
-  s.put('B', R.IH, F(`B${R.PEAK}-1+B${R.POSH}`, c.iH), ST.AUX);
+  s.put('B', R.IH, F(`IF(OR(B${R.BIC}=0,B${R.POSH}=0),B${R.PEAK},B${R.POSH})`, c.iH), ST.AUX);
   label(R.TH2, '(aux.) t interpolation haute');
   s.put('B', R.TH2, F(
     `IF(OR(B${R.BIC}=0,B${R.IH}>=${N_ROWS}),0,IFERROR((${CIDX('Q', `B${R.IH}`)}-B${R.QL})/(${CIDX('Q', `B${R.IH}`)}-${CIDX('Q', `B${R.IH}+1`)}),0))`,
@@ -632,7 +639,7 @@ function buildCurveSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
   s.put('D', 3, 'J (m/m)', ST.LABEL_B);
   s.put('D', 4, F(`Calcul!$B$${R.J}`, c.J), ST.N4);
 
-  const headers = ['Remplissage (%)', 'h (m)', 'θ circ (rad)', 'A circ', 'P circ', 'h ovoïde', 'A ovoïde', 'P ovoïde', 'A rect', 'P rect', 'A trap', 'P trap', 'A (m²)', 'P (m)', 'Rh (m)', 'V (m/s)', 'Q (L/s)', 'Q/Qc', 'V/Vc'];
+  const headers = ['Remplissage (%)', 'h (m)', 'θ circ (rad)', 'A circ', 'P circ', 'h ovoïde', 'A ovoïde', 'P ovoïde', 'A rect', 'P rect', 'A trap', 'P trap', 'A (m²)', 'P (m)', 'Rh (m)', 'V (m/s)', 'Q (L/s)', 'Q/Qc', 'V/Vc', 'idx bas', 'idx haut'];
   headers.forEach((h, i) => s.put(XLSX.utils.encode_col(i), 5, h, ST.THEAD));
 
   const Ca = (row: number) => `${CONST_SHEET}!$B$${row}`; // ovoid constants
@@ -674,8 +681,19 @@ function buildCurveSheet(data: ExportData, c: Caches): XLSX.WorkSheet {
     s.put('Q', n, F(`P${n}*M${n}*1000`, c.q[k]), ST.N2);
     s.put('R', n, FN(`IFERROR(IF(Calcul!$B$${R.QCL}=0,NA(),Q${n}/Calcul!$B$${R.QCL}),NA())`, c.qRatio[k]), ST.N3);
     s.put('S', n, FN(`IFERROR(IF(Calcul!$B$${R.VC}=0,NA(),P${n}/Calcul!$B$${R.VC}),NA())`, c.vRatio[k]), ST.N3);
+    // Helper flags for the operating-point lookup. Using a plain per-row test
+    // plus MAX() avoids dynamic ranges (Q6:INDEX(...)), which Excel rejects,
+    // and makes no assumption about the ordering of the discharge column.
+    s.put('T', n, F(
+      `IF(OR(Calcul!$B$${R.QL}="",A${n}>Calcul!$B$${R.PEAK},Q${n}>Calcul!$B$${R.QL}),0,A${n})`,
+      c.tFlag[k],
+    ), ST.N0);
+    s.put('U', n, F(
+      `IF(OR(Calcul!$B$${R.QL}="",A${n}<Calcul!$B$${R.PEAK},Q${n}<Calcul!$B$${R.QL}),0,A${n})`,
+      c.uFlag[k],
+    ), ST.N0);
   }
-  return s.toSheet([13, 9, 10, 10, 9, 9, 10, 9, 10, 9, 10, 9, 10, 9, 9, 9, 10, 8, 8]);
+  return s.toSheet([13, 9, 10, 10, 9, 9, 10, 9, 10, 9, 10, 9, 10, 9, 9, 9, 10, 8, 8, 8, 8]);
 }
 
 // ---------------------------------------------------------------------------
