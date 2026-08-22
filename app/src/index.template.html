@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gabarit tranchées impétrants</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231e3a8a'/%3E%3Crect x='6' y='10' width='20' height='14' fill='%23f3e6a8'/%3E%3Crect x='6' y='7' width='20' height='3' fill='%23fff'/%3E%3Crect x='8' y='16' width='3' height='4' fill='%232f6fed'/%3E%3Crect x='12' y='16' width='3' height='4' fill='%23e0533d'/%3E%3Ccircle cx='21' cy='19' r='2.5' fill='%23fff' stroke='%230e7c5a'/%3E%3C/svg%3E">
+<style>
+/*__STYLES__*/
+</style>
+</head>
+<body>
+<header class="app">
+  <svg class="logo" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+    <rect width="32" height="32" rx="7" fill="rgba(255,255,255,.14)"/>
+    <rect x="6" y="10" width="20" height="14" fill="#f3e6a8"/>
+    <rect x="6" y="7" width="20" height="3" fill="#fff"/>
+    <rect x="8" y="16" width="3" height="4" fill="#2f6fed"/>
+    <rect x="12" y="16" width="3" height="4" fill="#e0533d"/>
+    <circle cx="21" cy="19" r="2.5" fill="#fff" stroke="#0e7c5a" stroke-width="1.2"/>
+  </svg>
+  <div>
+    <h1>Gabarit tranchées impétrants</h1>
+    <div class="sub">Calcul des largeurs, volumes et répartition par impétrant — génération du classeur Excel</div>
+  </div>
+  <div class="pname"><input id="pname" placeholder="Nom du projet"></div>
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button id="btn-new">Nouveau</button>
+    <button id="btn-import">Importer…</button>
+    <button id="btn-export">Exporter</button>
+    <button id="btn-word">Générer Word</button>
+    <button id="btn-excel" class="primary">Générer Excel</button>
+  </div>
+  <input type="file" id="file-import" accept=".json,application/json" style="display:none">
+</header>
+<main>
+  <div id="app-root"></div>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+/*__EXCELJS__*/
+</script>
+<script>
+/*__DOCX__*/
+</script>
+<script>
+/*__MODEL__*/
+</script>
+<script>
+/*__COUPE__*/
+</script>
+<script>
+/*__DOCXGEN__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>
