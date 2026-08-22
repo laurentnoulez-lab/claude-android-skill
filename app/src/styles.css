@@ -33,6 +33,7 @@ button.tiny { padding: 2px 7px; font-size: 12px; }
 input, select { font-family: inherit; font-size: 13px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); width: 100%; }
 input:focus, select:focus { outline: 2px solid #bfd3ff; border-color: var(--accent); }
 input.in { background: var(--input); border-color: var(--input-border); }
+input.bad { background: #ffe3e0; border-color: #e0533d; color: #8a2b1c; }
 label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
 
 header.app {

@@ -5,7 +5,7 @@
   "description": "Application HTML d'automatisation du gabarit des tranchées impétrants",
   "scripts": {
     "build": "python3 build.py",
-    "test": "node test/model.test.js"
+    "test": "node test/decimal.test.js && node test/model.test.js && node test/original-equivalence.test.js"
   },
   "devDependencies": {
     "exceljs": "4.4.0"

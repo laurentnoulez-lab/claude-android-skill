@@ -40,9 +40,53 @@
     return s;
   }
 
+  // Analyse d'un nombre décimal saisi par un humain.
+  // Accepte indifféremment la virgule et le point comme séparateur décimal
+  // (« 0,48 » comme « 0.48 »), tolère les espaces de milliers (y compris
+  // insécables et fines) et le signe. Quand les deux séparateurs sont présents,
+  // le dernier rencontré est le séparateur décimal (« 1.234,5 » = « 1,234.5 » =
+  // 1234,5). Un séparateur unique est toujours décimal : dans ce gabarit les
+  // valeurs sont des mètres (0,48 · 1,20 · 12,5), jamais des milliers écrits
+  // avec un point. Retourne null si le texte n'est pas un nombre exploitable.
+  function parseDecimal(text) {
+    if (typeof text === 'number') return isFinite(text) ? text : null;
+    if (text == null) return null;
+    var s = String(text).trim().replace(/[\s\u00a0\u202f\u2009]/g, '');
+    if (!s) return null;
+    var neg = s.charAt(0) === '-';
+    s = s.replace(/^[+-]/, '');
+    var ent, dec, m;
+    if (/^\d*[.,]?\d*$/.test(s)) {
+      // Forme simple : au plus un séparateur, qui est toujours décimal.
+      var i = Math.max(s.lastIndexOf(','), s.lastIndexOf('.'));
+      ent = i >= 0 ? s.slice(0, i) : s;
+      dec = i >= 0 ? s.slice(i + 1) : '';
+    } else if ((m = s.match(/^(\d{1,3}(?:([.,])\d{3})+)(?:([.,])(\d*))?$/)) && m[3] !== m[2]) {
+      // Forme groupée : « 1.234,56 » ou « 1,234.56 » — le séparateur de
+      // milliers doit grouper par trois et différer du séparateur décimal.
+      ent = m[1].replace(/[.,]/g, '');
+      dec = m[4] || '';
+    } else {
+      return null;
+    }
+    if (!ent && !dec) return null;
+    var n = parseFloat((ent || '0') + '.' + (dec || '0'));
+    if (!isFinite(n)) return null;
+    return neg ? -n : n;
+  }
+
+  // Affichage d'un nombre dans un champ de saisie : virgule décimale, pas de
+  // zéros inutiles, pas de bruit de virgule flottante (0,30000000000000004).
+  function formatDecimal(n, maxDec) {
+    if (n == null || n === '' || !isFinite(Number(n))) return '';
+    var s = Number(n).toFixed(maxDec == null ? 6 : maxDec);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s.replace('.', ',');
+  }
+
   function num(v, dflt) {
-    var n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : v;
-    return (typeof n === 'number' && isFinite(n)) ? n : (dflt === undefined ? 0 : dflt);
+    var n = parseDecimal(v);
+    return n == null ? (dflt === undefined ? 0 : dflt) : n;
   }
 
   // Largeur effective d'un sous-réseau câbles posé sous gaines : chaque câble
@@ -938,7 +982,8 @@
 
   return {
     DATA_START: DATA_START,
-    uid: uid, colLetter: colLetter, num: num, effGaineWidth: effGaineWidth,
+    uid: uid, colLetter: colLetter, num: num, parseDecimal: parseDecimal,
+    formatDecimal: formatDecimal, effGaineWidth: effGaineWidth,
     defaultProject: defaultProject, defaultGeometry: defaultGeometry, newRow: newRow,
     buildLayout: buildLayout,
     computeRow: computeRow, computeRowWithLayout: computeRowWithLayout, projectTotals: projectTotals,

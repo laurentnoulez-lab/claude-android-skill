@@ -23,6 +23,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        encoding = "UTF-8"
     }
 }
 
@@ -34,3 +35,10 @@ val copyWebApp = tasks.register<Copy>("copyWebApp") {
     rename { "index.html" }
 }
 tasks.named("preBuild") { dependsOn(copyWebApp) }
+
+// Les sources Java contiennent des libellés accentués (« Enregistré dans
+// Téléchargements »). Sans encodage explicite, javac utiliserait l'encodage
+// par défaut de la plateforme de compilation.
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}

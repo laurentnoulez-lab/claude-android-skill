@@ -28,6 +28,50 @@
   function fmtPct(n) { if (n == null || isNaN(n)) return '–'; return (n * 100).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %'; }
   function num(v) { return M.num(v, 0); }
 
+  // Champ numérique tolérant à la virgule décimale.
+  // <input type="number"> refuse la virgule : le navigateur la supprime
+  // silencieusement de la valeur (« 0,48 » devient « 048 », soit 48) sans
+  // aucun signal visible. On utilise donc un champ texte avec
+  // inputmode="decimal" (pavé numérique sur mobile) et l'analyse maison
+  // M.parseDecimal, qui accepte la virgule comme le point.
+  function numberInput(attrs, initial, commit) {
+    var a = { type: 'text', inputmode: 'decimal', autocomplete: 'off', spellcheck: 'false' };
+    Object.keys(attrs || {}).forEach(function (k) { a[k] = attrs[k]; });
+    var input = el('input', a);
+    input.value = M.formatDecimal(initial);
+    // Sélection du contenu à la prise de focus : sans cela, le « 0 » déjà
+    // présent se colle à la frappe (« 0 » + « 5 » = 05). La sélection est faite
+    // au focus (synchrone, donc jamais en concurrence avec la frappe) et le
+    // mouseup qui suit un clic est neutralisé, sinon il la réduirait au curseur.
+    var selectOnMouseUp = false;
+    input.addEventListener('focus', function () {
+      selectOnMouseUp = true;
+      try { input.select(); } catch (e) {}
+    });
+    input.addEventListener('mouseup', function (e) {
+      if (selectOnMouseUp) { selectOnMouseUp = false; e.preventDefault(); }
+    });
+    input.addEventListener('keydown', function () { selectOnMouseUp = false; });
+    // Une saisie illisible n'écrit jamais dans le modèle : le champ passe en
+    // rouge et la dernière valeur valable est conservée, plutôt que d'enregistrer
+    // un 0 silencieux. Un champ vidé, lui, vaut bien zéro.
+    var last = M.num(initial, 0);
+    input.addEventListener('input', function () {
+      var raw = input.value;
+      if (raw.trim() === '') { input.classList.remove('bad'); last = 0; commit(0); return; }
+      var n = M.parseDecimal(raw);
+      if (n == null) { input.classList.add('bad'); return; }
+      input.classList.remove('bad');
+      last = n; commit(n);
+    });
+    input.addEventListener('blur', function () {
+      selectOnMouseUp = false;
+      input.classList.remove('bad');
+      input.value = M.formatDecimal(last);
+    });
+    return input;
+  }
+
   function loadProject() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
@@ -155,8 +199,8 @@
       ]);
       input.value = obj[key] || 'OUI';
     } else {
-      input = el('input', { class: 'in', type: 'number', step: '0.01', value: obj[key] != null ? obj[key] : 0,
-        oninput: function (e) { obj[key] = num(e.target.value); onUpdate(); } });
+      input = numberInput({ class: 'in' }, obj[key] != null ? obj[key] : 0,
+        function (v) { obj[key] = v; onUpdate(); });
     }
     return el('div', { class: 'fld' }, [el('label', { html: labelTxt + ' <small>(' + unit + ')</small>' }), input]);
   }
@@ -167,7 +211,7 @@
     grid.appendChild(el('div', { class: 'fld' }, [el('label', { html: 'Type de tranchée par défaut' }),
       el('input', { value: d.type || 'A', onchange: function (e) { d.type = e.target.value; save(); } })]));
     grid.appendChild(el('div', { class: 'fld' }, [el('label', { html: 'Largeur max disponible <small>(m)</small>' }),
-      el('input', { class: 'in', type: 'number', step: '0.01', value: d.largeurMax || 0, oninput: function (e) { d.largeurMax = num(e.target.value); save(); } })]));
+      numberInput({ class: 'in' }, d.largeurMax || 0, function (v) { d.largeurMax = v; save(); })]));
     GEOM_FIELDS.forEach(function (f) { grid.appendChild(geomField(d, f[0], f[1], f[2], save)); });
     remblaiControl(d, 'remblaiModeCable', 'remblaiSousFondCable', save).forEach(function (fld) { grid.appendChild(fld); });
     remblaiControl(d, 'remblaiModeConduite', 'remblaiSousFondConduite', save).forEach(function (fld) { grid.appendChild(fld); });
@@ -411,13 +455,13 @@
   }
   function fieldNum(label, unit, val, on) {
     return el('div', { class: 'fld' }, [el('label', { html: label + ' <small>(' + unit + ')</small>' }),
-      el('input', { class: 'in', type: 'number', step: '0.01', value: val != null ? val : 0, oninput: function (e) { on(num(e.target.value)); } })]);
+      numberInput({ class: 'in' }, val != null ? val : 0, on)]);
   }
   // Choix du remblai entre le haut du sable et le fond de coffre :
   // terres décaissées (réutilisation) / empierrement de sous-fondation / hauteur manuelle.
   function remblaiControl(geom, modeKey, valKey, on) {
-    var numInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom[valKey] != null ? geom[valKey] : 0,
-      oninput: function (e) { geom[valKey] = num(e.target.value); on(); } });
+    var numInput = numberInput({ class: 'in' }, geom[valKey] != null ? geom[valKey] : 0,
+      function (v) { geom[valKey] = v; on(); });
     var sync = function () { numInput.disabled = (geom[modeKey] || 'terres') !== 'manuel'; };
     var sel = el('select', { onchange: function (e) { geom[modeKey] = e.target.value; sync(); on(); } }, [
       el('option', { value: 'terres', text: 'Terres décaissées' }),
@@ -436,10 +480,10 @@
   // devient automatique ((largeur câbles ÷ Ø) × longueur) quand OUI, et le
   // volume des gaines est déduit du volume de sable.
   function gaineControl(geom, on) {
-    var diamInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom.diamGaine != null ? geom.diamGaine : 0.16,
-      oninput: function (e) { geom.diamGaine = num(e.target.value); on(); } });
-    var lgInput = el('input', { class: 'in', type: 'number', step: '0.1', value: geom.longueurGaines != null ? geom.longueurGaines : 0,
-      oninput: function (e) { geom.longueurGaines = num(e.target.value); on(); } });
+    var diamInput = numberInput({ class: 'in' }, geom.diamGaine != null ? geom.diamGaine : 0.16,
+      function (v) { geom.diamGaine = v; on(); });
+    var lgInput = numberInput({ class: 'in' }, geom.longueurGaines != null ? geom.longueurGaines : 0,
+      function (v) { geom.longueurGaines = v; on(); });
     var sync = function () {
       var oui = (geom.gainesCables || 'NON') === 'OUI';
       diamInput.disabled = !oui;
@@ -460,8 +504,8 @@
 
   // Hauteur moyenne conduites (BB) : MAX automatique des diamètres, ou forcée.
   function htConduiteControl(geom, on) {
-    var valInput = el('input', { class: 'in', type: 'number', step: '0.01', value: geom.htConduiteManuelle != null ? geom.htConduiteManuelle : 0,
-      oninput: function (e) { geom.htConduiteManuelle = num(e.target.value); on(); } });
+    var valInput = numberInput({ class: 'in' }, geom.htConduiteManuelle != null ? geom.htConduiteManuelle : 0,
+      function (v) { geom.htConduiteManuelle = v; on(); });
     var sync = function () { valInput.disabled = (geom.htConduiteMode || 'auto') !== 'manuel'; };
     var sel = el('select', { onchange: function (e) { geom.htConduiteMode = e.target.value; sync(); on(); } }, [
       el('option', { value: 'auto', text: 'Auto (MAX des Ø)' }),
@@ -477,7 +521,7 @@
 
   function wfield(label, interstice, val, on) {
     return el('div', { class: 'wfld' + (interstice ? ' interstice' : '') }, [el('label', { text: label }),
-      el('input', { class: 'in', type: 'number', step: '0.01', value: val != null ? val : 0, oninput: function (e) { on(num(e.target.value)); } })]);
+      numberInput({ class: 'in' }, val != null ? val : 0, on)]);
   }
 
   // ---------------------------------------------------------------------- totaux
@@ -553,7 +597,25 @@
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
   }
-  function sanitize(s) { return (s || 'projet').replace(/[^\w\-éèàùç ]+/g, '').trim().replace(/\s+/g, '_') || 'projet'; }
+  // Nom de fichier sûr, sans perdre les accents : \w est ASCII seul, il
+  // supprimait « É », « ê », « î », « Ü »… (« Rue de l'Église » devenait
+  // « Rue_de_lglise »). On ne retire ici que les caractères réellement
+  // interdits par Windows / Android, en normalisant la ponctuation typographique.
+  function sanitize(s) {
+    var out = String(s == null ? '' : s);
+    if (out.normalize) out = out.normalize('NFC');
+    out = out
+      .replace(/[\u2018\u2019\u02bc]/g, "'")      // apostrophes typographiques
+      .replace(/[\u201c\u201d]/g, '')             // guillemets courbes
+      .replace(/[\u2010-\u2015\u2212]/g, '-')     // tirets typographiques
+      .replace(/[\\/:*?"<>|]/g, '')               // interdits Windows
+      .replace(/[\u0000-\u001f\u007f]/g, '')      // caractères de contrôle
+      .replace(/\s+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^[._\-]+|[._\-]+$/g, '')
+      .slice(0, 80);
+    return out || 'projet';
+  }
 
   // -------------------------------------------------------------------- montage
   function mount() {

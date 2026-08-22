@@ -13,6 +13,20 @@ dans un navigateur. Aucune installation, aucun serveur, aucune connexion
 internet : tout est embarqué dans un seul fichier (y compris la bibliothèque
 ExcelJS).
 
+### Saisie des nombres
+
+Tous les champs numériques acceptent **indifféremment la virgule et le point**
+comme séparateur décimal : `0,48` et `0.48` donnent la même valeur. Les espaces
+de milliers sont tolérés (`1 234,5`). À la sortie du champ, la valeur est
+réaffichée sous forme normalisée (`0,5`). Une saisie illisible passe le champ en
+rouge et **n'écrase pas** la valeur en place ; un champ vidé vaut zéro.
+
+> Auparavant ces champs étaient des `<input type="number">`, qui suppriment la
+> virgule sans le signaler : une largeur saisie `0,48` était enregistrée `048`,
+> soit **48 m au lieu de 0,48 m**, et l'erreur se propageait jusqu'au classeur
+> Excel. **Si vous avez saisi des valeurs avec la virgule avant ce correctif,
+> vérifiez-les : elles peuvent être 10 ou 100 fois trop grandes.**
+
 ### Fonctions
 
 - **Impétrants (concessionnaires)** — ajouter / renommer / supprimer des
@@ -87,6 +101,10 @@ python3 app/build.py
 ```
 
 ### Tests
+
+```bash
+cd app && npm install && npm test
+```
 
 Le cœur métier (`model.js`) fonctionne aussi sous Node. Le moteur de calcul a
 été validé contre les valeurs réelles du classeur de référence (lignes 5 et 30)
