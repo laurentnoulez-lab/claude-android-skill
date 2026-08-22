@@ -39,9 +39,26 @@ jobs:
         working-directory: desktop
         run: npm run dist
 
+      - name: Empreintes SHA-256
+        shell: pwsh
+        working-directory: desktop/dist
+        run: |
+          Get-ChildItem -File -Path GabaritTranchees-*.exe,GabaritTranchees-*.zip |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}  ({2:N0} octets)" -f $_.Hash, (Split-Path $_.Path -Leaf), (Get-Item $_.Path).Length } |
+            Tee-Object -FilePath SHA256SUMS.txt
+
+      - name: Copie de l'application autonome (secours sans installation)
+        shell: pwsh
+        run: Copy-Item gabarit-tranchees-impetrants.html desktop/dist/ -Force
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: gabarit-tranchees-windows-setup
-          path: desktop/dist/GabaritTranchees-Setup-*.exe
+          path: |
+            desktop/dist/GabaritTranchees-Setup-*.exe
+            desktop/dist/GabaritTranchees-portable-*.zip
+            desktop/dist/SHA256SUMS.txt
+            desktop/dist/gabarit-tranchees-impetrants.html
           if-no-files-found: error
