@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Diaporama Studio</string>
+
+    <string name="editor_title">Diaporama Studio</string>
+    <string name="editor_subtitle">Créez une vidéo diaporama animée à partir de vos photos</string>
+    <string name="import_photos">Importer des photos</string>
+    <string name="add_photos">Ajouter</string>
+    <string name="clear_photos">Tout retirer</string>
+    <string name="shuffle">Regénérer la mise en scène</string>
+    <string name="photo_count">%1$d photo(s) importée(s)</string>
+    <string name="remove_photo">Retirer la photo</string>
+    <string name="empty_state_title">Aucune photo</string>
+    <string name="empty_state_message">Importez des photos pour composer votre diaporama.</string>
+
+    <string name="settings_title">Réglages</string>
+    <string name="scene_duration">Durée d\'affichage : %1$s s</string>
+    <string name="transition_duration">Durée des transitions : %1$s s</string>
+    <string name="images_per_scene">Nombre d\'images par scène</string>
+    <string name="mode_single">1 image</string>
+    <string name="mode_up_to_two">1 à 2 images</string>
+    <string name="mode_up_to_three">1 à 3 images</string>
+    <string name="mode_up_to_four">1 à 4 images</string>
+
+    <string name="summary_scenes">%1$d scènes</string>
+    <string name="summary_duration">Durée : %1$s</string>
+    <string name="summary_format">1920 × 1080 · 30 fps · H.264</string>
+
+    <string name="open_preview">Aperçu</string>
+    <string name="export_video">Exporter la vidéo</string>
+    <string name="exporting">Export en cours… %1$d %%</string>
+    <string name="export_cancel">Annuler</string>
+    <string name="export_done">Vidéo enregistrée</string>
+    <string name="export_failed">Échec de l\'export : %1$s</string>
+    <string name="share_video">Partager</string>
+    <string name="open_video">Ouvrir</string>
+    <string name="dismiss">Fermer</string>
+
+    <string name="preview_title">Aperçu</string>
+    <string name="play">Lire</string>
+    <string name="pause">Pause</string>
+    <string name="restart">Revenir au début</string>
+    <string name="back">Retour</string>
+    <string name="preview_hint">L\'aperçu est rendu en basse résolution ; l\'export final est en 1920 × 1080.</string>
+    <string name="loading_photos">Préparation des photos…</string>
+</resources>
