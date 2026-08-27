@@ -18,20 +18,28 @@ object SourceResolution {
     /** Never ask for less than this: a photo can still be zoomed into during preview scrubbing. */
     private const val MIN_WIDTH = 320
 
+    /**
+     * @param canvasWidthPx width the frame is rendered at, which is the export width for the video
+     *   and a smaller value for the preview.
+     */
     fun requiredWidth(
         photo: PhotoRef,
-        slot: NormRect,
-        motion: MotionSpec,
-        settings: SlideshowSettings,
+        slot: SlotPlan,
+        canvasAspect: Float,
+        canvasWidthPx: Int,
         maxWidth: Int,
     ): Int {
-        val targetAspect = slot.pixelAspect(settings.canvasAspect)
-        val ratio = targetAspect / photo.aspect
-        val coverWidth = if (ratio >= 1f) 1f else ratio
-        val zoom = max(motion.startZoom, motion.endZoom) * MOTION_HEADROOM
+        val slotAspect = slot.rect.pixelAspect(canvasAspect)
+        val cropAspect = PhotoFraming.cropAspect(photo.aspect, slotAspect, slot.fill)
+        val (coverWidth, _) = PhotoFraming.coverSize(photo.aspect, cropAspect)
+        val zoom = if (slot.coversSlot) {
+            max(slot.motion.startZoom, slot.motion.endZoom).coerceAtMost(slot.maxZoom) * MOTION_HEADROOM
+        } else {
+            1f
+        }
         val visibleWidth = (coverWidth / zoom).coerceIn(0.02f, 1f)
-        val slotWidthPx = slot.width * settings.outputWidth
-        val needed = ceil(slotWidthPx / visibleWidth).toInt()
+        val displayed = PhotoFraming.fitInside(slot.rect, cropAspect, canvasAspect)
+        val needed = ceil(displayed.width * canvasWidthPx / visibleWidth).toInt()
         return needed.coerceIn(MIN_WIDTH, minOf(maxWidth, photo.widthPx))
     }
 
@@ -42,13 +50,14 @@ object SourceResolution {
     fun forStoryboard(
         storyboard: Storyboard,
         photos: List<PhotoRef>,
+        canvasWidthPx: Int,
         maxWidth: Int,
     ): Map<Int, Int> {
         val widths = mutableMapOf<Int, Int>()
         storyboard.scenes.forEach { scene ->
             scene.slots.forEach { slot ->
                 val photo = photos.getOrNull(slot.photoIndex) ?: return@forEach
-                val width = requiredWidth(photo, slot.rect, slot.motion, storyboard.settings, maxWidth)
+                val width = requiredWidth(photo, slot, storyboard.canvasAspect, canvasWidthPx, maxWidth)
                 widths[slot.photoIndex] = max(widths[slot.photoIndex] ?: 0, width)
             }
         }

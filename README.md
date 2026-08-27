@@ -186,7 +186,7 @@ animated slideshow video (1920 × 1080, 30 fps, MP4 / H.264).
 It shows the skill's layering on a real feature:
 
 - `core:engine` — a pure Kotlin module holding every rendering decision (compositions, Ken Burns
-  movements, transitions, smart cropping). No Android dependency, 48 JVM unit tests.
+  movements, transitions, smart cropping). No Android dependency, 90 JVM unit tests.
 - `app` — Compose UI in MVVM with unidirectional data flow, photo import, live preview, and an
   OpenGL ES + MediaCodec exporter.
 

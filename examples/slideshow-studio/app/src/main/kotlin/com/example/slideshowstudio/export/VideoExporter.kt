@@ -108,7 +108,12 @@ class VideoExporter(
             val writer = EncoderWriter(codec, muxer)
 
             val refs = photos.map { it.ref }
-            val decodeWidths = SourceResolution.forStoryboard(storyboard, refs, maxTextureSize())
+            val decodeWidths = SourceResolution.forStoryboard(
+                storyboard = storyboard,
+                photos = refs,
+                canvasWidthPx = width,
+                maxWidth = maxTextureSize(),
+            )
             val composer = FrameComposer(storyboard, refs)
             val frameCount = composer.frameCount
             val frameDurationNs = 1_000_000_000L / storyboard.settings.fps
@@ -117,11 +122,25 @@ class VideoExporter(
                 ensureActive()
                 val frame = composer.frameAt(frameIndex)
 
-                renderer.beginFrame()
+                renderer.beginFrame(frame.backgroundColor)
+
+                frame.backdrops.forEach { backdrop ->
+                    val photo = photos.getOrNull(backdrop.photoIndex) ?: return@forEach
+                    val textureId = textures.textureFor(
+                        key = TextureCache.backdropKey(backdrop.photoIndex),
+                        frameIndex = frameIndex,
+                        renderer = renderer,
+                    ) {
+                        photoRepository.decodeBackdropSync(photo)
+                    }
+                    if (textureId != 0) renderer.draw(backdrop, textureId)
+                }
+                renderer.drawOverlay(frame.backdropDim)
+
                 frame.commands.forEach { command ->
                     val photo = photos.getOrNull(command.photoIndex) ?: return@forEach
                     val textureId = textures.textureFor(
-                        photoIndex = command.photoIndex,
+                        key = TextureCache.photoKey(command.photoIndex),
                         frameIndex = frameIndex,
                         renderer = renderer,
                     ) {
@@ -129,7 +148,7 @@ class VideoExporter(
                     }
                     if (textureId != 0) renderer.draw(command, textureId)
                 }
-                renderer.drawBlackout(frame.blackout)
+                renderer.drawOverlay(frame.blackout)
 
                 eglCore.setPresentationTime(frameIndex * frameDurationNs)
                 eglCore.swapBuffers()
@@ -153,19 +172,22 @@ class VideoExporter(
         }
     }
 
-    /** Keeps the textures of the photos currently on screen, and only those. */
+    /**
+     * Keeps the textures of what is currently on screen, and only those. A photo and its blurred
+     * backdrop are two different textures, so they get two different keys.
+     */
     private class TextureCache {
         private val textures = HashMap<Int, Int>()
         private val lastUsed = HashMap<Int, Int>()
 
         fun textureFor(
-            photoIndex: Int,
+            key: Int,
             frameIndex: Int,
             renderer: GlFrameRenderer,
             decode: () -> Bitmap?,
         ): Int {
-            lastUsed[photoIndex] = frameIndex
-            textures[photoIndex]?.let { return it }
+            lastUsed[key] = frameIndex
+            textures[key]?.let { return it }
             evictUnused(frameIndex, renderer)
             val bitmap = decode() ?: return 0
             val textureId = try {
@@ -173,16 +195,16 @@ class VideoExporter(
             } finally {
                 bitmap.recycle()
             }
-            textures[photoIndex] = textureId
+            textures[key] = textureId
             return textureId
         }
 
         fun evictUnused(frameIndex: Int, renderer: GlFrameRenderer) {
             if (textures.size < MAX_TEXTURES) return
             val stale = textures.keys.filter { (lastUsed[it] ?: 0) < frameIndex }
-            stale.forEach { photoIndex ->
-                textures.remove(photoIndex)?.let(renderer::deleteTexture)
-                lastUsed.remove(photoIndex)
+            stale.forEach { key ->
+                textures.remove(key)?.let(renderer::deleteTexture)
+                lastUsed.remove(key)
             }
         }
 
@@ -192,8 +214,11 @@ class VideoExporter(
             lastUsed.clear()
         }
 
-        private companion object {
-            const val MAX_TEXTURES = 10
+        companion object {
+            private const val MAX_TEXTURES = 12
+
+            fun photoKey(photoIndex: Int): Int = photoIndex * 2
+            fun backdropKey(photoIndex: Int): Int = photoIndex * 2 + 1
         }
     }
 
@@ -279,7 +304,14 @@ class VideoExporter(
      * engine works in normalized coordinates, so the composition is identical, only smaller.
      */
     private fun resolveSupportedSize(width: Int, height: Int, fps: Int): Pair<Int, Int> {
-        val candidates = listOf(width to height, 1280 to 720, 854 to 480)
+        // Fallbacks keep the orientation the user picked: a portrait video never falls back to a
+        // landscape frame.
+        val fallbacks = if (height > width) {
+            listOf(720 to 1280, 480 to 854)
+        } else {
+            listOf(1280 to 720, 854 to 480)
+        }
+        val candidates = listOf(width to height) + fallbacks
         candidates.forEach { (candidateWidth, candidateHeight) ->
             val format = createFormat(candidateWidth, candidateHeight, fps)
             if (MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(format) != null) {

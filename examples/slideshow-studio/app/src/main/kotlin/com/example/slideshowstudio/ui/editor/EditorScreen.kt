@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -30,7 +33,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +52,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.slideshowstudio.R
 import com.example.slideshowstudio.data.PhotoRepository
+import com.example.slideshowstudio.engine.BackgroundMode
+import com.example.slideshowstudio.engine.CropMode
 import com.example.slideshowstudio.engine.ImagesPerSceneMode
+import com.example.slideshowstudio.engine.OutputFormat
+import com.example.slideshowstudio.engine.PhotoOrder
 import com.example.slideshowstudio.engine.SlideshowSettings
 import com.example.slideshowstudio.ui.SlideshowAction
 import com.example.slideshowstudio.ui.SlideshowUiState
@@ -132,63 +138,63 @@ fun EditorScreen(
             }
         },
     ) { innerPadding ->
-        Column(
+        // Settings and photos share one scrolling surface: the settings are long enough that a
+        // separate fixed panel would leave no room for the photos on a phone.
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 104.dp),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            SettingsCard(
-                state = state,
-                onAction = onAction,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            ImportRow(
-                state = state,
-                onImport = {
-                    picker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
-                },
-                onAction = onAction,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            if (state.hasPhotos) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 104.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    items(state.photos, key = { it.id }) { photo ->
-                        Box {
-                            PhotoThumbnail(
-                                photo = photo,
-                                repository = repository,
-                                cache = thumbnails,
-                                modifier = Modifier
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp)),
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column {
+                    SettingsCard(state = state, onAction = onAction)
+                    Spacer(Modifier.height(12.dp))
+                    ImportRow(
+                        state = state,
+                        onImport = {
+                            picker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
-                            IconButton(
-                                onClick = { onAction(SlideshowAction.RemovePhoto(photo.id)) },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(2.dp)
-                                    .size(28.dp)
-                                    .clip(CircleShape),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.remove_photo),
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
+                        },
+                        onAction = onAction,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+            }
+
+            if (!state.hasPhotos) {
+                item(span = { GridItemSpan(maxLineSpan) }) { EmptyState() }
+            }
+
+            items(state.photos, key = { it.id }) { photo ->
+                Box {
+                    PhotoThumbnail(
+                        photo = photo,
+                        repository = repository,
+                        cache = thumbnails,
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp)),
+                    )
+                    IconButton(
+                        onClick = { onAction(SlideshowAction.RemovePhoto(photo.id)) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(2.dp)
+                            .size(28.dp)
+                            .clip(CircleShape),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.remove_photo),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
-            } else {
-                EmptyState(modifier = Modifier.weight(1f))
             }
         }
     }
@@ -215,7 +221,7 @@ private fun ImportRow(
         }
         if (state.hasPhotos) {
             OutlinedButton(onClick = { onAction(SlideshowAction.Reshuffle) }) {
-                Icon(Icons.Filled.Refresh, contentDescription = null)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.shuffle))
             }
             OutlinedButton(onClick = { onAction(SlideshowAction.ClearPhotos) }) {
                 Text(stringResource(R.string.clear_photos))
@@ -233,44 +239,103 @@ private fun SettingsCard(
     onAction: (SlideshowAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val settings = state.settings
     Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.scene_duration, format(state.settings.sceneDurationSeconds)),
-                style = MaterialTheme.typography.labelLarge,
-            )
+        Column(modifier = Modifier.padding(16.dp)) {
+            SettingLabel(stringResource(R.string.scene_duration, format(settings.sceneDurationSeconds)))
             Slider(
-                value = state.settings.sceneDurationSeconds,
+                value = settings.sceneDurationSeconds,
                 onValueChange = { onAction(SlideshowAction.SetSceneDuration(round(it))) },
                 valueRange = SlideshowSettings.MIN_SCENE_SECONDS..SlideshowSettings.MAX_SCENE_SECONDS,
                 steps = 9,
             )
 
-            Text(
-                text = stringResource(
-                    R.string.transition_duration,
-                    format(state.settings.effectiveTransitionSeconds),
-                ),
-                style = MaterialTheme.typography.labelLarge,
+            SettingLabel(
+                stringResource(R.string.transition_duration, format(settings.effectiveTransitionSeconds)),
             )
             Slider(
-                value = state.settings.transitionDurationSeconds,
+                value = settings.transitionDurationSeconds,
                 onValueChange = { onAction(SlideshowAction.SetTransitionDuration(round(it))) },
                 valueRange = SlideshowSettings.MIN_TRANSITION_SECONDS..SlideshowSettings.MAX_TRANSITION_SECONDS,
                 steps = 4,
             )
 
-            Text(
-                text = stringResource(R.string.images_per_scene),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            ModeChips(
-                selected = state.settings.mode,
+            SettingLabel(stringResource(R.string.images_per_scene))
+            ChoiceChips(
+                options = listOf(
+                    ImagesPerSceneMode.SINGLE to R.string.mode_single,
+                    ImagesPerSceneMode.UP_TO_TWO to R.string.mode_up_to_two,
+                    ImagesPerSceneMode.UP_TO_THREE to R.string.mode_up_to_three,
+                    ImagesPerSceneMode.UP_TO_FOUR to R.string.mode_up_to_four,
+                ),
+                selected = settings.mode,
                 onSelect = { onAction(SlideshowAction.SetMode(it)) },
+            )
+
+            SettingLabel(stringResource(R.string.output_format))
+            FormatChooser(
+                selected = settings.format,
+                onSelect = { onAction(SlideshowAction.SetFormat(it)) },
+            )
+
+            SettingLabel(stringResource(R.string.background_title))
+            ChoiceChips(
+                options = listOf(
+                    BackgroundMode.SOLID to R.string.background_solid,
+                    BackgroundMode.RANDOM to R.string.background_random,
+                    BackgroundMode.BLURRED_PHOTO to R.string.background_blurred,
+                ),
+                selected = settings.backgroundMode,
+                onSelect = { onAction(SlideshowAction.SetBackgroundMode(it)) },
+            )
+            when (settings.backgroundMode) {
+                BackgroundMode.SOLID -> SolidColorPicker(
+                    color = settings.backgroundColor,
+                    onColorChange = { onAction(SlideshowAction.SetBackgroundColor(it)) },
+                )
+
+                BackgroundMode.RANDOM -> SettingHint(stringResource(R.string.background_random_hint))
+                BackgroundMode.BLURRED_PHOTO -> SettingHint(stringResource(R.string.background_blurred_hint))
+            }
+
+            SettingLabel(stringResource(R.string.crop_title))
+            ChoiceChips(
+                options = listOf(
+                    CropMode.NEVER to R.string.crop_never,
+                    CropMode.SMART to R.string.crop_smart,
+                    CropMode.AUTO to R.string.crop_auto,
+                ),
+                selected = settings.cropMode,
+                onSelect = { onAction(SlideshowAction.SetCropMode(it)) },
+            )
+            SettingHint(
+                stringResource(
+                    when (settings.cropMode) {
+                        CropMode.NEVER -> R.string.crop_never_hint
+                        CropMode.SMART -> R.string.crop_smart_hint
+                        CropMode.AUTO -> R.string.crop_auto_hint
+                    },
+                ),
+            )
+
+            SettingLabel(stringResource(R.string.order_title))
+            ChoiceChips(
+                options = listOf(
+                    PhotoOrder.STRICT to R.string.order_strict,
+                    PhotoOrder.ADAPTIVE to R.string.order_adaptive,
+                    PhotoOrder.SHUFFLE to R.string.order_shuffle,
+                ),
+                selected = settings.photoOrder,
+                onSelect = { onAction(SlideshowAction.SetPhotoOrder(it)) },
+            )
+            SettingHint(
+                stringResource(
+                    when (settings.photoOrder) {
+                        PhotoOrder.STRICT -> R.string.order_strict_hint
+                        PhotoOrder.ADAPTIVE -> R.string.order_adaptive_hint
+                        PhotoOrder.SHUFFLE -> R.string.order_shuffle_hint
+                    },
+                ),
             )
 
             if (state.hasPhotos) {
@@ -278,11 +343,11 @@ private fun SettingsCard(
                     text = stringResource(R.string.summary_scenes, state.sceneCount) + " · " +
                         stringResource(R.string.summary_duration, formatDuration(state.totalDurationSeconds)),
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
             Text(
-                text = stringResource(R.string.summary_format),
+                text = stringResource(R.string.summary_format, resolutionLabel(settings.format)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -291,39 +356,12 @@ private fun SettingsCard(
 }
 
 @Composable
-private fun ModeChips(
-    selected: ImagesPerSceneMode,
-    onSelect: (ImagesPerSceneMode) -> Unit,
-) {
-    val labels = listOf(
-        ImagesPerSceneMode.SINGLE to R.string.mode_single,
-        ImagesPerSceneMode.UP_TO_TWO to R.string.mode_up_to_two,
-        ImagesPerSceneMode.UP_TO_THREE to R.string.mode_up_to_three,
-        ImagesPerSceneMode.UP_TO_FOUR to R.string.mode_up_to_four,
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        labels.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (mode, label) ->
-                    FilterChip(
-                        selected = mode == selected,
-                        onClick = { onSelect(mode) },
-                        label = { Text(stringResource(label)) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun EmptyState(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(32.dp),
+            modifier = Modifier.padding(16.dp),
         ) {
             Text(
                 text = stringResource(R.string.empty_state_title),
@@ -338,6 +376,8 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         }
     }
 }
+
+private fun resolutionLabel(format: OutputFormat): String = "${format.width} × ${format.height}"
 
 /** Sliders move in half seconds: fine enough to matter, coarse enough to stay easy to hit. */
 private fun round(value: Float): Float = (value * 2f).roundToInt() / 2f

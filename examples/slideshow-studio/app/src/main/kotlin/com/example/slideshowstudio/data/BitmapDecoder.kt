@@ -148,4 +148,97 @@ object BitmapDecoder {
 
     /** Rounds a dimension to an even number, which several encoders require. */
     fun roundToEven(value: Float): Int = (value.roundToInt() / 2) * 2
+
+    /**
+     * A heavily blurred, slightly desaturated copy of a photo, used as a scene backdrop.
+     *
+     * The blur is mostly free: the photo is decoded at a few dozen pixels wide, which throws away
+     * every detail, and the renderer scales it back up with bilinear filtering. A short box blur on
+     * top removes the last traces of blockiness, and pulling the colours towards grey keeps the
+     * backdrop from competing with the photos in front of it.
+     */
+    fun decodeBackdrop(context: Context, uri: Uri, targetWidth: Int = BACKDROP_WIDTH): Bitmap? {
+        val small = decode(context, uri, targetWidth) ?: return null
+        return try {
+            val width = small.width
+            val height = small.height
+            val pixels = IntArray(width * height)
+            small.getPixels(pixels, 0, width, 0, 0, width, height)
+            boxBlur(pixels, width, height, BLUR_RADIUS)
+            boxBlur(pixels, width, height, BLUR_RADIUS)
+            desaturate(pixels, BACKDROP_SATURATION)
+            small.setPixels(pixels, 0, width, 0, 0, width, height)
+            small
+        } catch (error: Exception) {
+            Log.w(TAG, "Impossible de flouter $uri", error)
+            small
+        } catch (error: OutOfMemoryError) {
+            small
+        }
+    }
+
+    private fun boxBlur(pixels: IntArray, width: Int, height: Int, radius: Int) {
+        if (radius <= 0 || width <= 1 || height <= 1) return
+        val buffer = IntArray(pixels.size)
+        blurRows(pixels, buffer, width, height, radius)
+        blurColumns(buffer, pixels, width, height, radius)
+    }
+
+    private fun blurRows(source: IntArray, target: IntArray, width: Int, height: Int, radius: Int) {
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                var r = 0
+                var g = 0
+                var b = 0
+                var count = 0
+                for (offset in -radius..radius) {
+                    val sampleX = (x + offset).coerceIn(0, width - 1)
+                    val pixel = source[row + sampleX]
+                    r += (pixel shr 16) and 0xFF
+                    g += (pixel shr 8) and 0xFF
+                    b += pixel and 0xFF
+                    count++
+                }
+                target[row + x] = (0xFF shl 24) or ((r / count) shl 16) or ((g / count) shl 8) or (b / count)
+            }
+        }
+    }
+
+    private fun blurColumns(source: IntArray, target: IntArray, width: Int, height: Int, radius: Int) {
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                var r = 0
+                var g = 0
+                var b = 0
+                var count = 0
+                for (offset in -radius..radius) {
+                    val sampleY = (y + offset).coerceIn(0, height - 1)
+                    val pixel = source[sampleY * width + x]
+                    r += (pixel shr 16) and 0xFF
+                    g += (pixel shr 8) and 0xFF
+                    b += pixel and 0xFF
+                    count++
+                }
+                target[y * width + x] = (0xFF shl 24) or ((r / count) shl 16) or ((g / count) shl 8) or (b / count)
+            }
+        }
+    }
+
+    private fun desaturate(pixels: IntArray, keep: Float) {
+        for (index in pixels.indices) {
+            val pixel = pixels[index]
+            val r = (pixel shr 16) and 0xFF
+            val g = (pixel shr 8) and 0xFF
+            val b = pixel and 0xFF
+            val luma = (0.299f * r + 0.587f * g + 0.114f * b)
+            fun mix(component: Int): Int =
+                (component * keep + luma * (1f - keep)).roundToInt().coerceIn(0, 255)
+            pixels[index] = (0xFF shl 24) or (mix(r) shl 16) or (mix(g) shl 8) or mix(b)
+        }
+    }
+
+    private const val BACKDROP_WIDTH = 96
+    private const val BLUR_RADIUS = 3
+    private const val BACKDROP_SATURATION = 0.7f
 }

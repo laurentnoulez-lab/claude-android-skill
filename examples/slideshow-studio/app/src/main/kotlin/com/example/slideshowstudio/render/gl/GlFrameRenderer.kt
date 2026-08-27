@@ -3,6 +3,7 @@ package com.example.slideshowstudio.render.gl
 import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.opengl.GLUtils
+import com.example.slideshowstudio.engine.BackdropCommand
 import com.example.slideshowstudio.engine.DrawCommand
 import com.example.slideshowstudio.engine.NormRect
 import java.nio.ByteBuffer
@@ -22,7 +23,6 @@ import kotlin.math.sin
 class GlFrameRenderer(
     private val width: Int,
     private val height: Int,
-    private val backgroundColor: FloatArray = floatArrayOf(0.055f, 0.055f, 0.07f, 1f),
 ) {
 
     private var textureProgram = 0
@@ -55,18 +55,53 @@ class GlFrameRenderer(
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
     }
 
-    fun beginFrame() {
+    /** @param colorArgb background colour of the scene, packed as ARGB. */
+    fun beginFrame(colorArgb: Int) {
         GLES20.glViewport(0, 0, width, height)
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
-        GLES20.glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], backgroundColor[3])
+        GLES20.glClearColor(
+            ((colorArgb ushr 16) and 0xFF) / 255f,
+            ((colorArgb ushr 8) and 0xFF) / 255f,
+            (colorArgb and 0xFF) / 255f,
+            1f,
+        )
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
     }
 
     fun draw(command: DrawCommand, textureId: Int) {
-        if (command.alpha <= 0f) return
-        applyScissor(command.clip)
+        drawQuad(
+            src = command.src,
+            dst = command.dst,
+            clip = command.clip,
+            rotationDeg = command.rotationDeg,
+            alpha = command.alpha,
+            textureId = textureId,
+        )
+    }
 
-        fillQuad(command)
+    fun draw(backdrop: BackdropCommand, textureId: Int) {
+        drawQuad(
+            src = backdrop.src,
+            dst = backdrop.dst,
+            clip = null,
+            rotationDeg = 0f,
+            alpha = backdrop.alpha,
+            textureId = textureId,
+        )
+    }
+
+    private fun drawQuad(
+        src: NormRect,
+        dst: NormRect,
+        clip: NormRect?,
+        rotationDeg: Float,
+        alpha: Float,
+        textureId: Int,
+    ) {
+        if (alpha <= 0f) return
+        applyScissor(clip)
+
+        fillQuad(src, dst, rotationDeg)
         GLES20.glUseProgram(textureProgram)
         vertexBuffer.position(0)
         GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, STRIDE_BYTES, vertexBuffer)
@@ -78,7 +113,7 @@ class GlFrameRenderer(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
         GLES20.glUniform1i(uTexture, 0)
-        GLES20.glUniform1f(uAlpha, command.alpha.coerceIn(0f, 1f))
+        GLES20.glUniform1f(uAlpha, alpha.coerceIn(0f, 1f))
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, VERTEX_COUNT)
 
@@ -87,8 +122,8 @@ class GlFrameRenderer(
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
     }
 
-    /** Opening and closing fades. */
-    fun drawBlackout(alpha: Float) {
+    /** Black veil: dims the backdrop, and fades the video in and out. */
+    fun drawOverlay(alpha: Float) {
         if (alpha <= 0f) return
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
         quadBuffer.clear()
@@ -144,19 +179,18 @@ class GlFrameRenderer(
 
     /**
      * Builds the four corners of the quad. Positions are rotated in pixel space around the center of
-     * the destination rectangle, then converted to clip space.
+     * the destination rectangle, then converted to clip space. Only the quad is ever painted, so a
+     * photo that does not fill its slot cannot bleed past its own edges.
      */
-    private fun fillQuad(command: DrawCommand) {
-        val dst = command.dst
+    private fun fillQuad(src: NormRect, dst: NormRect, rotationDeg: Float) {
         val centerX = dst.centerX * width
         val centerY = dst.centerY * height
         val halfWidth = dst.width * width / 2f
         val halfHeight = dst.height * height / 2f
-        val radians = Math.toRadians(command.rotationDeg.toDouble())
+        val radians = Math.toRadians(rotationDeg.toDouble())
         val cos = cos(radians).toFloat()
         val sin = sin(radians).toFloat()
 
-        val src = command.src
         val corners = floatArrayOf(
             -halfWidth, -halfHeight, src.left, src.top,
             -halfWidth, halfHeight, src.left, src.bottom,

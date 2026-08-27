@@ -1,8 +1,8 @@
 package com.example.slideshowstudio.engine
 
 /**
- * Region of a photo that matters (typically faces). Expressed in image space (0..1).
- * The cropper does its best to keep this area inside the visible crop at all times.
+ * Region of a photo that matters (typically faces and people). Expressed in image space (0..1).
+ * The framing does its best to keep this area fully visible, at every instant of the animation.
  */
 data class FocusArea(
     val left: Float,
@@ -51,18 +51,72 @@ enum class ImagesPerSceneMode(val maxImages: Int) {
     UP_TO_FOUR(4),
 }
 
+/** Resolution and orientation of the exported video. */
+enum class OutputFormat(val width: Int, val height: Int) {
+    /** 1920 × 1080, for televisions, computers and YouTube. */
+    LANDSCAPE_1080P(1920, 1080),
+
+    /** 1080 × 1920, for phones, Reels, TikTok and Shorts. */
+    PORTRAIT_1080P(1080, 1920);
+
+    val aspect: Float get() = width.toFloat() / height.toFloat()
+    val isPortrait: Boolean get() = height > width
+}
+
+/** How much of a photo the engine is allowed to cut away to fill its slot. */
+enum class CropMode {
+    /** Never cut: the whole photo stays visible, with background around it if needed. */
+    NEVER,
+
+    /** Crop to fill, while keeping faces and people inside the frame. */
+    SMART,
+
+    /** Decide photo by photo and scene by scene, between the two above. */
+    AUTO,
+}
+
+/** How photos are sequenced through the video. */
+enum class PhotoOrder {
+    /** Exactly the order the user picked. Fully predictable. */
+    STRICT,
+
+    /** The user's order, with occasional swaps of one or two positions for better compositions. */
+    ADAPTIVE,
+
+    /** Shuffled once, before generation. */
+    SHUFFLE,
+}
+
+/** What fills the canvas behind and between the photos. */
+enum class BackgroundMode {
+    /** One colour chosen by the user. */
+    SOLID,
+
+    /** A muted colour per scene, drifting from one scene to the next. */
+    RANDOM,
+
+    /** One of the scene's own photos, blown up and heavily blurred. */
+    BLURRED_PHOTO,
+}
+
 /** Rendering + pacing settings chosen by the user. */
 data class SlideshowSettings(
     val sceneDurationSeconds: Float = 4f,
     val transitionDurationSeconds: Float = DEFAULT_TRANSITION_SECONDS,
     val mode: ImagesPerSceneMode = ImagesPerSceneMode.UP_TO_THREE,
-    val outputWidth: Int = 1920,
-    val outputHeight: Int = 1080,
+    val format: OutputFormat = OutputFormat.LANDSCAPE_1080P,
+    val cropMode: CropMode = CropMode.AUTO,
+    val photoOrder: PhotoOrder = PhotoOrder.ADAPTIVE,
+    val backgroundMode: BackgroundMode = BackgroundMode.BLURRED_PHOTO,
+    val backgroundColor: Int = Palette.DEFAULT_BACKGROUND,
     val fps: Int = 30,
     val seed: Long = 0L,
 ) {
-    /** Aspect ratio of the output frame, 16:9 by default. */
-    val canvasAspect: Float get() = outputWidth.toFloat() / outputHeight.toFloat()
+    val outputWidth: Int get() = format.width
+    val outputHeight: Int get() = format.height
+
+    /** Aspect ratio of the output frame: 16:9 in landscape, 9:16 in portrait. */
+    val canvasAspect: Float get() = format.aspect
 
     /** Transition duration, never longer than half of a scene so two transitions cannot overlap. */
     val effectiveTransitionSeconds: Float

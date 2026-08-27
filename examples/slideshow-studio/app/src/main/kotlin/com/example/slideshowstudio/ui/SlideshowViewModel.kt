@@ -43,6 +43,11 @@ class SlideshowViewModel(
             }
 
             is SlideshowAction.SetMode -> updateSettings { it.copy(mode = action.mode) }
+            is SlideshowAction.SetFormat -> updateSettings { it.copy(format = action.format) }
+            is SlideshowAction.SetCropMode -> updateSettings { it.copy(cropMode = action.cropMode) }
+            is SlideshowAction.SetPhotoOrder -> updateSettings { it.copy(photoOrder = action.order) }
+            is SlideshowAction.SetBackgroundMode -> updateSettings { it.copy(backgroundMode = action.mode) }
+            is SlideshowAction.SetBackgroundColor -> updateSettings { it.copy(backgroundColor = action.color) }
             SlideshowAction.Reshuffle -> updateSettings { it.copy(seed = Random.nextLong()) }
             SlideshowAction.StartExport -> startExport()
             SlideshowAction.CancelExport -> cancelExport()

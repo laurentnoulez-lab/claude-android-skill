@@ -1,8 +1,8 @@
 # Diaporama Studio
 
 Application Android qui transforme des photos importées en **vidéo diaporama animée** :
-1920 × 1080, 30 fps, MP4 / H.264, avec mouvements Ken Burns, compositions variées et transitions
-dynamiques.
+1080p horizontal ou vertical, 30 fps, MP4 / H.264, avec mouvements Ken Burns, compositions variées
+et transitions dynamiques.
 
 Cette application sert aussi d'exemple complet pour la skill `android-development` de ce dépôt :
 architecture en couches, module de logique métier pur Kotlin entièrement testé, UI Jetpack Compose
@@ -13,6 +13,10 @@ en MVVM avec flux de données unidirectionnel.
 | Besoin | Où c'est implémenté |
 |---|---|
 | Import de photos (portrait / paysage / carré, résolutions mixtes) | `data/AndroidPhotoRepository.kt` (photo picker Android) |
+| Format de sortie 16:9 ou 9:16, compositions recalculées | `OutputFormat`, catalogues de compositions séparés dans `LayoutCatalog` |
+| Arrière-plan : couleur unie, couleur aléatoire, photo floutée | `BackgroundMode`, `SceneBackground`, `BitmapDecoder.decodeBackdrop` |
+| Mode de recadrage : jamais, intelligent, automatique | `CropMode`, `CropPlanner`, `PhotoFraming` |
+| Ordre des photos : strict, chronologique adaptable, aléatoire | `PhotoOrder`, `StoryboardBuilder` |
 | Durée d'affichage réglable de 2 à 7 s | `SlideshowSettings.sceneDurationSeconds`, curseur dans `ui/editor` |
 | Modes 1 / 1-2 / 1-3 / 1-4 images par scène | `ImagesPerSceneMode`, `StoryboardBuilder.chooseCount` |
 | Variation automatique du nombre d'images | `StoryboardBuilder` : deux scènes consécutives n'ont jamais le même nombre d'images quand c'est possible |
@@ -21,7 +25,7 @@ en MVVM avec flux de données unidirectionnel.
 | Mouvement permanent (zoom, panoramique, diagonale, rotation légère) | `MotionKind`, `MotionFactory` |
 | Transitions variées de 0,5 à 1 s | `TransitionKind` (15 transitions, 6 familles), `TransitionFactory` |
 | Entrées / sorties de photos intégrées à la transition | transitions échelonnées (`stagger`) dans `TransitionSpec` |
-| Recadrage intelligent, jamais de déformation | `SmartCrop` + détection de visages (`FaceFocusDetector`) |
+| Recadrage intelligent, jamais de déformation | `PhotoFraming` + détection de visages (`FaceFocusDetector`) |
 | Aperçu avec lecture / pause / retour au début | `ui/preview/PreviewScreen.kt` |
 | Export 1080p MP4 H.264 | `export/VideoExporter.kt` (MediaCodec + MediaMuxer + OpenGL ES) |
 
@@ -58,10 +62,12 @@ déterministe et sans dépendance Android. Cela permet de vérifier par des test
 * aucun recadrage ne sort de la photo ;
 * aucune photo n'apparaît ni ne disparaît brutalement (contrôle image par image) ;
 * aucune photo n'est figée ;
+* chaque photo apparaît exactement une fois, quel que soit le mode d'ordre ;
+* en ordre adaptable, aucune photo ne se déplace de plus de deux positions ;
 * les règles de variété (compositions, transitions, mouvements, nombres d'images) sont respectées.
 
 ```bash
-./gradlew :core:engine:test     # 48 tests
+./gradlew :core:engine:test     # 90 tests
 ```
 
 Ces tests, ainsi que la construction de l'APK, tournent en intégration continue
@@ -99,6 +105,22 @@ sous la scène entrante.
 réellement nécessaire d'après la taille de son emplacement et son zoom maximal. Une photo qui
 occupe un quart de l'écran n'est pas décodée en pleine résolution : moins de mémoire, et surtout
 moins de scintillement dû à une réduction trop brutale.
+
+**Le recadrage est un curseur, pas un interrupteur.** Une seule valeur, le *remplissage*, décrit
+tout : à 1 la photo est recadrée jusqu'à épouser exactement son emplacement, à 0 elle reste entière
+et l'arrière-plan apparaît autour. Entre les deux, elle est recadrée à mi-chemin. À toutes les
+valeurs, la partie visible et la zone d'affichage ont le même rapport : déformer une photo n'est
+pas représentable dans ce modèle. Le mode automatique choisit cette valeur photo par photo, d'après
+ce que le recadrage coûterait à *cette* photo dans *cet* emplacement, et la réduit encore si un
+visage risquait d'être coupé.
+
+**Une animation ne peut pas faire disparaître un visage.** Le zoom de chaque photo est plafonné à la
+valeur qui garde la zone d'intérêt entièrement visible, et le recentrage est contraint à chaque
+image : ce qui est cadré au départ le reste jusqu'à la fin de la scène.
+
+**Arrière-plan flouté à coût nul.** La photo de fond est décodée à quelques dizaines de pixels de
+large — ce qui supprime tout détail — puis lissée par un court flou et légèrement désaturée ; c'est
+l'agrandissement bilinéaire au rendu qui produit le flou final.
 
 **Attribution des photos aux emplacements.** Pour chaque scène, les permutations possibles
 (4 photos au maximum) sont évaluées et celle qui minimise l'écart entre le format de la photo et

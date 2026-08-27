@@ -52,11 +52,11 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * The preview renders at this size instead of 1080p: the animations and transitions are identical
+ * The preview renders at this width instead of 1080p: the animations and transitions are identical
  * because both renderers consume the same engine frames, but playback stays smooth on any device.
+ * The height follows the format the user picked, so the preview has the shape of the final video.
  */
-private const val PREVIEW_WIDTH = 960
-private const val PREVIEW_HEIGHT = 540
+private const val PREVIEW_LONG_EDGE = 960
 private const val NANOS_PER_SECOND = 1_000_000_000f
 private const val MAX_STEP_SECONDS = 0.1f
 
@@ -87,8 +87,10 @@ fun PreviewScreen(
         derivedStateOf { sceneIndexAt(player.positionSeconds, storyboard) }
     }
     val neededPhotos = remember(storyboard, sceneIndex) { photoIndicesAround(storyboard, sceneIndex) }
+    val neededBackdrops = remember(storyboard, sceneIndex) { backdropIndicesAround(storyboard, sceneIndex) }
 
     LaunchedEffect(neededPhotos) { store.ensureLoaded(neededPhotos) }
+    LaunchedEffect(neededBackdrops) { store.ensureBackdrops(neededBackdrops) }
 
     // Playback follows the display clock, so it plays at the real speed on any refresh rate.
     LaunchedEffect(player.isPlaying, storyboard) {
@@ -129,22 +131,31 @@ fun PreviewScreen(
                 .padding(innerPadding),
             verticalArrangement = Arrangement.Center,
         ) {
+            // A portrait video is taller than the screen if it only follows the width, so the tall
+            // format is fitted to the available height instead.
+            val aspect = storyboard.canvasAspect
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(storyboard.settings.canvasAspect)
-                    .background(SlideshowCanvasColor),
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawSlideshowFrame(
-                        frame = composer.compose(player.positionSeconds),
-                        background = SlideshowCanvasColor,
-                        image = { index -> store[index] },
-                    )
-                }
-                if (!store.isReady(currentScenePhotos(storyboard, sceneIndex))) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                Box(
+                    modifier = Modifier
+                        .aspectRatio(aspect, matchHeightConstraintsFirst = aspect < 1f)
+                        .background(SlideshowCanvasColor),
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawSlideshowFrame(
+                            frame = composer.compose(player.positionSeconds),
+                            image = { index -> store[index] },
+                            backdrop = { index -> store.backdrop(index) },
+                        )
+                    }
+                    if (!store.isReady(currentScenePhotos(storyboard, sceneIndex))) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                        }
                     }
                 }
             }
@@ -224,11 +235,30 @@ private fun photoIndicesAround(storyboard: Storyboard, sceneIndex: Int): Set<Int
     return indices
 }
 
+/** Only the photos actually used as a backdrop are blurred, and only around the current scene. */
+private fun backdropIndicesAround(storyboard: Storyboard, sceneIndex: Int): Set<Int> {
+    val indices = mutableSetOf<Int>()
+    for (offset in -1..1) {
+        storyboard.scenes.getOrNull(sceneIndex + offset)?.background?.photoIndex?.let { indices += it }
+    }
+    return indices
+}
+
 private fun previewDecodeWidths(storyboard: Storyboard, refs: List<PhotoRef>): Map<Int, Int> {
-    val previewStoryboard = storyboard.copy(
-        settings = storyboard.settings.copy(outputWidth = PREVIEW_WIDTH, outputHeight = PREVIEW_HEIGHT),
+    val canvasWidth = previewCanvasWidth(storyboard)
+    return SourceResolution.forStoryboard(
+        storyboard = storyboard,
+        photos = refs,
+        canvasWidthPx = canvasWidth,
+        maxWidth = PREVIEW_LONG_EDGE,
     )
-    return SourceResolution.forStoryboard(previewStoryboard, refs, maxWidth = PREVIEW_WIDTH)
+}
+
+/** Width of the preview canvas: the long edge is fixed, so a portrait preview is narrower. */
+private fun previewCanvasWidth(storyboard: Storyboard): Int = if (storyboard.canvasAspect < 1f) {
+    (PREVIEW_LONG_EDGE * storyboard.canvasAspect).toInt()
+} else {
+    PREVIEW_LONG_EDGE
 }
 
 private fun formatTime(seconds: Float): String {

@@ -123,16 +123,52 @@ object TransitionFactory {
 
     private val ALL = TransitionKind.entries.toList()
 
+    private val VERTICAL = setOf(
+        TransitionKind.SLIDE_UP,
+        TransitionKind.SLIDE_DOWN,
+        TransitionKind.PUSH_UP,
+        TransitionKind.PUSH_DOWN,
+        TransitionKind.STAGGER_RISE,
+    )
+
+    private val HORIZONTAL = setOf(
+        TransitionKind.SLIDE_LEFT,
+        TransitionKind.SLIDE_RIGHT,
+        TransitionKind.PUSH_LEFT,
+        TransitionKind.PUSH_RIGHT,
+        TransitionKind.STAGGER_DRIFT,
+    )
+
     /**
      * Picks the next transition, never repeating the previous one and, when possible, avoiding its
      * family as well so two consecutive transitions never feel like the same effect.
+     *
+     * Movement along the long side of the canvas is favoured — vertical in portrait, horizontal in
+     * landscape — without ever excluding the other direction.
      */
-    fun pickKind(random: Random, previous: TransitionKind?): TransitionKind {
-        if (previous == null) return ALL[random.nextInt(ALL.size)]
-        val differentFamily = ALL.filter { it.family != previous.family }
-        val pool = differentFamily.ifEmpty { ALL.filter { it != previous } }.ifEmpty { ALL }
+    fun pickKind(
+        random: Random,
+        previous: TransitionKind?,
+        canvasAspect: Float = DEFAULT_ASPECT,
+    ): TransitionKind {
+        val candidates = if (previous == null) {
+            ALL
+        } else {
+            ALL.filter { it.family != previous.family }
+                .ifEmpty { ALL.filter { it != previous } }
+                .ifEmpty { ALL }
+        }
+        val favoured = if (canvasAspect < 1f) VERTICAL else HORIZONTAL
+        val pool = buildList {
+            candidates.forEach { kind ->
+                add(kind)
+                if (kind in favoured) add(kind)
+            }
+        }
         return pool[random.nextInt(pool.size)]
     }
+
+    private const val DEFAULT_ASPECT = 16f / 9f
 
     fun create(kind: TransitionKind, random: Random): TransitionSpec {
         val jitter = 0.9f + random.nextFloat() * 0.2f

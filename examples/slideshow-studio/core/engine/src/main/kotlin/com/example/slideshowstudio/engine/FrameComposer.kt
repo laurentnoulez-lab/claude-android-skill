@@ -24,7 +24,16 @@ class FrameComposer(
     fun frameAt(frameIndex: Int): Frame = compose(frameIndex.toFloat() / settings.fps)
 
     fun compose(timeSeconds: Float): Frame {
-        if (storyboard.isEmpty) return Frame(timeSeconds, emptyList(), blackout = 1f)
+        if (storyboard.isEmpty) {
+            return Frame(
+                timeSeconds = timeSeconds,
+                backgroundColor = settings.backgroundColor,
+                backdrops = emptyList(),
+                backdropDim = 0f,
+                commands = emptyList(),
+                blackout = 1f,
+            )
+        }
 
         val t = timeSeconds.coerceIn(0f, totalDurationSeconds)
         val sceneIndex = floor(t / sceneDuration).toInt().coerceIn(0, storyboard.scenes.size - 1)
@@ -33,29 +42,85 @@ class FrameComposer(
         val transition = scene.transitionIn
 
         val commands = mutableListOf<DrawCommand>()
+        val backdrops = mutableListOf<BackdropCommand>()
+        val sceneProgress = localTime / sceneDuration
+        val backgroundColor: Int
+        val backdropDim: Float
+
         if (sceneIndex > 0 && transition != null && localTime < transitionDuration) {
             val progress = (localTime / transitionDuration).coerceIn(0f, 1f)
             val previous = storyboard.scenes[sceneIndex - 1]
+            val outgoingProgress = (t - (sceneIndex - 1) * sceneDuration) / sceneDuration
 
             // The outgoing scene keeps playing its own movement and stays fully opaque for most of
             // the transition: compositing the incoming scene over it gives a clean cross fade with no
             // luminance dip. It only fades over the tail, once the incoming scene is nearly opaque, so
             // it disappears smoothly instead of popping out from between the new tiles.
-            val outgoingProgress = (t - (sceneIndex - 1) * sceneDuration) / sceneDuration
             val outgoingAlpha = outgoingFadeAlpha(progress)
             val outgoingTransform = transition.outgoingTransform(progress)
+
+            // The background travels with the scenes: the colour drifts and the backdrops cross fade,
+            // so a scene change never flashes through the empty canvas.
+            val colourProgress = Easing.SMOOTHER_STEP.apply(progress)
+            backgroundColor = Palette.lerpColor(
+                previous.background.color,
+                scene.background.color,
+                colourProgress,
+            )
+            backdropDim = lerp(previous.background.dim, scene.background.dim, colourProgress)
+            appendBackdrop(backdrops, previous, outgoingProgress, outgoingAlpha)
+            appendBackdrop(backdrops, scene, sceneProgress, colourProgress)
+
             appendScene(commands, previous, outgoingProgress) {
                 outgoingTransform.copy(alpha = outgoingTransform.alpha * outgoingAlpha)
             }
-
-            appendScene(commands, scene, localTime / sceneDuration) { slotIndex ->
+            appendScene(commands, scene, sceneProgress) { slotIndex ->
                 transition.incomingTransform(progress, slotIndex, scene.slots.size)
             }
         } else {
-            appendScene(commands, scene, localTime / sceneDuration) { SceneTransform.Identity }
+            backgroundColor = scene.background.color
+            backdropDim = scene.background.dim
+            appendBackdrop(backdrops, scene, sceneProgress, 1f)
+            appendScene(commands, scene, sceneProgress) { SceneTransform.Identity }
         }
 
-        return Frame(timeSeconds = t, commands = commands, blackout = blackoutAt(t))
+        return Frame(
+            timeSeconds = t,
+            backgroundColor = backgroundColor,
+            backdrops = backdrops,
+            backdropDim = backdropDim,
+            commands = commands,
+            blackout = blackoutAt(t),
+        )
+    }
+
+    private fun appendBackdrop(
+        target: MutableList<BackdropCommand>,
+        scene: Scene,
+        progress: Float,
+        alpha: Float,
+    ) {
+        if (alpha <= ALPHA_EPSILON) return
+        val background = scene.background
+        val photoIndex = background.photoIndex ?: return
+        val photo = photos.getOrNull(photoIndex) ?: return
+        val motion = background.motion ?: return
+
+        // The zoom is applied to the destination rather than to the crop, so the backdrop keeps
+        // covering the whole canvas whichever way it drifts.
+        val src = SmartCrop.crop(
+            imageAspect = photo.aspect,
+            targetAspect = canvasAspect,
+            zoom = 1f,
+            pan = motion.panAt(progress),
+            focus = FocusArea.point(0.5f, 0.5f),
+        )
+        target += BackdropCommand(
+            photoIndex = photoIndex,
+            src = src,
+            dst = NormRect.Full.scaleAroundCenter(motion.zoomAt(progress)),
+            alpha = alpha.coerceIn(0f, 1f),
+        )
     }
 
     private inline fun appendScene(
@@ -69,38 +134,52 @@ class FrameComposer(
             if (transform.alpha <= ALPHA_EPSILON) return@forEachIndexed
 
             val photo = photos.getOrNull(slot.photoIndex) ?: return@forEachIndexed
-            val clip = slot.rect
+            val area = slot.rect
                 .scaleAround(0.5f, 0.5f, transform.scale)
                 .translate(transform.offset.x, transform.offset.y)
-            if (isOffscreen(clip)) return@forEachIndexed
+            if (isOffscreen(area)) return@forEachIndexed
 
-            val slotAspect = slot.rect.pixelAspect(canvasAspect)
             val motion = slot.motion
-            val src = SmartCrop.crop(
-                imageAspect = photo.aspect,
-                targetAspect = slotAspect,
-                zoom = motion.zoomAt(progress),
-                pan = motion.panAt(progress),
-                focus = photo.focus,
+            val covers = slot.coversSlot
+            val pan = motion.panAt(progress)
+            val zoom = if (covers) motion.zoomAt(progress).coerceAtMost(slot.maxZoom) else 1f
+            // A photo that does not fill its slot cannot be zoomed into without cutting it, so its
+            // movement becomes a gentle drift inside the slot instead.
+            val displayScale = if (covers) {
+                1f
+            } else {
+                (1f - (motion.zoomAt(progress) - 1f) * 0.5f).coerceIn(0.86f, 0.995f)
+            }
+
+            val framing = PhotoFraming.plan(
+                photo = photo,
+                slot = area,
+                canvasAspect = canvasAspect,
+                fill = slot.fill,
+                zoom = zoom,
+                pan = pan,
+                displayScale = displayScale,
+                displayShift = if (covers) Vec2.Zero else pan,
             )
 
             val rotation = motion.rotationAt(progress) + transform.rotationDeg
-            val dst = if (rotation == 0f) {
-                clip
-            } else {
+            val dst = if (rotation != 0f && covers) {
                 val cover = rotationCoverScale(
                     degrees = rotation,
-                    pixelWidth = clip.width * settings.outputWidth,
-                    pixelHeight = clip.height * settings.outputHeight,
+                    pixelWidth = framing.dst.width * settings.outputWidth,
+                    pixelHeight = framing.dst.height * settings.outputHeight,
                 )
-                clip.scaleAroundCenter(cover)
+                framing.dst.scaleAroundCenter(cover)
+            } else {
+                framing.dst
             }
 
             target += DrawCommand(
                 photoIndex = slot.photoIndex,
-                src = src,
+                src = framing.src,
                 dst = dst,
-                clip = clip,
+                // Clipping matters only when the photo is meant to fill its slot edge to edge.
+                clip = if (covers) area else null,
                 rotationDeg = rotation,
                 alpha = transform.alpha,
             )

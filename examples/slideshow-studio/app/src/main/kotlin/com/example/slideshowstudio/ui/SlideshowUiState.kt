@@ -2,7 +2,11 @@ package com.example.slideshowstudio.ui
 
 import android.net.Uri
 import com.example.slideshowstudio.data.GalleryPhoto
+import com.example.slideshowstudio.engine.BackgroundMode
+import com.example.slideshowstudio.engine.CropMode
 import com.example.slideshowstudio.engine.ImagesPerSceneMode
+import com.example.slideshowstudio.engine.OutputFormat
+import com.example.slideshowstudio.engine.PhotoOrder
 import com.example.slideshowstudio.export.ExportedVideo
 import com.example.slideshowstudio.engine.SlideshowSettings
 import com.example.slideshowstudio.engine.Storyboard
@@ -41,6 +45,11 @@ sealed interface SlideshowAction {
     data class SetSceneDuration(val seconds: Float) : SlideshowAction
     data class SetTransitionDuration(val seconds: Float) : SlideshowAction
     data class SetMode(val mode: ImagesPerSceneMode) : SlideshowAction
+    data class SetFormat(val format: OutputFormat) : SlideshowAction
+    data class SetCropMode(val cropMode: CropMode) : SlideshowAction
+    data class SetPhotoOrder(val order: PhotoOrder) : SlideshowAction
+    data class SetBackgroundMode(val mode: BackgroundMode) : SlideshowAction
+    data class SetBackgroundColor(val color: Int) : SlideshowAction
     data object Reshuffle : SlideshowAction
     data object StartExport : SlideshowAction
     data object CancelExport : SlideshowAction

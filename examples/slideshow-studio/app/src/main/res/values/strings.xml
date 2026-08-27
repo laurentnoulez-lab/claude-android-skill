@@ -22,9 +22,43 @@
     <string name="mode_up_to_three">1 à 3 images</string>
     <string name="mode_up_to_four">1 à 4 images</string>
 
+    <string name="output_format">Format de sortie</string>
+    <string name="format_landscape">1080p Horizontal</string>
+    <string name="format_landscape_detail">1920 × 1080 — 16:9</string>
+    <string name="format_portrait">1080p Vertical</string>
+    <string name="format_portrait_detail">1080 × 1920 — 9:16</string>
+
+    <string name="background_title">Arrière-plan</string>
+    <string name="background_solid">Couleur unie</string>
+    <string name="background_random">Couleur aléatoire</string>
+    <string name="background_blurred">Photo floutée</string>
+    <string name="background_random_hint">Une couleur sobre différente à chaque scène, qui évolue pendant les transitions.</string>
+    <string name="background_blurred_hint">Une photo de la scène, agrandie et fortement floutée, derrière les autres.</string>
+    <string name="color_hue">Teinte</string>
+    <string name="color_saturation">Saturation</string>
+    <string name="color_brightness">Luminosité</string>
+    <string name="color_hex">Code couleur</string>
+    <string name="color_preset">Couleur prédéfinie</string>
+
+    <string name="crop_title">Mode de recadrage</string>
+    <string name="crop_never">Ne jamais recadrer</string>
+    <string name="crop_smart">Recadrage intelligent</string>
+    <string name="crop_auto">Automatique</string>
+    <string name="crop_never_hint">Chaque photo reste entière ; de l\'espace peut apparaître autour.</string>
+    <string name="crop_smart_hint">Les photos remplissent les zones, sans jamais couper les visages.</string>
+    <string name="crop_auto_hint">Le meilleur compromis, décidé photo par photo.</string>
+
+    <string name="order_title">Ordre des photos</string>
+    <string name="order_strict">Ordre strict</string>
+    <string name="order_adaptive">Chronologique adaptable</string>
+    <string name="order_shuffle">Ordre aléatoire</string>
+    <string name="order_strict_hint">Exactement l\'ordre d\'importation.</string>
+    <string name="order_adaptive_hint">L\'ordre d\'importation, avec quelques échanges d\'une ou deux positions.</string>
+    <string name="order_shuffle_hint">Mélangées une fois avant la génération.</string>
+
     <string name="summary_scenes">%1$d scènes</string>
     <string name="summary_duration">Durée : %1$s</string>
-    <string name="summary_format">1920 × 1080 · 30 fps · H.264</string>
+    <string name="summary_format">%1$s · 30 fps · MP4 H.264</string>
 
     <string name="open_preview">Aperçu</string>
     <string name="export_video">Exporter la vidéo</string>

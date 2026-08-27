@@ -64,11 +64,61 @@ object MotionFactory {
 
     private val ALL = MotionKind.entries.toList()
 
-    /** Picks a movement kind different from the ones in [avoid] whenever possible. */
-    fun pickKind(random: Random, avoid: Set<MotionKind> = emptySet()): MotionKind {
-        val candidates = ALL.filterNot { it in avoid }
-        val pool = candidates.ifEmpty { ALL }
+    private val VERTICAL = setOf(
+        MotionKind.PAN_UP,
+        MotionKind.PAN_DOWN,
+        MotionKind.DIAGONAL_UP,
+        MotionKind.DIAGONAL_DOWN,
+    )
+
+    private val HORIZONTAL = setOf(
+        MotionKind.PAN_LEFT,
+        MotionKind.PAN_RIGHT,
+        MotionKind.DIAGONAL_UP,
+        MotionKind.DIAGONAL_DOWN,
+    )
+
+    /**
+     * Picks a movement kind different from the ones in [avoid] whenever possible.
+     *
+     * A tall canvas leans towards vertical movement and a wide one towards horizontal movement,
+     * because that is where the room to travel is. It is a bias, not a rule: zooms and the opposite
+     * direction still come up, which is what keeps a long video from feeling mechanical.
+     */
+    fun pickKind(
+        random: Random,
+        avoid: Set<MotionKind> = emptySet(),
+        canvasAspect: Float = DEFAULT_ASPECT,
+    ): MotionKind {
+        val candidates = ALL.filterNot { it in avoid }.ifEmpty { ALL }
+        val favoured = if (canvasAspect < 1f) VERTICAL else HORIZONTAL
+        val pool = buildList {
+            candidates.forEach { kind ->
+                add(kind)
+                if (kind in favoured) add(kind)
+            }
+        }
         return pool[random.nextInt(pool.size)]
+    }
+
+    private const val DEFAULT_ASPECT = 16f / 9f
+
+    /**
+     * Movement for a blurred backdrop: slower and larger than a foreground movement, so the backdrop
+     * breathes behind the photos without ever competing with them.
+     */
+    fun createBackdrop(random: Random): MotionSpec {
+        val start = 1.05f + random.nextFloat() * 0.05f
+        val travel = 0.06f + random.nextFloat() * 0.05f
+        val drift = (random.nextFloat() - 0.5f) * 0.3f
+        val zoomIn = random.nextBoolean()
+        return MotionSpec(
+            kind = if (zoomIn) MotionKind.ZOOM_IN else MotionKind.ZOOM_OUT,
+            startZoom = if (zoomIn) start else start + travel,
+            endZoom = if (zoomIn) start + travel else start,
+            startPan = Vec2(drift, -drift),
+            endPan = Vec2(-drift, drift),
+        )
     }
 
     fun create(kind: MotionKind, random: Random): MotionSpec {

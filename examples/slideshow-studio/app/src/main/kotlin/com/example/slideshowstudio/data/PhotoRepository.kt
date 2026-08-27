@@ -21,4 +21,10 @@ interface PhotoRepository {
      * from the main thread.
      */
     fun decodeSync(photo: GalleryPhoto, targetWidth: Int): Bitmap?
+
+    /** Blurred, desaturated copy of a photo, used as the backdrop of a scene. */
+    suspend fun decodeBackdrop(photo: GalleryPhoto): Bitmap?
+
+    /** Blocking version of [decodeBackdrop], for the exporter's render thread. */
+    fun decodeBackdropSync(photo: GalleryPhoto): Bitmap?
 }

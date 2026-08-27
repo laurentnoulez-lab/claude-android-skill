@@ -4,6 +4,9 @@ import kotlin.random.Random
 
 internal fun photo(id: String, width: Int, height: Int): PhotoRef = PhotoRef(id, width, height)
 
+internal fun photo(id: String, width: Int, height: Int, focus: FocusArea): PhotoRef =
+    PhotoRef(id, width, height, focus)
+
 /** A mix of landscape, portrait, square and odd resolutions, like a real gallery selection. */
 internal fun mixedPhotos(count: Int): List<PhotoRef> {
     val sizes = listOf(
@@ -26,5 +29,11 @@ internal fun randomSettings(random: Random, mode: ImagesPerSceneMode): Slideshow
     sceneDurationSeconds = 2f + random.nextFloat() * 5f,
     transitionDurationSeconds = 0.5f + random.nextFloat() * 0.5f,
     mode = mode,
+    format = if (random.nextBoolean()) OutputFormat.LANDSCAPE_1080P else OutputFormat.PORTRAIT_1080P,
+    cropMode = CropMode.entries[random.nextInt(CropMode.entries.size)],
+    photoOrder = PhotoOrder.entries[random.nextInt(PhotoOrder.entries.size)],
+    backgroundMode = BackgroundMode.entries[random.nextInt(BackgroundMode.entries.size)],
     seed = random.nextLong(),
 )
+
+internal val BOTH_FORMATS = listOf(OutputFormat.LANDSCAPE_1080P, OutputFormat.PORTRAIT_1080P)

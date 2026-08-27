@@ -36,6 +36,13 @@ class AndroidPhotoRepository(
     override fun decodeSync(photo: GalleryPhoto, targetWidth: Int): Bitmap? =
         BitmapDecoder.decode(context, photo.uri, targetWidth)
 
+    override suspend fun decodeBackdrop(photo: GalleryPhoto): Bitmap? = withContext(dispatcher) {
+        decodeBackdropSync(photo)
+    }
+
+    override fun decodeBackdropSync(photo: GalleryPhoto): Bitmap? =
+        BitmapDecoder.decodeBackdrop(context, photo.uri)
+
     /**
      * Faces are looked for on a thumbnail: cheap enough to run on every imported photo, and precise
      * enough to steer the crop away from cutting someone's head.
