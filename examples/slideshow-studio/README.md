@@ -64,6 +64,10 @@ déterministe et sans dépendance Android. Cela permet de vérifier par des test
 ./gradlew :core:engine:test     # 48 tests
 ```
 
+Ces tests, ainsi que la construction de l'APK, tournent en intégration continue
+([`.github/workflows/slideshow-studio.yml`](../../.github/workflows/slideshow-studio.yml)) à chaque
+modification de l'application.
+
 ## Compilation
 
 ```bash
