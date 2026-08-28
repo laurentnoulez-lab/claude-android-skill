@@ -63,6 +63,10 @@ def _data_path() -> str:
     return candidats[0]
 
 
+#: Renseigne d'où proviennent effectivement les données (diagnostic).
+SOURCE_DONNEES = {"origine": "inconnue"}
+
+
 def _octets_donnees() -> bytes:
     """Contenu compressé du référentiel GTI.
 
@@ -73,15 +77,19 @@ def _octets_donnees() -> bytes:
     try:
         from importlib import resources
 
-        return resources.files("bassin.data").joinpath(DATA_FILE).read_bytes()
+        octets = resources.files("bassin.data").joinpath(DATA_FILE).read_bytes()
+        SOURCE_DONNEES["origine"] = "ressource de paquet"
+        return octets
     except Exception:
         pass
     chemin = _data_path()
     if os.path.exists(chemin):
         with open(chemin, "rb") as fh:
+            SOURCE_DONNEES["origine"] = f"fichier {chemin}"
             return fh.read()
-    from .. data.gti_embarque import DONNEES  # repli embarqué dans le code
+    from ..data.gti_embarque import DONNEES  # repli embarqué dans le code
 
+    SOURCE_DONNEES["origine"] = "module embarqué"
     return DONNEES
 
 

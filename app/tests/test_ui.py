@@ -279,6 +279,20 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(len(rails[0].destinations), 7)
         rails[0].on_change(_Evenement(rails[0], 3))
 
+    def test_diagnostic_accessible(self):
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        boutons = _rechercher(page.controls[0], ft.IconButton)
+        infos = [b for b in boutons if b.tooltip == "Diagnostic"]
+        self.assertTrue(infos)
+        infos[0].on_click(None)
+        fenetres = [c for c in page.ouverts if isinstance(c, ft.AlertDialog)]
+        self.assertTrue(fenetres)
+        textes = [t.value for t in _rechercher(fenetres[-1].content, ft.Text)]
+        self.assertTrue(any("communes" in t for t in textes))
+
     def test_une_vue_en_erreur_affiche_le_detail(self):
         """Une page blanche est inacceptable : l'erreur doit être visible."""
         import main as application

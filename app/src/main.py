@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flet as ft  # noqa: E402
 
 from bassin import __app_name__, __version__  # noqa: E402
+from bassin.core import rainfall  # noqa: E402
 from bassin.core.model import LIBELLES_SCENARIOS  # noqa: E402
 from bassin.ui import theme  # noqa: E402
 from bassin.ui.state import CLE_STOCKAGE, EtatApplication  # noqa: E402
@@ -151,6 +152,32 @@ def main(page: ft.Page) -> None:
         )
         page.open(dialogue)
 
+    def diagnostic(_=None) -> None:
+        """Informations utiles pour signaler un problème."""
+        from bassin.ui.state import diagnostic_stockage, repertoire_documents
+
+        try:
+            nb_communes = len(rainfall.communes())
+            origine = rainfall.SOURCE_DONNEES["origine"]
+        except Exception as exc:
+            nb_communes, origine = 0, f"ÉCHEC : {exc}"
+        lignes = [
+            f"{__app_name__} version {__version__}",
+            f"Plateforme : {getattr(page, 'platform', '?')} · largeur {page.width} × hauteur {page.height}",
+            f"Python {sys.version.split()[0]} · Flet {getattr(ft, '__version__', '?')}",
+            f"Pluies GTI : {nb_communes} communes ({origine})",
+            f"Dossier des rapports : {repertoire_documents()}",
+        ]
+        lignes += [f"  {'écriture possible' if ok else 'inaccessible'} — {c}"
+                   for c, ok in diagnostic_stockage()]
+        fenetre = ft.AlertDialog(
+            title=ft.Text("Diagnostic"),
+            content=ft.Column([ft.Text("\n".join(lignes), size=12, selectable=True)],
+                              tight=True, scroll=ft.ScrollMode.AUTO, width=460),
+            actions=[ft.TextButton("Fermer", on_click=lambda _: page.close(fenetre))],
+        )
+        page.open(fenetre)
+
     bouton_menu = ft.IconButton(ft.Icons.MENU, tooltip="Sections", on_click=ouvrir_menu, visible=False)
     barre = ft.Container(
         content=ft.Row(
@@ -163,6 +190,7 @@ def main(page: ft.Page) -> None:
                     border_radius=10,
                 ),
                 ft.Column([titre_page, resume], spacing=0, expand=True, tight=True),
+                ft.IconButton(ft.Icons.INFO_OUTLINE, tooltip="Diagnostic", on_click=diagnostic),
                 ft.IconButton(ft.Icons.RESTART_ALT, tooltip="Nouveau projet", on_click=reinitialiser),
                 ft.IconButton(ft.Icons.DARK_MODE, tooltip="Thème clair / sombre",
                               on_click=basculer_theme),
