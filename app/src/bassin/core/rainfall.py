@@ -27,6 +27,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -50,7 +51,16 @@ QDF_DURATION_LABELS: Tuple[str, ...] = (
 
 
 def _data_path() -> str:
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", DATA_FILE)
+    """Chemin du jeu de données, y compris dans une application empaquetée."""
+    candidats = [os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", DATA_FILE)]
+    base = getattr(sys, "_MEIPASS", None)  # exécutable PyInstaller
+    if base:
+        candidats.append(os.path.join(base, "bassin", "data", DATA_FILE))
+        candidats.append(os.path.join(base, "data", DATA_FILE))
+    for chemin in candidats:
+        if os.path.exists(chemin):
+            return chemin
+    return candidats[0]
 
 
 @lru_cache(maxsize=1)

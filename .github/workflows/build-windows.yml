@@ -35,10 +35,9 @@ jobs:
           --product-version 1.0.0
           --file-version 1.0.0.${{ github.run_number }}
           --copyright "HydroBassin"
-          --icon src/assets/icon.png
+          --icon src/assets/icon.ico
           --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data"
           --add-data "src/assets;assets"
-          --onefile
           --yes
 
       - name: Vérifier le livrable
