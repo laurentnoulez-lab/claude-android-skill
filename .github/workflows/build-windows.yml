@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    branches: ["claude/**"]
+    paths:
+      - "app/**"
+      - ".github/workflows/build-*.yml"
 
 jobs:
   exe-portable:
