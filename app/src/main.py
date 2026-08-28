@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,7 +62,8 @@ def main(page: ft.Page) -> None:
         VueRapport(page, etat),
     ]
     index = {"courant": 0}
-    zone = ft.Container(expand=True, padding=ft.padding.symmetric(18, 22))
+    zone = ft.Column(spacing=0, scroll=ft.ScrollMode.AUTO, expand=True)
+    marge = {"valeur": ft.padding.symmetric(18, 22)}
 
     # ------------------------------------------------------------------ entête
     resume = ft.Text("", size=11.5, color=theme.GRIS, max_lines=1,
@@ -87,7 +89,26 @@ def main(page: ft.Page) -> None:
 
     def afficher(i: int) -> None:
         index["courant"] = i
-        zone.content = vues[i].afficher()
+        try:
+            contenu = vues[i].afficher()
+        except Exception:
+            # Une page blanche ne dit rien à l'utilisateur : on montre l'erreur.
+            contenu = ft.Column(
+                [
+                    theme.message(
+                        f"Impossible d'afficher la section « {vues[i].titre} ». "
+                        "Merci de transmettre le détail ci-dessous.", "erreur"),
+                    ft.Container(
+                        ft.Text(traceback.format_exc(), size=11, selectable=True,
+                                font_family="monospace"),
+                        padding=12,
+                        border_radius=10,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    ),
+                ],
+                spacing=12,
+            )
+        zone.controls = [ft.Container(contenu, padding=marge["valeur"])]
         rail.selected_index = i
         tiroir.selected_index = i
         maj_entete()
@@ -207,7 +228,9 @@ def main(page: ft.Page) -> None:
         separateur.visible = not compact
         bouton_menu.visible = compact
         rail.extended = (not compact) and largeur > 1180
-        zone.padding = ft.padding.symmetric(10, 10) if compact else ft.padding.symmetric(18, 22)
+        marge["valeur"] = ft.padding.symmetric(10, 10) if compact else ft.padding.symmetric(18, 22)
+        if zone.controls:
+            zone.controls[0].padding = marge["valeur"]
         page.update()
 
     page.on_resized = adapter

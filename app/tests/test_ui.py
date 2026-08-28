@@ -279,6 +279,22 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(len(rails[0].destinations), 7)
         rails[0].on_change(_Evenement(rails[0], 3))
 
+    def test_une_vue_en_erreur_affiche_le_detail(self):
+        """Une page blanche est inacceptable : l'erreur doit être visible."""
+        import main as application
+        from bassin.ui.vues import projet as mod_projet
+
+        original = mod_projet.VueProjet.construire
+        mod_projet.VueProjet.construire = lambda self: (_ for _ in ()).throw(RuntimeError("panne simulée"))
+        try:
+            page = PageFactice()
+            application.main(page)
+        finally:
+            mod_projet.VueProjet.construire = original
+        textes = [c.value for c in _rechercher(page.controls[0], ft.Text) if getattr(c, "value", None)]
+        self.assertTrue(any("panne simulée" in t for t in textes),
+                        "la trace de l'erreur doit apparaître à l'écran")
+
     def test_reprise_d_un_projet_enregistre(self):
         import main as application
 

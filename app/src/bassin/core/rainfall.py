@@ -63,10 +63,31 @@ def _data_path() -> str:
     return candidats[0]
 
 
+def _octets_donnees() -> bytes:
+    """Contenu compressé du référentiel GTI.
+
+    Trois sources successives, car l'empaquetage diffère selon la cible
+    (fichier sur disque en développement et sous Windows, ressource de paquet
+    sur Android et sur le web, module Python en dernier recours).
+    """
+    try:
+        from importlib import resources
+
+        return resources.files("bassin.data").joinpath(DATA_FILE).read_bytes()
+    except Exception:
+        pass
+    chemin = _data_path()
+    if os.path.exists(chemin):
+        with open(chemin, "rb") as fh:
+            return fh.read()
+    from .. data.gti_embarque import DONNEES  # repli embarqué dans le code
+
+    return DONNEES
+
+
 @lru_cache(maxsize=1)
 def _raw() -> dict:
-    with gzip.open(_data_path(), "rb") as fh:
-        return json.loads(fh.read().decode("utf-8"))
+    return json.loads(gzip.decompress(_octets_donnees()).decode("utf-8"))
 
 
 @dataclass(frozen=True)

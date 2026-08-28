@@ -19,7 +19,7 @@ class Vue:
     def __init__(self, page: ft.Page, etat: EtatApplication):
         self.page = page
         self.etat = etat
-        self.corps = ft.Column(spacing=16, scroll=ft.ScrollMode.AUTO, expand=True)
+        self.corps = ft.Column(spacing=16, tight=True)
         #: Zone recalculée seule, sans reconstruire les champs de saisie.
         self.zone = ft.Column(spacing=16)
 

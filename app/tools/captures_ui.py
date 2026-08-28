@@ -27,6 +27,21 @@ def servir(racine: str, port: int) -> socketserver.TCPServer:
     return serveur
 
 
+def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str) -> None:
+    """Capture aussi le bas de la page : les débordements y sont fréquents."""
+    try:
+        page.mouse.move(200, 400)
+        for _ in range(3):
+            page.mouse.wheel(0, 900)
+            page.wait_for_timeout(600)
+        page.screenshot(path=os.path.join(sortie, f"{nom_format}_{index}_{nom}_bas.png"))
+        for _ in range(4):
+            page.mouse.wheel(0, -900)
+        page.wait_for_timeout(600)
+    except Exception as exc:  # pragma: no cover
+        print(f"  ! défilement impossible ({nom_format}/{nom}) : {str(exc)[:80]}")
+
+
 def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -42,7 +57,15 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             page.on("pageerror", lambda e: erreurs.append(str(e)[:200]))
             page.goto(url, wait_until="load", timeout=90000)
             page.wait_for_timeout(15000)
+            # Flutter dessine dans un canvas : sans l'arbre d'accessibilité, aucun
+            # texte n'est sélectionnable par Playwright.
+            try:
+                page.click("flt-semantics-placeholder", force=True, timeout=5000)
+                page.wait_for_timeout(2000)
+            except Exception as exc:
+                print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
             page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_accueil.png"))
+            defiler_et_capturer(page, sortie, nom_format, 0, "accueil")
             for i, vue in enumerate(VUES[1:], start=1):
                 try:
                     if largeur < 840:  # navigation par le tiroir
@@ -50,7 +73,9 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                         page.wait_for_timeout(1200)
                     page.get_by_text(vue, exact=True).first.click(timeout=10000)
                     page.wait_for_timeout(3000)
-                    page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{vue.replace(' ', '_')}.png"))
+                    nom = vue.replace(" ", "_")
+                    page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
+                    defiler_et_capturer(page, sortie, nom_format, i, nom)
                 except Exception as exc:  # pragma: no cover - dépend du rendu
                     print(f"  ! {nom_format} / {vue} : {str(exc)[:120]}")
             if erreurs:
