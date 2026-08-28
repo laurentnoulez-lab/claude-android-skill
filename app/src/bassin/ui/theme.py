@@ -42,11 +42,11 @@ def titre_section(texte: str, icone: Optional[str] = None, sous_titre: str = "")
     ligne: List[ft.Control] = []
     if icone:
         ligne.append(ft.Icon(icone, color=BLEU, size=22))
-    colonne = [ft.Text(texte, size=18, weight=ft.FontWeight.W_700)]
+    colonne = [ft.Text(texte, size=17, weight=ft.FontWeight.W_700, no_wrap=False)]
     if sous_titre:
-        colonne.append(ft.Text(sous_titre, size=12, color=GRIS))
-    ligne.append(ft.Column(colonne, spacing=1))
-    return ft.Row(ligne, spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        colonne.append(ft.Text(sous_titre, size=12, color=GRIS, no_wrap=False))
+    ligne.append(ft.Column(colonne, spacing=1, expand=True, tight=True))
+    return ft.Row(ligne, spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
 
 
 def carte(contenu: ft.Control, padding: int = 20) -> ft.Control:
@@ -133,10 +133,10 @@ def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None]
             return "0"
         if abs(v) < 1e-3 or abs(v) >= 1e7:
             texte = f"{v:.10f}".rstrip("0").rstrip(".")
-            return texte if texte else "0"
+            return (texte if texte else "0").replace(".", ",")
         if float(v) == int(v):
             return str(int(v))
-        return f"{round(v, decimales):g}"
+        return f"{round(v, decimales):g}".replace(".", ",")
 
     def lire(texte: str) -> Optional[float]:
         brut = (texte or "").replace(",", ".").replace(" ", "").strip()

@@ -80,15 +80,27 @@ class VueProjet(Vue):
 
     # --------------------------------------------------------------- surfaces
     def _ligne_surface(self, index: int, surface: SurfaceIncidente) -> ft.Control:
+        actifs = ft.Text(f"{surface.aire_ponderee_m2:.1f} m² actifs", size=12, color=theme.BLEU,
+                         weight=ft.FontWeight.W_600, no_wrap=True)
+
+        def rafraichir_ligne() -> None:
+            """Met à jour la surface active de la ligne et les totaux, sans tout reconstruire."""
+            actifs.value = f"{surface.aire_ponderee_m2:.1f} m² actifs"
+            try:
+                actifs.update()
+            except Exception:
+                pass
+            self._maj_totaux()
+
         def maj_aire(v: float) -> None:
             surface.aire_m2 = max(v, 0.0)
             self.etat.invalider()
-            self._maj_totaux()
+            rafraichir_ligne()
 
         def maj_coef(v: float) -> None:
             surface.coefficient = max(min(v, 1.5), 0.0)
             self.etat.invalider()
-            self._maj_totaux()
+            rafraichir_ligne()
 
         def supprimer(_=None) -> None:
             self.etat.projet.surfaces.pop(index)
@@ -104,7 +116,7 @@ class VueProjet(Vue):
             libelle = ft.TextField(value=surface.libelle, label="Surface personnalisée", dense=True,
                                    border_radius=10, text_size=13, on_change=maj_libelle)
         else:
-            libelle = ft.Text(surface.libelle, size=13, weight=ft.FontWeight.W_500)
+            libelle = ft.Text(surface.libelle, size=13, weight=ft.FontWeight.W_500, no_wrap=False)
 
         return ft.Container(
             content=ft.ResponsiveRow(
@@ -113,23 +125,22 @@ class VueProjet(Vue):
                                  alignment=ft.alignment.center_left,
                                  padding=ft.padding.only(bottom=2)),
                     ft.Container(
-                        theme.champ_nombre("Coefficient", surface.coefficient, maj_coef, "—",
-                                           on_valide=self._maj_totaux, compact=True),
+                        theme.champ_nombre("Coefficient", surface.coefficient, maj_coef,
+                                           on_valide=rafraichir_ligne, compact=True),
                         col={"xs": 5, "md": 2},
                     ),
                     ft.Container(
                         theme.champ_nombre("Surface", surface.aire_m2, maj_aire, "m²",
-                                           on_valide=self._maj_totaux, compact=True),
+                                           on_valide=rafraichir_ligne, compact=True),
                         col={"xs": 7, "md": 3},
                     ),
                     ft.Container(
                         ft.Row(
                             [
-                                ft.Text(f"{surface.aire_ponderee_m2:.1f} m² actifs", size=12,
-                                        color=theme.BLEU, weight=ft.FontWeight.W_600,
-                                        no_wrap=True),
-                                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=18, tooltip="Supprimer",
-                                              on_click=supprimer) if personnalisee else ft.Container(),
+                                actifs,
+                                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=18,
+                                              tooltip="Supprimer", on_click=supprimer)
+                                if personnalisee else ft.Container(),
                             ],
                             spacing=4,
                             alignment=ft.MainAxisAlignment.END,

@@ -279,6 +279,35 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(len(rails[0].destinations), 7)
         rails[0].on_change(_Evenement(rails[0], 3))
 
+    def test_zone_sure_sur_mobile(self):
+        """Le contenu ne doit pas passer sous la barre d'état ni sous la barre système."""
+        import main as application
+
+        page = PageFactice()
+        page.platform = ft.PagePlatform.ANDROID
+        application.main(page)
+        self.assertTrue(page.controls)
+        self.assertIsInstance(page.controls[0], ft.SafeArea)
+
+    def test_surface_active_mise_a_jour_a_la_saisie(self):
+        """La surface active de la ligne doit suivre la saisie, sans reconstruction."""
+        page = PageFactice()
+        etat = etat_complet()
+        vue = VueProjet(page, etat)
+        vue.construire()
+        lignes = vue._ligne_surface(4, etat.projet.surfaces[4])  # terres battues, c = 0,5
+        champs = _rechercher(lignes, ft.TextField)
+        textes = [t for t in _rechercher(lignes, ft.Text) if "actifs" in (t.value or "")]
+        self.assertTrue(champs and textes)
+        surface = champs[-1]
+        surface.update = lambda: None
+        for t in textes:
+            t.update = lambda: None
+        surface.value = "300"
+        surface.on_change(_Evenement(surface))
+        surface.on_blur(_Evenement(surface))
+        self.assertIn("150", textes[0].value)
+
     def test_diagnostic_accessible(self):
         import main as application
 

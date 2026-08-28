@@ -170,9 +170,10 @@ class VueRapport(Vue):
                     ("Période de retour", f"{p.periode_retour} ans"),
                     ("Surface active pondérée", f"{p.aire_ponderee_m2:.1f} m²"),
                     ("Scénario retenu", LIBELLES_SCENARIOS[etat.scenario_principal]),
-                    ("Volume de temporisation", f"{res.volume_m3:.1f} m³"),
-                    ("Durée critique", res.duree_critique_hm),
-                    ("Temps de vidange", res.temps_vidange_hm),
+                    ("Volume de temporisation",
+                     f"{res.volume_m3:.1f} m³" if res.dimensionnable else "— (aucun débit de sortie)"),
+                    ("Durée critique", res.duree_critique_hm if res.dimensionnable else "—"),
+                    ("Temps de vidange", res.temps_vidange_hm if res.dimensionnable else "—"),
                     ("Ouvrage encodé",
                      f"{etat.bassin.volume_total_m3:.1f} m³" if etat.bassin_valide else "non encodé"),
                 ]

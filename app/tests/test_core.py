@@ -224,6 +224,17 @@ class TestMethodeRationnelle(unittest.TestCase):
         res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
         self.assertTrue(any("période de retour" in a for a in res.alertes))
 
+    def test_sans_debit_de_sortie_le_volume_n_a_pas_de_sens(self):
+        p = projet_type()  # ni infiltration ni ajutage
+        res = hydro.dimensionner(p, SCENARIO_MIXTE)
+        self.assertFalse(res.dimensionnable)
+        self.assertEqual(res.volume_affiche, "—")
+        self.assertEqual(res.temps_vidange_hm, "infini")
+        self.assertFalse(res.conforme)
+        res_ok = hydro.dimensionner(projet_type(debit_ajutage_ls=1.0), SCENARIO_TEMPORISATION)
+        self.assertTrue(res_ok.dimensionnable)
+        self.assertEqual(res_ok.volume_affiche, f"{res_ok.volume_m3:.1f}")
+
     def test_courbe_volume(self):
         p = projet_type(debit_ajutage_ls=1.0)
         pts = hydro.courbe_volume(p, SCENARIO_TEMPORISATION)

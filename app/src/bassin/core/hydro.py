@@ -127,6 +127,15 @@ class Resultat:
     alertes: List[str] = field(default_factory=list)
 
     @property
+    def dimensionnable(self) -> bool:
+        """Un volume n'a de sens que si le dispositif se vidange."""
+        return self.debit_sortant_ls > 0 and self.volume_m3 > 0
+
+    @property
+    def volume_affiche(self) -> str:
+        return f"{self.volume_m3:.1f}" if self.dimensionnable else "—"
+
+    @property
     def temps_vidange_hm(self) -> str:
         if self.temps_vidange_h == float("inf"):
             return "infini"

@@ -137,7 +137,7 @@ class VueDimensionnement(Vue):
                     ft.Text(DESCRIPTIONS[cle], size=11, color=theme.GRIS, max_lines=3),
                     ft.Row(
                         [
-                            ft.Text(f"{res.volume_m3:.1f}", size=28, weight=ft.FontWeight.W_800,
+                            ft.Text(res.volume_affiche, size=28, weight=ft.FontWeight.W_800,
                                     color=couleur),
                             ft.Text("m³ de temporisation", size=11, color=theme.GRIS, expand=True),
                         ],
@@ -194,10 +194,11 @@ class VueDimensionnement(Vue):
 
         tuiles = ft.ResponsiveRow(
             [
-                ft.Container(theme.tuile(f"{res.volume_m3:.1f}", "Volume à mettre en œuvre", "m³",
+                ft.Container(theme.tuile(res.volume_affiche, "Volume à mettre en œuvre", "m³",
                                          theme.BLEU, ft.Icons.WATER),
                              col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(res.duree_critique_hm, "Durée de pluie critique", "",
+                ft.Container(theme.tuile(res.duree_critique_hm if res.dimensionnable else "—",
+                                         "Durée de pluie critique", "",
                                          theme.ARDOISE, ft.Icons.TIMER),
                              col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(
@@ -214,6 +215,12 @@ class VueDimensionnement(Vue):
             spacing=12,
             run_spacing=12,
         )
+
+        if not res.dimensionnable:
+            tuiles = theme.message(
+                "Aucun débit de sortie n'est encodé : sans infiltration ni ajutage, le bassin ne se "
+                "vidange jamais et aucun volume ne peut être déterminé. Encodez une surface "
+                "d'infiltration et/ou un débit d'ajutage ci-dessus.", "erreur")
 
         alertes = [theme.message(a, "alerte") for a in res.alertes]
         alertes += [theme.message(m, "info") for m in res.messages]

@@ -79,7 +79,7 @@ def main(page: ft.Page) -> None:
         resume.value = (
             f"{etat.projet.commune_nom} · T = {etat.projet.periode_retour} ans · "
             f"{etat.projet.aire_ponderee_m2:.0f} m² actifs · "
-            f"{LIBELLES_SCENARIOS[etat.scenario_principal]} : {res.volume_m3:.1f} m³"
+            f"{LIBELLES_SCENARIOS[etat.scenario_principal]} : {res.volume_affiche} m³"
         )
 
     def sauvegarder() -> None:
@@ -262,7 +262,9 @@ def main(page: ft.Page) -> None:
         page.update()
 
     page.on_resized = adapter
-    page.add(ft.Column([barre, corps], expand=True, spacing=0))
+    # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
+    # navigation du système : SafeArea réserve ces zones.
+    page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     afficher(0)
     adapter()
 
