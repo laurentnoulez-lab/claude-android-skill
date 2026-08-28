@@ -30,11 +30,14 @@ VUES = (VueProjet, VueDimensionnement, VueBassin, VueTableQDF, VueAjutage, VuePl
 class _Stockage:
     def __init__(self):
         self.donnees = {}
+        self.appels = 0
 
     def get(self, cle):
+        self.appels += 1
         return self.donnees.get(cle)
 
     def set(self, cle, valeur):
+        self.appels += 1
         self.donnees[cle] = valeur
 
 
@@ -65,6 +68,7 @@ class PageFactice:
         self.overlay = []
         self.drawer = None
         self.platform = None
+        self.web = False
 
     def open(self, controle):
         self.ouverts.append(controle)
@@ -345,6 +349,31 @@ class TestCoquilleApplication(unittest.TestCase):
         avant = resume.value
         self.assertIn("1575", avant)
         self.assertNotIn("…", avant)
+
+    def test_aucun_stockage_client_sur_le_web(self):
+        """Le stockage client bloque dans la version web : il ne doit pas être appelé."""
+        import main as application
+
+        page = PageFactice()
+        page.web = True
+        application.main(page)
+        self.assertEqual(page.client_storage.appels, 0)
+        self.assertTrue(page.controls, "la page doit s'afficher malgré tout")
+
+    def test_stockage_indisponible_n_empeche_pas_le_demarrage(self):
+        import main as application
+
+        class _StockageCasse:
+            def get(self, cle):
+                raise BaseException("stockage indisponible")
+
+            def set(self, cle, valeur):
+                raise BaseException("stockage indisponible")
+
+        page = PageFactice()
+        page.client_storage = _StockageCasse()
+        application.main(page)
+        self.assertTrue(page.controls)
 
     def test_diagnostic_accessible(self):
         import main as application

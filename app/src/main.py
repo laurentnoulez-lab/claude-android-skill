@@ -45,19 +45,38 @@ def main(page: ft.Page) -> None:
         page.window.min_height = 560
     except Exception:
         pass
-    try:
-        sombre = bool(page.client_storage.get("hydrobassin.sombre"))
-    except Exception:
-        sombre = False
+    # Le stockage client bloque dans la version web (appel synchrone vers le
+    # navigateur) : la persistance n'est activée que sur les applications
+    # installées (Android, Windows), où elle fonctionne.
+    stockage = {"actif": not bool(getattr(page, "web", False))}
+
+    def lire_stockage(cle, defaut=None):
+        if not stockage["actif"]:
+            return defaut
+        try:
+            return page.client_storage.get(cle)
+        except BaseException:
+            stockage["actif"] = False
+            return defaut
+
+    def ecrire_stockage(cle, valeur) -> None:
+        if not stockage["actif"]:
+            return
+        try:
+            page.client_storage.set(cle, valeur)
+        except BaseException:
+            stockage["actif"] = False
+
+    sombre = bool(lire_stockage("hydrobassin.sombre") or False)
     theme.appliquer_theme(page, sombre)
 
     etat = EtatApplication()
-    try:
-        sauvegarde = page.client_storage.get(CLE_STOCKAGE)
-        if sauvegarde:
+    sauvegarde = lire_stockage(CLE_STOCKAGE)
+    if sauvegarde:
+        try:
             etat.charger_json(sauvegarde)
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     vues = [
         VueProjet(page, etat),
@@ -101,10 +120,7 @@ def main(page: ft.Page) -> None:
                 pass
 
     def sauvegarder() -> None:
-        try:
-            page.client_storage.set(CLE_STOCKAGE, etat.to_json())
-        except Exception:
-            pass
+        ecrire_stockage(CLE_STOCKAGE, etat.to_json())
 
     def afficher(i: int) -> None:
         index["courant"] = i
@@ -157,10 +173,7 @@ def main(page: ft.Page) -> None:
     def basculer_theme(_=None) -> None:
         clair = page.theme_mode == ft.ThemeMode.LIGHT
         page.theme_mode = ft.ThemeMode.DARK if clair else ft.ThemeMode.LIGHT
-        try:
-            page.client_storage.set("hydrobassin.sombre", clair)
-        except Exception:
-            pass
+        ecrire_stockage("hydrobassin.sombre", clair)
         page.update()
 
     def reinitialiser(_=None) -> None:
@@ -297,18 +310,14 @@ def main(page: ft.Page) -> None:
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
     trace("contrôles construits")
-    try:
-        afficher(0)          # le contenu est prêt avant le premier rendu
-        trace("première vue prête")
-    except Exception:
-        trace(f"première vue en erreur : {traceback.format_exc(limit=2).strip()}")
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     page_prete["oui"] = True
-    trace("page affichée")
+    trace("coquille affichée")
     try:
+        afficher(0)
         adapter()
-        trace("mise en page adaptée")
-    except Exception:
+        trace("première vue affichée")
+    except BaseException:
         # Filet de sécurité : une panne au démarrage doit rester lisible à l'écran.
         zone.controls = [
             ft.Container(
