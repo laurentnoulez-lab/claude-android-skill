@@ -73,7 +73,10 @@ jobs:
 
   application-windows:
     name: Application Windows (build Flutter)
-    runs-on: windows-latest
+    # windows-latest embarque Visual Studio 2026, que Flutter 3.29.2 ne détecte
+    # pas : il retombe sur le générateur CMake « Visual Studio 16 2019 », absent
+    # de la machine. VS 2022 est celui que cette version de Flutter sait utiliser.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
