@@ -46,6 +46,7 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
     from playwright.sync_api import sync_playwright
 
     os.makedirs(sortie, exist_ok=True)
+    journal: list[str] = []
     with sync_playwright() as pw:
         options = {"args": ["--no-sandbox"]}
         if chemin_navigateur:
@@ -54,7 +55,9 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
         for nom_format, (largeur, hauteur) in FORMATS.items():
             page = navigateur.new_page(viewport={"width": largeur, "height": hauteur})
             erreurs: list[str] = []
-            page.on("pageerror", lambda e: erreurs.append(str(e)[:200]))
+            page.on("pageerror", lambda e: erreurs.append(f"[{nom_format}] pageerror : {str(e)[:400]}"))
+            page.on("console", lambda m: erreurs.append(f"[{nom_format}] {m.type} : {m.text[:400]}")
+                    if m.type in ("error", "warning") else None)
             page.goto(url, wait_until="load", timeout=90000)
             page.wait_for_timeout(15000)
             # Flutter dessine dans un canvas : sans l'arbre d'accessibilité, aucun
@@ -78,10 +81,15 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
                 except Exception as exc:  # pragma: no cover - dépend du rendu
                     print(f"  ! {nom_format} / {vue} : {str(exc)[:120]}")
+            journal.extend(erreurs)
             if erreurs:
-                print(f"  ! erreurs console ({nom_format}) : {erreurs[:3]}")
+                print(f"  ! {len(erreurs)} message(s) console ({nom_format})")
             page.close()
         navigateur.close()
+    # Le journal est publié avec les captures : indispensable pour diagnostiquer
+    # un écran vide sans avoir accès au navigateur.
+    with open(os.path.join(sortie, "journal.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(journal) if journal else "aucun message de console")
 
 
 def main() -> int:

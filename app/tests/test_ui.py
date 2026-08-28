@@ -279,6 +279,27 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(len(rails[0].destinations), 7)
         rails[0].on_change(_Evenement(rails[0], 3))
 
+    def test_un_calcul_en_erreur_n_empeche_pas_l_affichage(self):
+        """Une erreur dans le résumé ne doit jamais laisser la page vide."""
+        import main as application
+        from bassin.ui import state as mod_state
+
+        original = mod_state.EtatApplication.resultat
+        mod_state.EtatApplication.resultat = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("calcul impossible")))
+        try:
+            page = PageFactice()
+            application.main(page)
+        finally:
+            mod_state.EtatApplication.resultat = original
+        colonnes = _rechercher(page.controls[0], ft.Column)
+        self.assertTrue(colonnes)
+        textes = [t.value for t in _rechercher(page.controls[0], ft.Text) if t.value]
+        self.assertTrue(any("indisponible" in t or "calcul impossible" in t for t in textes),
+                        "l'utilisateur doit voir qu'un calcul a échoué")
+        conteneurs = [c for c in _rechercher(page.controls[0], ft.Container) if c.content]
+        self.assertTrue(conteneurs, "le contenu de la vue doit tout de même être posé")
+
     def test_zone_sure_sur_mobile(self):
         """Le contenu ne doit pas passer sous la barre d'état ni sous la barre système."""
         import main as application

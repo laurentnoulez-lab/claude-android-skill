@@ -277,8 +277,26 @@ def main(page: ft.Page) -> None:
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
-    afficher(0)
-    adapter()
+    try:
+        afficher(0)
+        adapter()
+    except Exception:
+        # Filet de sécurité : une panne au démarrage doit rester lisible à l'écran.
+        zone.controls = [
+            ft.Container(
+                ft.Column(
+                    [
+                        theme.message("HydroBassin n'a pas pu démarrer normalement. "
+                                      "Merci de transmettre le détail ci-dessous.", "erreur"),
+                        ft.Text(traceback.format_exc(), size=11, selectable=True,
+                                font_family="monospace"),
+                    ],
+                    spacing=12,
+                ),
+                padding=16,
+            )
+        ]
+        page.update()
 
 
 if __name__ == "__main__":
