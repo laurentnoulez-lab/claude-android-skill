@@ -30,7 +30,13 @@ from bassin.ui.vues.rapport import VueRapport  # noqa: E402
 LARGEUR_COMPACTE = 840
 
 
+def trace(etape: str) -> None:
+    """Jalons de démarrage, visibles dans la console (journal des captures)."""
+    print(f"[HydroBassin] {etape}", flush=True)
+
+
 def main(page: ft.Page) -> None:
+    trace("démarrage")
     page.title = f"{__app_name__} — dimensionnement de bassins d'orage"
     try:  # sans effet (voire indisponible) sur mobile
         page.window.width = 1280
@@ -63,6 +69,7 @@ def main(page: ft.Page) -> None:
         VueRapport(page, etat),
     ]
     index = {"courant": 0}
+    page_prete = {"oui": False}
 
     zone = ft.Column(spacing=0, scroll=ft.ScrollMode.AUTO, expand=True)
     marge = {"valeur": ft.padding.symmetric(18, 22)}
@@ -123,9 +130,22 @@ def main(page: ft.Page) -> None:
         zone.controls = [ft.Container(contenu, padding=marge["valeur"])]
         rail.selected_index = i
         tiroir.selected_index = i
-        maj_entete()
-        sauvegarder()
-        page.update()
+        # Rien ici ne doit empêcher l'affichage : une erreur de calcul dans le
+        # résumé laissait auparavant l'écran entièrement vide, sans message.
+        try:
+            maj_entete()
+        except Exception:
+            titre_page.value = vues[i].titre
+            resume.value = "résumé indisponible — voir Diagnostic"
+            trace(f"résumé en erreur : {traceback.format_exc(limit=1).strip()}")
+        if page_prete["oui"]:
+            page.update()
+        # L'enregistrement vient après l'affichage : un stockage lent ou
+        # indisponible ne doit jamais retarder le rendu.
+        try:
+            sauvegarder()
+        except Exception:
+            trace("enregistrement du projet impossible")
 
     def ouvrir_menu(_=None) -> None:
         page.open(tiroir)
@@ -276,10 +296,18 @@ def main(page: ft.Page) -> None:
     page.on_resized = adapter
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
-    page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
+    trace("contrôles construits")
     try:
-        afficher(0)
+        afficher(0)          # le contenu est prêt avant le premier rendu
+        trace("première vue prête")
+    except Exception:
+        trace(f"première vue en erreur : {traceback.format_exc(limit=2).strip()}")
+    page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
+    page_prete["oui"] = True
+    trace("page affichée")
+    try:
         adapter()
+        trace("mise en page adaptée")
     except Exception:
         # Filet de sécurité : une panne au démarrage doit rester lisible à l'écran.
         zone.controls = [
