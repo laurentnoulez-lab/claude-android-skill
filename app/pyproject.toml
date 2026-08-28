@@ -1,0 +1,32 @@
+[project]
+name = "hydrobassin"
+version = "1.0.0"
+description = "Dimensionnement de bassins d'orage - méthode rationnelle, pluies statistiques du GTI (Région wallonne)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "HydroBassin" }]
+dependencies = [
+    "flet==0.28.3",
+    "openpyxl>=3.1.2",
+]
+
+[project.optional-dependencies]
+dev = ["formulas>=1.2", "python-docx>=1.1"]
+
+[tool.flet]
+org = "be.hydrobassin"
+product = "HydroBassin"
+company = "HydroBassin"
+copyright = "HydroBassin"
+build_number = 1
+build_version = "1.0.0"
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = false
+
+[tool.flet.splash]
+color = "#1D4ED8"
+dark_color = "#0F172A"

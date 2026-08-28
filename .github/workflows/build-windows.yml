@@ -1,0 +1,105 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  exe-portable:
+    name: Exécutable portable (.exe unique)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]==0.28.3" openpyxl pyinstaller
+
+      - name: Empaqueter avec flet pack (PyInstaller)
+        working-directory: app
+        run: >
+          flet pack src/main.py
+          --name HydroBassin
+          --product-name HydroBassin
+          --file-description "Dimensionnement de bassins d'orage"
+          --product-version 1.0.0
+          --file-version 1.0.0.${{ github.run_number }}
+          --copyright "HydroBassin"
+          --icon src/assets/icon.png
+          --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data"
+          --add-data "src/assets;assets"
+          --onefile
+          --yes
+
+      - name: Vérifier le livrable
+        working-directory: app
+        run: dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HydroBassin-windows-exe
+          path: app/dist/HydroBassin.exe
+          if-no-files-found: error
+
+      - name: Publier dans la release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/dist/HydroBassin.exe
+
+  application-windows:
+    name: Application Windows (build Flutter)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.2"
+          channel: stable
+          cache: true
+
+      - name: Installer flet
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]==0.28.3"
+
+      - name: Construire l'application
+        working-directory: app
+        run: >
+          flet build windows
+          --project HydroBassin
+          --product HydroBassin
+          --org be.hydrobassin
+          --company HydroBassin
+          --copyright "HydroBassin"
+          --build-version 1.0.0
+          --build-number ${{ github.run_number }}
+          --verbose
+
+      - name: Compresser le dossier
+        working-directory: app
+        run: Compress-Archive -Path build/windows/* -DestinationPath ../HydroBassin-windows.zip
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HydroBassin-windows-app
+          path: HydroBassin-windows.zip
+          if-no-files-found: error
+
+      - name: Publier dans la release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: HydroBassin-windows.zip
