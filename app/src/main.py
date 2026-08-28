@@ -30,10 +30,13 @@ LARGEUR_COMPACTE = 840
 
 def main(page: ft.Page) -> None:
     page.title = f"{__app_name__} — dimensionnement de bassins d'orage"
-    page.window.width = 1280
-    page.window.height = 860
-    page.window.min_width = 360
-    page.window.min_height = 560
+    try:  # sans effet (voire indisponible) sur mobile
+        page.window.width = 1280
+        page.window.height = 860
+        page.window.min_width = 360
+        page.window.min_height = 560
+    except Exception:
+        pass
     try:
         sombre = bool(page.client_storage.get("hydrobassin.sombre"))
     except Exception:
@@ -190,13 +193,20 @@ def main(page: ft.Page) -> None:
 
     corps = ft.Row([rail, separateur, zone], expand=True, spacing=0)
 
+    def sur_mobile() -> bool:
+        """Un téléphone garde la navigation par tiroir quelle que soit la largeur."""
+        try:
+            return page.platform in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS)
+        except Exception:
+            return False
+
     def adapter(_=None) -> None:
         largeur = page.width or 1200
-        compact = largeur < LARGEUR_COMPACTE
+        compact = sur_mobile() or largeur < LARGEUR_COMPACTE
         rail.visible = not compact
         separateur.visible = not compact
         bouton_menu.visible = compact
-        rail.extended = largeur > 1180
+        rail.extended = (not compact) and largeur > 1180
         zone.padding = ft.padding.symmetric(10, 10) if compact else ft.padding.symmetric(18, 22)
         page.update()
 

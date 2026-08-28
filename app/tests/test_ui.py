@@ -64,6 +64,7 @@ class PageFactice:
         self.on_resized = None
         self.overlay = []
         self.drawer = None
+        self.platform = None
 
     def open(self, controle):
         self.ouverts.append(controle)
@@ -93,6 +94,31 @@ def etat_complet() -> EtatApplication:
                       surface_dispersion_m2=120.0, debit_ajutage_ls=1.0)
     etat.invalider()
     return etat
+
+
+class _Evenement:
+    """Événement Flet minimal (control + index sélectionné)."""
+
+    def __init__(self, control, index=None):
+        self.control = control
+        if index is not None:
+            control.selected_index = index
+
+
+def _rechercher(controle, classe, profondeur: int = 0):
+    """Retourne tous les contrôles d'une classe donnée dans l'arbre."""
+    trouves = [controle] if isinstance(controle, classe) else []
+    if profondeur > 40:
+        return trouves
+    for attribut in ("controls", "content", "destinations", "actions"):
+        valeur = getattr(controle, attribut, None)
+        if valeur is None:
+            continue
+        elements = valeur if isinstance(valeur, (list, tuple)) else [valeur]
+        for element in elements:
+            if isinstance(element, ft.Control):
+                trouves.extend(_rechercher(element, classe, profondeur + 1))
+    return trouves
 
 
 def parcourir(controle, profondeur: int = 0) -> int:
@@ -230,6 +256,28 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertTrue(page.controls)
         if page.on_resized:
             page.on_resized(None)
+
+    def test_navigation_par_tiroir_sur_android(self):
+        import main as application
+
+        page = PageFactice()
+        page.platform = ft.PagePlatform.ANDROID
+        page.width, page.height = 1280, 800  # largeur signalée parfois trompeuse
+        application.main(page)
+        page.on_resized(None)
+        rails = _rechercher(page.controls[0], ft.NavigationRail)
+        self.assertTrue(rails)
+        self.assertFalse(rails[0].visible, "le rail latéral doit être masqué sur téléphone")
+
+    def test_toutes_les_sections_sont_accessibles(self):
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        tiroirs = [c for c in page.ouverts if isinstance(c, ft.NavigationDrawer)]
+        rails = _rechercher(page.controls[0], ft.NavigationRail)
+        self.assertEqual(len(rails[0].destinations), 7)
+        rails[0].on_change(_Evenement(rails[0], 3))
 
     def test_reprise_d_un_projet_enregistre(self):
         import main as application
