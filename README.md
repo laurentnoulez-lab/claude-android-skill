@@ -177,6 +177,27 @@ internal class OfflineFirstMyRepository @Inject constructor(
 }
 ```
 
+## Example App: Diaporama Studio
+
+[`examples/slideshow-studio/`](examples/slideshow-studio) is a complete Android application built
+with the patterns described in this skill: **Diaporama Studio**, which turns imported photos into an
+animated slideshow video (1920 × 1080, 30 fps, MP4 / H.264).
+
+It shows the skill's layering on a real feature:
+
+- `core:engine` — a pure Kotlin module holding every rendering decision (compositions, Ken Burns
+  movements, transitions, smart cropping). No Android dependency, 90 JVM unit tests.
+- `app` — Compose UI in MVVM with unidirectional data flow, photo import, live preview, and an
+  OpenGL ES + MediaCodec exporter.
+
+```bash
+cd examples/slideshow-studio
+./gradlew :core:engine:test     # engine test suite
+./gradlew :app:assembleDebug    # build the app
+```
+
+See its [README](examples/slideshow-studio/README.md) for the architecture and the design notes.
+
 ## Technology Stack
 
 This skill configures projects with:
