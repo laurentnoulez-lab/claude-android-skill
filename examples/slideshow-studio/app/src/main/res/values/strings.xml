@@ -10,6 +10,9 @@
     <string name="shuffle">Regénérer la mise en scène</string>
     <string name="photo_count">%1$d photo(s) importée(s)</string>
     <string name="remove_photo">Retirer la photo</string>
+    <string name="mark_important">Marquer comme importante</string>
+    <string name="unmark_important">Retirer le statut important</string>
+    <string name="important_count">%1$d importante(s) — chacune seule dans sa scène</string>
     <string name="empty_state_title">Aucune photo</string>
     <string name="empty_state_message">Importez des photos pour composer votre diaporama.</string>
 

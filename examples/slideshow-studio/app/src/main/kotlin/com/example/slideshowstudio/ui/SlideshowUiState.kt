@@ -23,6 +23,7 @@ data class SlideshowUiState(
     val export: ExportUiState = ExportUiState.Idle,
 ) {
     val hasPhotos: Boolean get() = photos.isNotEmpty()
+    val importantCount: Int get() = photos.count { it.ref.isImportant }
     val sceneCount: Int get() = storyboard?.scenes?.size ?: 0
     val totalDurationSeconds: Float get() = storyboard?.totalDurationSeconds ?: 0f
     val canExport: Boolean get() = hasPhotos && export !is ExportUiState.Running && !isImporting
@@ -41,6 +42,7 @@ sealed interface ExportUiState {
 sealed interface SlideshowAction {
     data class AddPhotos(val uris: List<Uri>) : SlideshowAction
     data class RemovePhoto(val id: String) : SlideshowAction
+    data class ToggleImportant(val id: String) : SlideshowAction
     data object ClearPhotos : SlideshowAction
     data class SetSceneDuration(val seconds: Float) : SlideshowAction
     data class SetTransitionDuration(val seconds: Float) : SlideshowAction

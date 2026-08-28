@@ -48,7 +48,6 @@ import com.example.slideshowstudio.engine.Storyboard
 import com.example.slideshowstudio.render.drawSlideshowFrame
 import com.example.slideshowstudio.ui.theme.SlideshowCanvasColor
 import kotlinx.coroutines.isActive
-import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
@@ -84,7 +83,7 @@ fun PreviewScreen(
     // Reading the position through derivedStateOf keeps the screen from recomposing on every frame:
     // only a scene change matters here, the canvas reads the position in the draw phase.
     val sceneIndex by remember(storyboard, player) {
-        derivedStateOf { sceneIndexAt(player.positionSeconds, storyboard) }
+        derivedStateOf { storyboard.sceneIndexAt(player.positionSeconds) }
     }
     val neededPhotos = remember(storyboard, sceneIndex) { photoIndicesAround(storyboard, sceneIndex) }
     val neededBackdrops = remember(storyboard, sceneIndex) { backdropIndicesAround(storyboard, sceneIndex) }
@@ -214,12 +213,6 @@ private fun PlaybackControls(
             modifier = Modifier.padding(top = 8.dp),
         )
     }
-}
-
-private fun sceneIndexAt(positionSeconds: Float, storyboard: Storyboard): Int {
-    if (storyboard.isEmpty) return 0
-    val index = floor(positionSeconds / storyboard.sceneDurationSeconds).toInt()
-    return index.coerceIn(0, storyboard.scenes.size - 1)
 }
 
 private fun currentScenePhotos(storyboard: Storyboard, sceneIndex: Int): Set<Int> =

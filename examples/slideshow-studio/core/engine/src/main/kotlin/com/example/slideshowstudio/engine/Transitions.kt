@@ -140,8 +140,23 @@ object TransitionFactory {
     )
 
     /**
+     * Transitions that suit a photo the user singled out: they carry the eye to the photo instead of
+     * throwing it across the screen. Slides, pushes and staggered entrances are left out.
+     */
+    private val ELEGANT = listOf(
+        TransitionKind.CROSS_FADE,
+        TransitionKind.FADE_ZOOM_IN,
+        TransitionKind.FADE_ZOOM_OUT,
+        TransitionKind.ZOOM_PUSH,
+        TransitionKind.ROTATE_FADE,
+    )
+
+    /**
      * Picks the next transition, never repeating the previous one and, when possible, avoiding its
      * family as well so two consecutive transitions never feel like the same effect.
+     *
+     * @param elegantOnly restricts the choice to the calm transitions, used around a photo marked
+     *   as important — both the one that brings it in and the one that takes it away.
      *
      * Movement along the long side of the canvas is favoured — vertical in portrait, horizontal in
      * landscape — without ever excluding the other direction.
@@ -150,13 +165,15 @@ object TransitionFactory {
         random: Random,
         previous: TransitionKind?,
         canvasAspect: Float = DEFAULT_ASPECT,
+        elegantOnly: Boolean = false,
     ): TransitionKind {
+        val allowed = if (elegantOnly) ELEGANT else ALL
         val candidates = if (previous == null) {
-            ALL
+            allowed
         } else {
-            ALL.filter { it.family != previous.family }
-                .ifEmpty { ALL.filter { it != previous } }
-                .ifEmpty { ALL }
+            allowed.filter { it.family != previous.family }
+                .ifEmpty { allowed.filter { it != previous } }
+                .ifEmpty { allowed }
         }
         val favoured = if (canvasAspect < 1f) VERTICAL else HORIZONTAL
         val pool = buildList {

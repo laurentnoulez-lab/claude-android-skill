@@ -1,6 +1,5 @@
 package com.example.slideshowstudio.engine
 
-import kotlin.math.floor
 import kotlin.math.max
 
 /**
@@ -13,10 +12,8 @@ class FrameComposer(
     private val photos: List<PhotoRef>,
 ) {
     private val settings = storyboard.settings
-    private val sceneDuration = storyboard.sceneDurationSeconds
-    private val transitionDuration = storyboard.transitionDurationSeconds
     private val canvasAspect = settings.canvasAspect
-    private val fadeDuration = minOf(FADE_SECONDS, sceneDuration * 0.25f)
+    private val fadeDuration = minOf(FADE_SECONDS, storyboard.sceneDurationSeconds * 0.25f)
 
     val totalDurationSeconds: Float = storyboard.totalDurationSeconds
     val frameCount: Int = storyboard.frameCount
@@ -36,9 +33,13 @@ class FrameComposer(
         }
 
         val t = timeSeconds.coerceIn(0f, totalDurationSeconds)
-        val sceneIndex = floor(t / sceneDuration).toInt().coerceIn(0, storyboard.scenes.size - 1)
+        // Scenes no longer all last the same time: an important photo is held a little longer.
+        val sceneIndex = storyboard.sceneIndexAt(t)
         val scene = storyboard.scenes[sceneIndex]
-        val localTime = t - sceneIndex * sceneDuration
+        val sceneStart = storyboard.sceneStartTimes[sceneIndex]
+        val sceneDuration = scene.durationSeconds
+        val transitionDuration = storyboard.transitionDurationFor(sceneIndex)
+        val localTime = t - sceneStart
         val transition = scene.transitionIn
 
         val commands = mutableListOf<DrawCommand>()
@@ -50,7 +51,8 @@ class FrameComposer(
         if (sceneIndex > 0 && transition != null && localTime < transitionDuration) {
             val progress = (localTime / transitionDuration).coerceIn(0f, 1f)
             val previous = storyboard.scenes[sceneIndex - 1]
-            val outgoingProgress = (t - (sceneIndex - 1) * sceneDuration) / sceneDuration
+            val outgoingProgress =
+                (t - storyboard.sceneStartTimes[sceneIndex - 1]) / previous.durationSeconds
 
             // The outgoing scene keeps playing its own movement and stays fully opaque for most of
             // the transition: compositing the incoming scene over it gives a clean cross fade with no

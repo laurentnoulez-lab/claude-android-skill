@@ -33,6 +33,15 @@ class SlideshowViewModel(
         when (action) {
             is SlideshowAction.AddPhotos -> addPhotos(action)
             is SlideshowAction.RemovePhoto -> updatePhotos(_uiState.value.photos.filterNot { it.id == action.id })
+            is SlideshowAction.ToggleImportant -> updatePhotos(
+                _uiState.value.photos.map { photo ->
+                    if (photo.id == action.id) {
+                        photo.copy(ref = photo.ref.copy(isImportant = !photo.ref.isImportant))
+                    } else {
+                        photo
+                    }
+                },
+            )
             SlideshowAction.ClearPhotos -> updatePhotos(emptyList())
             is SlideshowAction.SetSceneDuration -> updateSettings {
                 it.copy(sceneDurationSeconds = action.seconds)

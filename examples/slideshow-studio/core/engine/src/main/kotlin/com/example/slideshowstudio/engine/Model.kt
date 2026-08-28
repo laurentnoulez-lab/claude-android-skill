@@ -39,6 +39,12 @@ data class PhotoRef(
     val widthPx: Int,
     val heightPx: Int,
     val focus: FocusArea = FocusArea.defaultFor(widthPx, heightPx),
+    /**
+     * Marked by the user as one of the photos that matter. It always gets a scene to itself, never
+     * shares one with another photo, and is presented with a little more room and a gentler
+     * movement. It still appears exactly once, like every other photo.
+     */
+    val isImportant: Boolean = false,
 ) {
     val aspect: Float get() = widthPx.toFloat() / heightPx.toFloat()
 }

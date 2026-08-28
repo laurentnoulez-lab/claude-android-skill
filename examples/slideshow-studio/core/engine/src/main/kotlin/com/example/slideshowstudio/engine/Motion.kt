@@ -104,6 +104,28 @@ object MotionFactory {
     private const val DEFAULT_ASPECT = 16f / 9f
 
     /**
+     * Movement for a photo the user marked as important.
+     *
+     * Alone on screen and held a little longer, it needs less movement, not more: a slow zoom and a
+     * barely perceptible drift, no rotation. The photo is what should be noticed, not the effect.
+     */
+    fun createHighlight(random: Random, canvasAspect: Float = DEFAULT_ASPECT): MotionSpec {
+        val start = 1.03f + random.nextFloat() * 0.03f
+        val travel = 0.05f + random.nextFloat() * 0.03f
+        val drift = 0.12f + random.nextFloat() * 0.10f
+        val zoomIn = random.nextBoolean()
+        val vertical = canvasAspect < 1f
+        val along = if (random.nextInt(4) == 0) -drift else drift
+        return MotionSpec(
+            kind = if (zoomIn) MotionKind.ZOOM_IN else MotionKind.ZOOM_OUT,
+            startZoom = if (zoomIn) start else start + travel,
+            endZoom = if (zoomIn) start + travel else start,
+            startPan = if (vertical) Vec2(0f, -along) else Vec2(-along, 0f),
+            endPan = if (vertical) Vec2(0f, along) else Vec2(along, 0f),
+        )
+    }
+
+    /**
      * Movement for a blurred backdrop: slower and larger than a foreground movement, so the backdrop
      * breathes behind the photos without ever competing with them.
      */

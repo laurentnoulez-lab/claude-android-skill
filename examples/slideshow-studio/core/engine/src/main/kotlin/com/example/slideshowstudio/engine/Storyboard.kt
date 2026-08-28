@@ -29,13 +29,16 @@ data class SceneBackground(
     val dim: Float = 0f,
 )
 
-/** A composition shown for one scene duration, plus the transition that brings it in. */
+/** A composition shown for [durationSeconds], plus the transition that brings it in. */
 data class Scene(
     val index: Int,
     val layoutId: String,
     val slots: List<SlotPlan>,
     val transitionIn: TransitionSpec?,
     val background: SceneBackground,
+    val durationSeconds: Float,
+    /** Holds a single photo the user marked as important: alone, longer, and more calmly animated. */
+    val isHighlight: Boolean = false,
 ) {
     val photoCount: Int get() = slots.size
 }
@@ -45,13 +48,45 @@ data class Storyboard(
     val settings: SlideshowSettings,
     val scenes: List<Scene>,
 ) {
+    /** Display duration the user chose. Individual scenes may hold a little longer than this. */
     val sceneDurationSeconds: Float get() = settings.sceneDurationSeconds
     val transitionDurationSeconds: Float get() = settings.effectiveTransitionSeconds
-    val totalDurationSeconds: Float get() = scenes.size * sceneDurationSeconds
-    val frameCount: Int get() = (totalDurationSeconds * settings.fps).roundToInt()
     val canvasAspect: Float get() = settings.canvasAspect
-
     val isEmpty: Boolean get() = scenes.isEmpty()
+
+    /** Where each scene starts: scenes no longer all last the same time. */
+    val sceneStartTimes: List<Float> = run {
+        var start = 0f
+        scenes.map { scene ->
+            val current = start
+            start += scene.durationSeconds
+            current
+        }
+    }
+
+    val totalDurationSeconds: Float =
+        (sceneStartTimes.lastOrNull() ?: 0f) + (scenes.lastOrNull()?.durationSeconds ?: 0f)
+
+    val frameCount: Int get() = (totalDurationSeconds * settings.fps).roundToInt()
+
+    /** Index of the scene playing at [seconds], clamped to the timeline. */
+    fun sceneIndexAt(seconds: Float): Int {
+        if (scenes.isEmpty()) return 0
+        val t = seconds.coerceIn(0f, totalDurationSeconds)
+        var index = sceneStartTimes.binarySearch { start -> start.compareTo(t) }
+        if (index < 0) index = -index - 2
+        return index.coerceIn(0, scenes.size - 1)
+    }
+
+    /** Duration of the transition that brings scene [index] in, never more than half of a scene. */
+    fun transitionDurationFor(index: Int): Float {
+        if (index <= 0 || index >= scenes.size) return 0f
+        return minOf(
+            transitionDurationSeconds,
+            scenes[index].durationSeconds * 0.5f,
+            scenes[index - 1].durationSeconds * 0.5f,
+        )
+    }
 }
 
 /**
@@ -99,15 +134,28 @@ object StoryboardBuilder {
         var previousMotions: Set<MotionKind> = emptySet()
         var previousBackgroundColor: Int? = null
 
+        var previousWasHighlight = false
+
         while (queue.isNotEmpty()) {
-            val maxCount = minOf(settings.mode.maxImages, photos.size, queue.size)
-            val count = chooseCount(maxCount, previousCount, random)
+            // A photo marked as important takes the whole scene. Everything else — the count the
+            // engine would have liked, the composition variety — gives way to that.
+            val highlight = photos[queue.first()].isImportant
+            // Photos available for a shared composition: the run before the next important photo.
+            val groupable = queue.takeWhile { !photos[it].isImportant }
+
+            val count = if (highlight) {
+                1
+            } else {
+                chooseCount(minOf(settings.mode.maxImages, groupable.size), previousCount, random)
+            }
             val templates = templatesByCount.getValue(count)
             val template = chooseTemplate(templates, previousTemplateId, lastTemplateForCount[count], random)
 
             val ordered = takePhotos(
                 queue = queue,
+                groupable = groupable,
                 count = count,
+                highlight = highlight,
                 template = template,
                 photos = photos,
                 canvasAspect = canvasAspect,
@@ -121,7 +169,11 @@ object StoryboardBuilder {
             val slots = ordered.mapIndexed { slotIndex, photoIndex ->
                 val rect = template.slots[slotIndex]
                 val photo = photos[photoIndex]
-                val kind = MotionFactory.pickKind(random, usedMotions + previousMotions, canvasAspect)
+                val kind = if (highlight) {
+                    MotionKind.ZOOM_IN
+                } else {
+                    MotionFactory.pickKind(random, usedMotions + previousMotions, canvasAspect)
+                }
                 usedMotions += kind
                 val fill = CropPlanner.fillFor(
                     mode = settings.cropMode,
@@ -134,16 +186,27 @@ object StoryboardBuilder {
                 SlotPlan(
                     photoIndex = photoIndex,
                     rect = rect,
-                    motion = MotionFactory.create(kind, random),
+                    motion = if (highlight) {
+                        MotionFactory.createHighlight(random, canvasAspect)
+                    } else {
+                        MotionFactory.create(kind, random)
+                    },
                     fill = fill,
                     maxZoom = PhotoFraming.maxZoomKeepingFocus(photo, cropAspect),
                 )
             }
 
+            // A highlight deserves a calm arrival, and the scene that follows it deserves a calm
+            // departure: both transitions come from the quiet set.
             val transition = if (scenes.isEmpty()) {
                 null
             } else {
-                val kind = TransitionFactory.pickKind(random, previousTransition, canvasAspect)
+                val kind = TransitionFactory.pickKind(
+                    random = random,
+                    previous = previousTransition,
+                    canvasAspect = canvasAspect,
+                    elegantOnly = highlight || previousWasHighlight,
+                )
                 previousTransition = kind
                 TransitionFactory.create(kind, random)
             }
@@ -163,12 +226,20 @@ object StoryboardBuilder {
                 slots = slots,
                 transitionIn = transition,
                 background = background,
+                // Held a little longer than the rest: enough to register, not enough to drag.
+                durationSeconds = if (highlight) {
+                    settings.sceneDurationSeconds * HIGHLIGHT_DURATION_FACTOR
+                } else {
+                    settings.sceneDurationSeconds
+                },
+                isHighlight = highlight,
             )
 
             previousCount = count
             previousTemplateId = template.id
             lastTemplateForCount[count] = template.id
             previousMotions = usedMotions
+            previousWasHighlight = highlight
         }
 
         return Storyboard(settings, scenes)
@@ -192,7 +263,9 @@ object StoryboardBuilder {
      */
     private fun takePhotos(
         queue: ArrayDeque<Int>,
+        groupable: List<Int>,
         count: Int,
+        highlight: Boolean,
         template: LayoutTemplate,
         photos: List<PhotoRef>,
         canvasAspect: Float,
@@ -200,17 +273,21 @@ object StoryboardBuilder {
         placed: Int,
         originalPosition: Map<Int, Int>,
     ): List<Int> {
-        val chosen: List<Int> = if (order == PhotoOrder.ADAPTIVE && queue.size > count) {
-            pickAdaptive(queue, count, template, photos, canvasAspect, placed, originalPosition)
-        } else {
-            queue.take(count)
+        val chosen: List<Int> = when {
+            highlight -> listOf(queue.first())
+            // Adaptive order looks ahead, but never past an important photo: pulling one into a
+            // shared composition is exactly what it must not do.
+            order == PhotoOrder.ADAPTIVE && groupable.size > count ->
+                pickAdaptive(groupable, count, template, photos, canvasAspect, placed, originalPosition)
+
+            else -> groupable.take(count)
         }
         chosen.forEach { queue.remove(it) }
         return bestAssignment(chosen, template.slots, photos, canvasAspect).first
     }
 
     private fun pickAdaptive(
-        queue: ArrayDeque<Int>,
+        queue: List<Int>,
         count: Int,
         template: LayoutTemplate,
         photos: List<PhotoRef>,
@@ -394,4 +471,7 @@ object StoryboardBuilder {
     }
 
     private const val BACKDROP_DIM = 0.34f
+
+    /** How much longer an important photo stays on screen. */
+    private const val HIGHLIGHT_DURATION_FACTOR = 1.25f
 }

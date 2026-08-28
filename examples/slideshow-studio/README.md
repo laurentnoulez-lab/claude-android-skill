@@ -17,6 +17,7 @@ en MVVM avec flux de données unidirectionnel.
 | Arrière-plan : couleur unie, couleur aléatoire, photo floutée | `BackgroundMode`, `SceneBackground`, `BitmapDecoder.decodeBackdrop` |
 | Mode de recadrage : jamais, intelligent, automatique | `CropMode`, `CropPlanner`, `PhotoFraming` |
 | Ordre des photos : strict, chronologique adaptable, aléatoire | `PhotoOrder`, `StoryboardBuilder` |
+| Photos importantes : toujours seules dans leur scène, mises en valeur | `PhotoRef.isImportant`, `Scene.isHighlight` |
 | Durée d'affichage réglable de 2 à 7 s | `SlideshowSettings.sceneDurationSeconds`, curseur dans `ui/editor` |
 | Modes 1 / 1-2 / 1-3 / 1-4 images par scène | `ImagesPerSceneMode`, `StoryboardBuilder.chooseCount` |
 | Variation automatique du nombre d'images | `StoryboardBuilder` : deux scènes consécutives n'ont jamais le même nombre d'images quand c'est possible |
@@ -63,11 +64,12 @@ déterministe et sans dépendance Android. Cela permet de vérifier par des test
 * aucune photo n'apparaît ni ne disparaît brutalement (contrôle image par image) ;
 * aucune photo n'est figée ;
 * chaque photo apparaît exactement une fois, quel que soit le mode d'ordre ;
+* une photo marquée importante n'est jamais accompagnée d'une autre dans sa scène ;
 * en ordre adaptable, aucune photo ne se déplace de plus de deux positions ;
 * les règles de variété (compositions, transitions, mouvements, nombres d'images) sont respectées.
 
 ```bash
-./gradlew :core:engine:test     # 90 tests
+./gradlew :core:engine:test     # 102 tests
 ```
 
 Ces tests, ainsi que la construction de l'APK, tournent en intégration continue
@@ -113,6 +115,17 @@ valeurs, la partie visible et la zone d'affichage ont le même rapport : déform
 pas représentable dans ce modèle. Le mode automatique choisit cette valeur photo par photo, d'après
 ce que le recadrage coûterait à *cette* photo dans *cet* emplacement, et la réduit encore si un
 visage risquait d'être coupé.
+
+**Une photo importante est une contrainte, pas une préférence.** Le moteur ne construit une scène
+partagée qu'à partir des photos situées avant la prochaine photo importante : une photo marquée ne
+peut donc jamais être entraînée dans une composition, quel que soit le mode d'images par scène ou
+le mode d'ordre. Elle est ensuite tenue un peu plus longtemps, animée par un simple zoom lent sans
+rotation, et encadrée par des transitions calmes — les glissements et les entrées échelonnées sont
+écartés avant comme après elle.
+
+**Les scènes n'ont plus toutes la même durée.** La ligne de temps est construite à partir des
+durées cumulées de chaque scène, ce qui permet à une photo importante d'être tenue plus longtemps
+sans décaler le reste ni casser les transitions.
 
 **Une animation ne peut pas faire disparaître un visage.** Le zoom de chaque photo est plafonné à la
 valeur qui garde la zone d'intérêt entièrement visible, et le recentrage est contraint à chaque

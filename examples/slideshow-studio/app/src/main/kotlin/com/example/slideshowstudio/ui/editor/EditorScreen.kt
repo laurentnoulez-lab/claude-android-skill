@@ -5,6 +5,8 @@ import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -171,6 +176,7 @@ fun EditorScreen(
             }
 
             items(state.photos, key = { it.id }) { photo ->
+                val important = photo.ref.isImportant
                 Box {
                     PhotoThumbnail(
                         photo = photo,
@@ -178,7 +184,18 @@ fun EditorScreen(
                         cache = thumbnails,
                         modifier = Modifier
                             .aspectRatio(1f)
-                            .clip(RoundedCornerShape(12.dp)),
+                            .clip(RoundedCornerShape(12.dp))
+                            // A marked photo is outlined, so the selection reads at a glance across
+                            // the whole grid rather than one badge at a time.
+                            .border(
+                                width = if (important) 3.dp else 0.dp,
+                                color = if (important) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color.Transparent
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                            ),
                     )
                     IconButton(
                         onClick = { onAction(SlideshowAction.RemovePhoto(photo.id)) },
@@ -192,6 +209,27 @@ fun EditorScreen(
                             imageVector = Icons.Filled.Close,
                             contentDescription = stringResource(R.string.remove_photo),
                             tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(
+                        onClick = { onAction(SlideshowAction.ToggleImportant(photo.id)) },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(2.dp)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                    ) {
+                        Icon(
+                            imageVector = if (important) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                            contentDescription = stringResource(
+                                if (important) R.string.unmark_important else R.string.mark_important,
+                            ),
+                            tint = if (important) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         )
                     }
                 }
@@ -345,6 +383,13 @@ private fun SettingsCard(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 12.dp),
                 )
+                if (state.importantCount > 0) {
+                    Text(
+                        text = stringResource(R.string.important_count, state.importantCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Text(
                 text = stringResource(R.string.summary_format, resolutionLabel(settings.format)),
