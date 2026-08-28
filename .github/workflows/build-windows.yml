@@ -9,6 +9,12 @@ on:
       - "app/**"
       - ".github/workflows/build-*.yml"
 
+# La console des exécuteurs Windows est en cp1252 : les caractères affichés par
+# flet (rich) provoquent alors une UnicodeEncodeError. On force l'UTF-8.
+env:
+  PYTHONIOENCODING: "utf-8"
+  PYTHONUTF8: "1"
+
 jobs:
   exe-portable:
     name: Exécutable portable (.exe unique)
@@ -27,18 +33,21 @@ jobs:
 
       - name: Empaqueter avec flet pack (PyInstaller)
         working-directory: app
-        run: >
-          flet pack src/main.py
-          --name HydroBassin
-          --product-name HydroBassin
-          --file-description "Dimensionnement de bassins d'orage"
-          --product-version 1.0.0
-          --file-version 1.0.0.${{ github.run_number }}
-          --copyright "HydroBassin"
-          --icon src/assets/icon.ico
-          --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data"
-          --add-data "src/assets;assets"
-          --yes
+        shell: pwsh
+        run: |
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          flet pack src/main.py `
+            --name HydroBassin `
+            --product-name HydroBassin `
+            --file-description "Dimensionnement de bassins d'orage" `
+            --product-version 1.0.0 `
+            --file-version 1.0.0.${{ github.run_number }} `
+            --copyright "HydroBassin" `
+            --icon src/assets/icon.ico `
+            --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data" `
+            --add-data "src/assets;assets" `
+            --yes
 
       - name: Vérifier le livrable
         working-directory: app
@@ -79,21 +88,24 @@ jobs:
 
       - name: Construire l'application
         working-directory: app
-        run: >
-          flet build windows
-          --project HydroBassin
-          --product HydroBassin
-          --org be.hydrobassin
-          --company HydroBassin
-          --copyright "HydroBassin"
-          --build-version 1.0.0
-          --build-number ${{ github.run_number }}
-          --verbose
+        shell: pwsh
+        run: |
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          flet build windows `
+            --project HydroBassin `
+            --product HydroBassin `
+            --org be.hydrobassin `
+            --company HydroBassin `
+            --copyright "HydroBassin" `
+            --build-version 1.0.0 `
+            --build-number ${{ github.run_number }} `
+            --verbose
 
       - name: Compresser le dossier
         working-directory: app
-        run: Compress-Archive -Path build/windows/* -DestinationPath ../HydroBassin-windows.zip
         shell: pwsh
+        run: Compress-Archive -Path build/windows/* -DestinationPath ../HydroBassin-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
