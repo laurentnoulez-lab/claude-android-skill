@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 A4 = (595.28, 841.89)  # points
 
-# Largeurs Helvetica (unites/1000) pour l'ASCII imprimable.
+# Largeurs Helvetica (unités/1000) pour l'ASCII imprimable.
 _W_REG = {
     " ": 278, "!": 278, '"': 355, "#": 556, "$": 556, "%": 889, "&": 667, "'": 191,
     "(": 333, ")": 333, "*": 389, "+": 584, ",": 278, "-": 333, ".": 278, "/": 278,

@@ -37,13 +37,13 @@ DATA_FILE = "gti_rainfall.json.gz"
 #: Periodes de retour disponibles dans le GTI (annees).
 RETURN_PERIODS: Tuple[int, ...] = (2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 200)
 
-#: Durees normalisees des tableaux QDF, en minutes.
+#: Durées normalisées des tableaux QDF, en minutes.
 QDF_DURATIONS_MIN: Tuple[int, ...] = (
     10, 20, 30, 60, 120, 180, 360, 720,
     1440, 2880, 4320, 5760, 7200, 10080, 14400, 21600, 28800, 36000, 43200,
 )
 
-#: Libelles des durees QDF.
+#: Libellés des durées QDF.
 QDF_DURATION_LABELS: Tuple[str, ...] = (
     "10 min", "20 min", "30 min", "1 h", "2 h", "3 h", "6 h", "12 h",
     "1 j", "2 j", "3 j", "4 j", "5 j", "7 j", "10 j", "15 j", "20 j", "25 j", "30 j",

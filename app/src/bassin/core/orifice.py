@@ -20,7 +20,7 @@ from typing import List, Optional, Tuple
 
 G = 9.81
 
-#: Coefficients de debit usuels.
+#: Coefficients de débit usuels.
 COEFFICIENTS_DEBIT = (
     ("Orifice en paroi mince (usuel)", 0.60),
     ("Orifice en paroi mince, arête vive", 0.61),

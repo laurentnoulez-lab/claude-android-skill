@@ -242,7 +242,7 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier) -> None:
         ws.cell(row=r, column=11, value=f"=(Q_infiltration+Q_ajutage)*A{r}*60/1000").number_format = "0.00"
         ws.cell(row=r, column=12, value=f"=MAX(F{r}-K{r},0)").number_format = "0.00"
         # [4] dispersion + temporisation au-dela du seuil (ajutage sureleve).
-        # M : debit ruisselle entrant, N : instant ou le niveau atteint l'axe de l'ajutage.
+        # M : débit ruisselé entrant, N : instant où le niveau atteint l'axe de l'ajutage.
         ws.cell(row=r, column=13, value=f"=F{r}*1000/(A{r}*60)").number_format = "0.000"
         ws.cell(row=r, column=14,
                 value=(f'=IF(V_sous_ajutage<=0,0,IF(M{r}-Q_infiltration<=0,"",'

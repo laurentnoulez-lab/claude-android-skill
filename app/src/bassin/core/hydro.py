@@ -30,7 +30,7 @@ from .model import (
     POURCENTAGE_SURFACE_INFILTRATION_LIMITE,
 )
 
-#: Grille de durees de pluie balayee (minutes) : 10 min a 60 jours, pas de 5 min.
+#: Grille de durées de pluie balayée (minutes) : 10 min à 60 jours, pas de 5 min.
 DUREE_MIN = 10
 DUREE_MAX = 86400
 PAS_DUREE = 5

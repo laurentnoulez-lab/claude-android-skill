@@ -12,12 +12,12 @@ TYPES_SURFACES = (
     ("Champs cultivés, landes, bruyères", 0.25),
     ("Dalles gazon, toitures vertes", 0.40),
     ("Terres battues, chemins de terre", 0.50),
-    ("Pavés a joints écartés, pavés drainants", 0.70),
-    ("Allées pavées, trottoirs, graviers compactes", 0.90),
+    ("Pavés à joints écartés, pavés drainants", 0.70),
+    ("Allées pavées, trottoirs, graviers compactés", 0.90),
     ("Toitures, routes, plans d'eau, surfaces imperméables", 1.00),
 )
 
-#: Contraintes reglementaires du GTI.
+#: Contraintes réglementaires du GTI.
 TEMPS_VIDANGE_LIMITE_H = 48.0
 DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA = 5.0
 POURCENTAGE_SURFACE_INFILTRATION_LIMITE = 0.10
