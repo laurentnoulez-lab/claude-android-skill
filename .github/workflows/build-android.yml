@@ -9,6 +9,13 @@ on:
       - "app/**"
       - ".github/workflows/build-*.yml"
 
+env:
+  FLET_CLI_NO_RICH_OUTPUT: "1"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apk:
     runs-on: ubuntu-latest
