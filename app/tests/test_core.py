@@ -96,6 +96,37 @@ class TestPluies(unittest.TestCase):
         self.assertAlmostEqual(lsha[0][0], mm[0][0] / (10 * 60.0) * 10000.0, places=6)
 
 
+class TestChargementDesDonnees(unittest.TestCase):
+    """Le référentiel doit rester disponible quel que soit l'empaquetage."""
+
+    def test_origine_renseignee(self):
+        rainfall.communes()
+        self.assertNotEqual(rainfall.SOURCE_DONNEES["origine"], "inconnue")
+
+    def test_le_repli_embarque_est_identique_au_fichier(self):
+        import gzip
+        import json
+
+        from bassin.data.gti_embarque import DONNEES
+
+        with open(rainfall._data_path(), "rb") as fh:
+            depuis_fichier = json.loads(gzip.decompress(fh.read()).decode("utf-8"))
+        depuis_module = json.loads(gzip.decompress(DONNEES).decode("utf-8"))
+        self.assertEqual(depuis_module.keys(), depuis_fichier.keys())
+        self.assertEqual(len(depuis_module["communes"]), len(depuis_fichier["communes"]))
+        self.assertEqual(depuis_module["montana"]["63013"], depuis_fichier["montana"]["63013"])
+
+    def test_le_repli_seul_suffit_a_charger_les_pluies(self):
+        import gzip
+        import json
+
+        from bassin.data.gti_embarque import DONNEES
+
+        donnees = json.loads(gzip.decompress(DONNEES).decode("utf-8"))
+        a1, b1 = donnees["montana"]["63013"]["25"][:2]
+        self.assertAlmostEqual(a1 * 10 ** -b1, rainfall.intensite_montana(BUTGENBACH, 25, 10), places=9)
+
+
 class TestMethodeRationnelle(unittest.TestCase):
     def test_surfaces_ponderees(self):
         p = projet_type()
