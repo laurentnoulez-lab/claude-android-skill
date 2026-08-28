@@ -63,6 +63,14 @@ class VueDimensionnement(Vue):
         def maj_k_mmh(v: float) -> None:
             p.k_infiltration_ms = max(v, 0.0) / MM_H
             self.etat.invalider()
+            champ = getattr(self, "_champ_k", None)
+            interne = getattr(champ, "content", champ)
+            if interne is not None:
+                interne.helper_text = f"soit {p.k_infiltration_ms:.2e} m/s · essai in situ"
+                try:
+                    interne.update()
+                except Exception:
+                    pass
 
         def choisir_sol(e: ft.ControlEvent) -> None:
             for cle, _, valeur in SOLS:

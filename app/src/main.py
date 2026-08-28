@@ -63,6 +63,7 @@ def main(page: ft.Page) -> None:
         VueRapport(page, etat),
     ]
     index = {"courant": 0}
+
     zone = ft.Column(spacing=0, scroll=ft.ScrollMode.AUTO, expand=True)
     marge = {"valeur": ft.padding.symmetric(18, 22)}
 
@@ -72,15 +73,25 @@ def main(page: ft.Page) -> None:
     titre_page = ft.Text("", size=15, weight=ft.FontWeight.W_700, max_lines=1,
                          overflow=ft.TextOverflow.ELLIPSIS)
 
-    def maj_entete() -> None:
-        vue = vues[index["courant"]]
-        titre_page.value = vue.titre
-        res = etat.resultat
+    def maj_entete(calculer: bool = True) -> None:
+        """Résumé permanent ; `calculer` reste faux pendant la frappe (coût du calcul)."""
+        titre_page.value = vues[index["courant"]].titre
+        volume = "…"
+        if calculer or etat.resultats_disponibles:
+            volume = f"{etat.resultat.volume_affiche} m³"
         resume.value = (
             f"{etat.projet.commune_nom} · T = {etat.projet.periode_retour} ans · "
             f"{etat.projet.aire_ponderee_m2:.0f} m² actifs · "
-            f"{LIBELLES_SCENARIOS[etat.scenario_principal]} : {res.volume_affiche} m³"
+            f"{LIBELLES_SCENARIOS[etat.scenario_principal]} : {volume}"
         )
+
+    def entete_apres_saisie() -> None:
+        maj_entete(calculer=False)
+        for controle in (titre_page, resume):
+            try:
+                controle.update()
+            except Exception:
+                pass
 
     def sauvegarder() -> None:
         try:
@@ -261,6 +272,7 @@ def main(page: ft.Page) -> None:
             zone.controls[0].padding = marge["valeur"]
         page.update()
 
+    etat.abonner(entete_apres_saisie)
     page.on_resized = adapter
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.

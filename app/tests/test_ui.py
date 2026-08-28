@@ -308,6 +308,23 @@ class TestCoquilleApplication(unittest.TestCase):
         surface.on_blur(_Evenement(surface))
         self.assertIn("150", textes[0].value)
 
+    def test_entete_suit_les_saisies_sans_recalculer(self):
+        """Le résumé doit suivre les surfaces encodées, sans relancer le calcul à la frappe."""
+        import main as application
+
+        page = PageFactice()
+        etat_initial = etat_complet()
+        page.client_storage.set(application.CLE_STOCKAGE, etat_initial.to_json())
+        application.main(page)
+        textes = [t for t in _rechercher(page.controls[0], ft.Text)
+                  if t.value and "m² actifs" in t.value]
+        self.assertTrue(textes)
+        resume = textes[0]
+        resume.update = lambda: None
+        avant = resume.value
+        self.assertIn("1575", avant)
+        self.assertNotIn("…", avant)
+
     def test_diagnostic_accessible(self):
         import main as application
 

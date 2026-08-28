@@ -104,6 +104,11 @@ class EtatApplication:
         return self._resultats
 
     @property
+    def resultats_disponibles(self) -> bool:
+        """Vrai si les résultats sont déjà en cache (pas de calcul déclenché)."""
+        return self._resultats is not None
+
+    @property
     def resultat(self) -> hydro.Resultat:
         return self.resultats[self.scenario_principal]
 
