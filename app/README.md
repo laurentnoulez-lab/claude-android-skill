@@ -60,16 +60,19 @@ Les binaires sont produits par GitHub Actions (`Actions` → workflow → *Run w
 | Workflow | Livrable |
 |---|---|
 | `Build APK Android` | `HydroBassin-1.0.0.apk` |
-| `Build Windows` | `HydroBassin.exe` (portable, un seul fichier) et `HydroBassin-windows.zip` (application Flutter) |
+| `Build Windows` | `HydroBassin-Setup-1.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
+| `Captures d'interface` | copies d'écran de chaque onglet en formats téléphone, tablette et bureau (branche `ui-captures`) |
 
 En local (Flutter 3.29.x requis, installé automatiquement par flet si absent) :
 
 ```bash
 pip install "flet[all]==0.28.3"
 flet build apk        # Android
-flet build windows    # Windows (à lancer sur Windows)
-flet pack src/main.py --name HydroBassin --icon src/assets/icon.png --onefile \
-  --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data"
+flet build windows    # Windows (à lancer sur Windows, Visual Studio 2022 requis)
+
+# puis l'installeur (Inno Setup 6) :
+iscc /DSourceDir=..\..\build\windows /DExeName=HydroBassin.exe /DMaVersion=1.0.0 \
+     /DOutputDir=..\..\..\livrables packaging\windows\hydrobassin.iss
 ```
 
 ## Organisation du code

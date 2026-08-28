@@ -24,6 +24,7 @@ from bassin.ui.vues.projet import VueProjet  # noqa: E402
 from bassin.ui.vues.qdf import VueTableQDF  # noqa: E402
 from bassin.ui.vues.rapport import VueRapport  # noqa: E402
 
+#: En dessous de cette largeur, la navigation passe dans un tiroir latéral.
 LARGEUR_COMPACTE = 840
 
 
@@ -31,14 +32,13 @@ def main(page: ft.Page) -> None:
     page.title = f"{__app_name__} — dimensionnement de bassins d'orage"
     page.window.width = 1280
     page.window.height = 860
-    page.window.min_width = 380
+    page.window.min_width = 360
     page.window.min_height = 560
-    sombre = False
     try:
-        sombre = page.client_storage.get("hydrobassin.sombre") or False
+        sombre = bool(page.client_storage.get("hydrobassin.sombre"))
     except Exception:
         sombre = False
-    theme.appliquer_theme(page, bool(sombre))
+    theme.appliquer_theme(page, sombre)
 
     etat = EtatApplication()
     try:
@@ -61,12 +61,14 @@ def main(page: ft.Page) -> None:
     zone = ft.Container(expand=True, padding=ft.padding.symmetric(18, 22))
 
     # ------------------------------------------------------------------ entête
-    resume = ft.Text("", size=12, color=theme.GRIS)
-    titre_vue = ft.Text("", size=20, weight=ft.FontWeight.W_800)
+    resume = ft.Text("", size=11.5, color=theme.GRIS, max_lines=1,
+                     overflow=ft.TextOverflow.ELLIPSIS)
+    titre_page = ft.Text("", size=15, weight=ft.FontWeight.W_700, max_lines=1,
+                         overflow=ft.TextOverflow.ELLIPSIS)
 
     def maj_entete() -> None:
         vue = vues[index["courant"]]
-        titre_vue.value = vue.titre
+        titre_page.value = vue.titre
         res = etat.resultat
         resume.value = (
             f"{etat.projet.commune_nom} · T = {etat.projet.periode_retour} ans · "
@@ -82,26 +84,34 @@ def main(page: ft.Page) -> None:
 
     def afficher(i: int) -> None:
         index["courant"] = i
-        vue = vues[i]
-        zone.content = vue.afficher()
+        zone.content = vues[i].afficher()
+        rail.selected_index = i
+        tiroir.selected_index = i
         maj_entete()
         sauvegarder()
         page.update()
 
+    def ouvrir_menu(_=None) -> None:
+        page.open(tiroir)
+
+    def choisir_dans_le_tiroir(e: ft.ControlEvent) -> None:
+        page.close(tiroir)
+        afficher(e.control.selected_index)
+
     def basculer_theme(_=None) -> None:
-        nouveau = page.theme_mode == ft.ThemeMode.LIGHT
-        page.theme_mode = ft.ThemeMode.DARK if nouveau else ft.ThemeMode.LIGHT
+        clair = page.theme_mode == ft.ThemeMode.LIGHT
+        page.theme_mode = ft.ThemeMode.DARK if clair else ft.ThemeMode.LIGHT
         try:
-            page.client_storage.set("hydrobassin.sombre", nouveau)
+            page.client_storage.set("hydrobassin.sombre", clair)
         except Exception:
             pass
         page.update()
 
     def reinitialiser(_=None) -> None:
         def confirmer(_=None) -> None:
-            nouveau = EtatApplication()
-            etat.projet = nouveau.projet
-            etat.scenario_principal = nouveau.scenario_principal
+            neuf = EtatApplication()
+            etat.projet = neuf.projet
+            etat.scenario_principal = neuf.scenario_principal
             etat.invalider()
             page.close(dialogue)
             afficher(0)
@@ -117,32 +127,26 @@ def main(page: ft.Page) -> None:
         )
         page.open(dialogue)
 
+    bouton_menu = ft.IconButton(ft.Icons.MENU, tooltip="Sections", on_click=ouvrir_menu, visible=False)
     barre = ft.Container(
         content=ft.Row(
             [
+                bouton_menu,
                 ft.Container(
-                    ft.Icon(ft.Icons.WATER_DROP, color=ft.Colors.WHITE, size=22),
+                    ft.Icon(ft.Icons.WATER_DROP, color=ft.Colors.WHITE, size=20),
                     bgcolor=theme.BLEU,
-                    padding=9,
-                    border_radius=12,
+                    padding=8,
+                    border_radius=10,
                 ),
-                ft.Column(
-                    [
-                        ft.Row([ft.Text(__app_name__, size=17, weight=ft.FontWeight.W_800),
-                                ft.Text(f"v{__version__}", size=10, color=theme.GRIS)],
-                               spacing=6, vertical_alignment=ft.CrossAxisAlignment.END),
-                        resume,
-                    ],
-                    spacing=0,
-                    expand=True,
-                ),
+                ft.Column([titre_page, resume], spacing=0, expand=True, tight=True),
                 ft.IconButton(ft.Icons.RESTART_ALT, tooltip="Nouveau projet", on_click=reinitialiser),
-                ft.IconButton(ft.Icons.DARK_MODE, tooltip="Thème clair / sombre", on_click=basculer_theme),
+                ft.IconButton(ft.Icons.DARK_MODE, tooltip="Thème clair / sombre",
+                              on_click=basculer_theme),
             ],
-            spacing=12,
+            spacing=8,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.padding.symmetric(10, 18),
+        padding=ft.padding.symmetric(8, 12),
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
     )
@@ -161,28 +165,43 @@ def main(page: ft.Page) -> None:
         ],
         on_change=lambda e: afficher(e.control.selected_index),
     )
-    barre_basse = ft.NavigationBar(
+    separateur = ft.VerticalDivider(width=1)
+
+    # Sept sections : un tiroir est bien plus lisible qu'une barre basse sur téléphone.
+    tiroir = ft.NavigationDrawer(
         selected_index=0,
-        destinations=[ft.NavigationBarDestination(icon=v.icone, label=v.titre) for v in vues],
-        on_change=lambda e: afficher(e.control.selected_index),
-        visible=False,
+        on_change=choisir_dans_le_tiroir,
+        controls=[
+            ft.Container(
+                ft.Column(
+                    [
+                        ft.Text(__app_name__, size=18, weight=ft.FontWeight.W_800),
+                        ft.Text(f"version {__version__}", size=11, color=theme.GRIS),
+                    ],
+                    spacing=0,
+                ),
+                padding=ft.padding.only(20, 22, 20, 8),
+            ),
+            ft.Divider(height=8),
+        ] + [
+            ft.NavigationDrawerDestination(icon=v.icone, label=v.titre) for v in vues
+        ],
     )
 
-    corps = ft.Row([rail, ft.VerticalDivider(width=1), zone], expand=True, spacing=0)
+    corps = ft.Row([rail, separateur, zone], expand=True, spacing=0)
 
     def adapter(_=None) -> None:
-        compact = (page.width or 1200) < LARGEUR_COMPACTE
+        largeur = page.width or 1200
+        compact = largeur < LARGEUR_COMPACTE
         rail.visible = not compact
-        corps.controls[1].visible = not compact
-        barre_basse.visible = compact
-        rail.extended = (page.width or 1200) > 1180
-        zone.padding = ft.padding.symmetric(12, 12) if compact else ft.padding.symmetric(18, 22)
-        rail.selected_index = index["courant"]
-        barre_basse.selected_index = index["courant"]
+        separateur.visible = not compact
+        bouton_menu.visible = compact
+        rail.extended = largeur > 1180
+        zone.padding = ft.padding.symmetric(10, 10) if compact else ft.padding.symmetric(18, 22)
         page.update()
 
     page.on_resized = adapter
-    page.add(ft.Column([barre, corps, barre_basse], expand=True, spacing=0))
+    page.add(ft.Column([barre, corps], expand=True, spacing=0))
     afficher(0)
     adapter()
 

@@ -30,15 +30,16 @@ class VueTableQDF(Vue):
             self._mode = e.control.value
             self.rafraichir()
 
-        selecteur = ft.SegmentedButton(
-            selected={mode},
-            allow_multiple_selection=False,
-            on_change=changer_mode,
-            segments=[
-                ft.Segment("volume", label=ft.Text("Volume requis [m³]"), icon=ft.Icon(ft.Icons.WATER)),
-                ft.Segment("taux", label=ft.Text("Remplissage [%]"), icon=ft.Icon(ft.Icons.PERCENT)),
-                ft.Segment("pluie", label=ft.Text("Pluie [mm]"), icon=ft.Icon(ft.Icons.WATER_DROP)),
-            ],
+
+        selecteur = ft.ResponsiveRow(
+            [
+                theme.selecteur(
+                    "Valeur affichée", mode,
+                    [("volume", "Volume requis [m³]"), ("taux", "Remplissage [%]"),
+                     ("pluie", "Hauteur de pluie [mm]")],
+                    changer_mode, col={"xs": 12, "md": 5},
+                )
+            ]
         )
 
         colonnes = [ft.DataColumn(ft.Text("Durée", size=12, weight=ft.FontWeight.W_700))]
@@ -84,12 +85,9 @@ class VueTableQDF(Vue):
                 )
             lignes.append(ft.DataRow(cells=cellules))
 
-        tableau = ft.Row(
-            [ft.Column([ft.DataTable(columns=colonnes, rows=lignes, column_spacing=14,
-                                     heading_row_height=38, data_row_max_height=42,
-                                     divider_thickness=0.4)],
-                       scroll=ft.ScrollMode.AUTO)],
-            scroll=ft.ScrollMode.AUTO,
+        tableau = theme.tableau_defilant(
+            ft.DataTable(columns=colonnes, rows=lignes, column_spacing=10,
+                         heading_row_height=36, data_row_max_height=40, divider_thickness=0.4)
         )
 
         rp_max = table.periode_retour_max_acceptee()

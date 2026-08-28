@@ -117,32 +117,56 @@ def etiquette_statut(statut: str) -> ft.Control:
 
 
 def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None],
-                 unite: str = "", aide: str = "", decimales: int = 2,
-                 col: Optional[dict] = None, scientifique: bool = False) -> ft.Control:
-    """Champ numerique tolerant (virgule ou point, champ vide = 0)."""
+                 unite: str = "", aide: str = "", decimales: int = 3,
+                 col: Optional[dict] = None, on_valide: Optional[Callable[[], None]] = None,
+                 compact: bool = False) -> ft.Control:
+    """Champ numérique tolérant (virgule ou point, champ vide = 0).
+
+    ``on_change`` ne met à jour que la donnée : le texte saisi n'est jamais
+    reformaté et l'interface n'est pas reconstruite, sans quoi le champ perdrait
+    le focus à chaque frappe. ``on_valide`` est appelé quand l'utilisateur quitte
+    le champ ou valide : c'est là que les résultats sont recalculés.
+    """
 
     def formater(v: float) -> str:
-        if scientifique:
-            return f"{v:.2e}"
-        if v == int(v) and abs(v) < 1e6:
+        if v == 0:
+            return "0"
+        if abs(v) < 1e-3 or abs(v) >= 1e7:
+            texte = f"{v:.10f}".rstrip("0").rstrip(".")
+            return texte if texte else "0"
+        if float(v) == int(v):
             return str(int(v))
-        return f"{round(v, decimales)}"
+        return f"{round(v, decimales):g}"
+
+    def lire(texte: str) -> Optional[float]:
+        brut = (texte or "").replace(",", ".").replace(" ", "").strip()
+        if brut in ("", "-", ".", "-."):
+            return 0.0
+        try:
+            return float(brut)
+        except ValueError:
+            return None
 
     def _change(e: ft.ControlEvent) -> None:
-        brut = (e.control.value or "").replace(",", ".").strip()
-        if brut in ("", "-", "."):
-            valeur_num = 0.0
-            e.control.error_text = None
-        else:
-            try:
-                valeur_num = float(brut)
-                e.control.error_text = None
-            except ValueError:
-                e.control.error_text = "Nombre invalide"
-                e.control.update()
-                return
-        e.control.update()
+        valeur_num = lire(e.control.value)
+        erreur = "Nombre invalide" if valeur_num is None else None
+        if e.control.error_text != erreur:
+            e.control.error_text = erreur
+            e.control.update()
+        if valeur_num is not None:
+            on_change(valeur_num)
+
+    def _valide(e: ft.ControlEvent) -> None:
+        valeur_num = lire(e.control.value)
+        if valeur_num is None:
+            return
         on_change(valeur_num)
+        texte = formater(valeur_num)
+        if e.control.value != texte:
+            e.control.value = texte
+            e.control.update()
+        if on_valide:
+            on_valide()
 
     champ = ft.TextField(
         label=libelle,
@@ -150,10 +174,33 @@ def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None]
         suffix_text=unite or None,
         helper_text=aide or None,
         on_change=_change,
+        on_blur=_valide,
+        on_submit=_valide,
         keyboard_type=ft.KeyboardType.NUMBER,
         dense=True,
         border_radius=10,
-        text_size=14,
+        text_size=13 if compact else 14,
+        content_padding=ft.padding.symmetric(8, 12) if compact else None,
+    )
+    return ft.Container(champ, col=col) if col else champ
+
+
+def tableau_defilant(tableau: ft.Control) -> ft.Control:
+    """Rend un tableau défilable horizontalement (indispensable sur téléphone)."""
+    return ft.Row([tableau], scroll=ft.ScrollMode.AUTO, vertical_alignment=ft.CrossAxisAlignment.START)
+
+
+def selecteur(libelle: str, valeur: str, options, on_change, col: Optional[dict] = None,
+              compact: bool = False) -> ft.Control:
+    """Liste déroulante compacte (préférée aux boutons segmentés sur mobile)."""
+    champ = ft.Dropdown(
+        label=libelle,
+        value=valeur,
+        options=[ft.dropdown.Option(k, t) for k, t in options],
+        on_change=on_change,
+        dense=True,
+        border_radius=10,
+        text_size=13 if compact else 14,
     )
     return ft.Container(champ, col=col) if col else champ
 

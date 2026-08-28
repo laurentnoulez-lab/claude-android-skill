@@ -6,7 +6,7 @@ from typing import List
 
 import flet as ft
 
-from ...core import simulation
+from ...core import rainfall, simulation
 from ...reports import charts
 from .. import graphiques, theme
 from .base import Vue
@@ -17,44 +17,54 @@ class VueBassin(Vue):
     icone = ft.Icons.WATER_DAMAGE
     sous_titre = "Ouvrage encodé et simulation"
 
-    def construire(self) -> List[ft.Control]:
+    # ------------------------------------------------------------ formulaire
+    def _formulaire(self) -> ft.Control:
         p = self.etat.projet
         b = self.etat.bassin
 
         def maj(champ: str):
             def _f(v: float) -> None:
-                self.etat.definir_bassin(champ, v)
-                self.rafraichir()
+                setattr(b, champ, v)
+                self.etat.invalider()
             return _f
 
         def maj_charge(v: float) -> None:
-            self.etat.definir("hauteur_charge_m", v)
-            self.rafraichir()
+            p.hauteur_charge_m = v
+            self.etat.invalider()
 
-        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_infiltration_ms,
-                                                 p.coef_securite_infiltration)
-        saisie = ft.ResponsiveRow(
+        return ft.ResponsiveRow(
             [
                 theme.champ_nombre("Volume tampon total", b.volume_total_m3, maj("volume_total_m3"),
-                                   "m³", "Jusqu'au niveau du trop-plein", decimales=1,
-                                   col={"xs": 6, "md": 3}),
+                                   "m³", "jusqu'au trop-plein", on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Volume sous l'ajutage", b.volume_sous_ajutage_m3,
-                                   maj("volume_sous_ajutage_m3"), "m³",
-                                   "Volume mort sous l'axe de l'orifice", decimales=1,
-                                   col={"xs": 6, "md": 3}),
+                                   maj("volume_sous_ajutage_m3"), "m³", "volume mort",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Surface de dispersion", b.surface_dispersion_m2,
-                                   maj("surface_dispersion_m2"), "m²", "Fond infiltrant du bassin",
-                                   decimales=1, col={"xs": 6, "md": 3}),
+                                   maj("surface_dispersion_m2"), "m²", "fond infiltrant",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Débit d'ajutage", b.debit_ajutage_ls, maj("debit_ajutage_ls"),
-                                   "l/s", "Orifice calibré", decimales=3, col={"xs": 6, "md": 3}),
+                                   "l/s", "orifice calibré", on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge sur l'ajutage", p.hauteur_charge_m, maj_charge, "m",
-                                   "Axe de l'orifice → trop-plein", decimales=2,
-                                   col={"xs": 6, "md": 3}),
+                                   "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,
             run_spacing=12,
         )
 
+    def _reprendre(self, _=None) -> None:
+        self.etat.reprendre_dimensionnement()
+        self.rafraichir()
+        self.notifier("Ouvrage pré-rempli à partir du scénario retenu.", "succes")
+
+    # ------------------------------------------------------------- résultats
+    def resultats(self) -> List[ft.Control]:
+        p = self.etat.projet
+        b = self.etat.bassin
+        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_infiltration_ms,
+                                                 p.coef_securite_infiltration)
         entete = ft.Row(
             [
                 theme.etiquette(f"Volume utile au-dessus de l'ajutage : {b.volume_tampon_m3:.1f} m³",
@@ -69,49 +79,28 @@ class VueBassin(Vue):
             run_spacing=8,
         )
 
-        actions = ft.Row(
-            [
-                theme.bouton_secondaire("Reprendre le dimensionnement", ft.Icons.DOWNLOAD_DONE,
-                                        self._reprendre),
-                ft.Text("Pré-remplit l'ouvrage à partir du scénario retenu (+5 % de marge).",
-                        size=11.5, color=theme.GRIS),
-            ],
-            wrap=True,
-            spacing=12,
-        )
-
-        contenu: List[ft.Control] = [
-            theme.section("Caractéristiques de l'ouvrage",
-                          ft.Column([saisie, entete, actions], spacing=14),
-                          ft.Icons.ARCHITECTURE,
-                          "Bassin, noue, puits perdu, structure alvéolaire…"),
-        ]
-
         if not self.etat.bassin_valide:
-            contenu.append(theme.message(
-                "Encodez un volume tampon et au moins une surface incidente pour lancer la simulation.",
-                "info"))
-            return contenu
+            return [
+                entete,
+                theme.message("Encodez un volume tampon et au moins une surface incidente "
+                              "pour lancer la simulation.", "info"),
+            ]
 
         sim = self.etat.simulation
-        assert sim is not None
         couleur = theme.ROUGE if sim.debordement else (theme.ORANGE if sim.statut == "LIMITE" else theme.VERT)
         tuiles = ft.ResponsiveRow(
             [
                 ft.Container(theme.tuile(f"{sim.volume_max_m3:.1f}", "Volume stocké maximum", "m³",
-                                         couleur, ft.Icons.WATER),
-                             col={"xs": 6, "md": 3}),
+                                         couleur, ft.Icons.WATER), col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(f"{sim.taux_remplissage * 100:.0f}", "Taux de remplissage", "%",
-                                         couleur, ft.Icons.PERCENT),
-                             col={"xs": 6, "md": 3}),
+                                         couleur, ft.Icons.PERCENT), col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(f"{sim.temps_vidange_h:.1f}", "Temps de vidange", "h",
                                          theme.ARDOISE, ft.Icons.TIMELAPSE,
                                          f"maximum admis : {p.temps_vidange_max_h:.0f} h"),
-                             col={"xs": 6, "md": 3}),
+                             col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(f"{sim.volume_debordement_m3:.2f}", "Volume débordé", "m³",
                                          theme.ROUGE if sim.debordement else theme.GRIS,
-                                         ft.Icons.OUTBOX),
-                             col={"xs": 6, "md": 3}),
+                                         ft.Icons.OUTBOX), col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,
             run_spacing=12,
@@ -151,38 +140,55 @@ class VueBassin(Vue):
                 f"Temps de vidange de {sim.temps_vidange_h:.1f} h supérieur au maximum admis "
                 f"({p.temps_vidange_max_h:.0f} h).", "alerte"))
 
-        contenu.append(
+        return [
+            entete,
             theme.section("Simulation de l'événement critique",
                           ft.Column([details, tuiles] + avis, spacing=14),
                           ft.Icons.SCIENCE,
-                          "Pluie de projet à intensité constante, recherche de la durée la plus défavorable")
-        )
-        contenu.append(
+                          "Pluie de projet à intensité constante, durée la plus défavorable"),
             theme.section("Remplissage et vidange",
                           ft.Column(
                               [
-                                  graphiques.construire(self._graphique_niveau(sim), 300),
+                                  graphiques.construire(self._graphique_niveau(sim), 280),
                                   ft.Divider(height=18),
-                                  graphiques.construire(self._graphique_debits(sim), 240),
+                                  graphiques.construire(self._graphique_debits(sim), 220),
                               ],
-                              spacing=10,
-                          ),
-                          ft.Icons.SHOW_CHART)
-        )
-        contenu.append(
-            theme.section("Simuler une autre pluie",
-                          self._simulateur_manuel(),
-                          ft.Icons.TUNE,
-                          "Choisissez une durée et une récurrence pour visualiser le comportement de l'ouvrage")
-        )
-        return contenu
+                              spacing=10),
+                          ft.Icons.SHOW_CHART),
+            theme.section("Simuler une autre pluie", self._simulateur_manuel(), ft.Icons.TUNE,
+                          "Choisissez une durée et une récurrence"),
+        ]
+
+    def construire(self) -> List[ft.Control]:
+        self.zone.controls = self.resultats()
+        return [
+            theme.section(
+                "Caractéristiques de l'ouvrage",
+                ft.Column(
+                    [
+                        self._formulaire(),
+                        ft.Row(
+                            [
+                                theme.bouton_secondaire("Reprendre le dimensionnement",
+                                                        ft.Icons.DOWNLOAD_DONE, self._reprendre),
+                                theme.bouton_secondaire("Recalculer", ft.Icons.REFRESH,
+                                                        lambda _: self.maj_resultats()),
+                            ],
+                            wrap=True,
+                            spacing=10,
+                        ),
+                        ft.Text("« Reprendre le dimensionnement » pré-remplit l'ouvrage à partir du "
+                                "scénario retenu (+5 % de marge).", size=11.5, color=theme.GRIS),
+                    ],
+                    spacing=14,
+                ),
+                ft.Icons.ARCHITECTURE,
+                "Bassin, noue, puits perdu, structure alvéolaire…",
+            ),
+            self.zone,
+        ]
 
     # ------------------------------------------------------------------
-    def _reprendre(self, _=None) -> None:
-        self.etat.reprendre_dimensionnement()
-        self.rafraichir()
-        self.notifier("Ouvrage pré-rempli à partir du scénario retenu.", "succes")
-
     def _graphique_niveau(self, sim) -> charts.Graphique:
         b = self.etat.bassin
         g = charts.Graphique(
@@ -213,13 +219,11 @@ class VueBassin(Vue):
         )
 
     def _simulateur_manuel(self) -> ft.Control:
-        from ...core import rainfall
-
         etat = self.etat
         zone = ft.Column(spacing=10)
         duree = ft.Dropdown(
             label="Durée de pluie",
-            value=str(etat.simulation.duree_pluie_min if etat.simulation else 60),
+            value=str(float(etat.simulation.duree_pluie_min)) if etat.simulation else "60.0",
             options=[ft.dropdown.Option(str(float(d)), lib)
                      for d, lib in zip(rainfall.QDF_DURATIONS_MIN, rainfall.QDF_DURATION_LABELS)],
             dense=True,
@@ -246,8 +250,8 @@ class VueBassin(Vue):
                         theme.etiquette(f"Pluie {hauteur:.1f} mm", theme.BLEU, theme.BLEU_CLAIR),
                         theme.etiquette(f"Pointe {res.volume_max_m3:.1f} m³", theme.ARDOISE,
                                         theme.GRIS_CLAIR),
-                        theme.etiquette(f"Remplissage {res.taux_remplissage * 100:.0f} %", theme.ARDOISE,
-                                        theme.GRIS_CLAIR),
+                        theme.etiquette(f"Remplissage {res.taux_remplissage * 100:.0f} %",
+                                        theme.ARDOISE, theme.GRIS_CLAIR),
                         theme.etiquette(f"Vidange {res.temps_vidange_h:.1f} h", theme.ARDOISE,
                                         theme.GRIS_CLAIR),
                     ],
@@ -255,16 +259,19 @@ class VueBassin(Vue):
                     spacing=8,
                     run_spacing=8,
                 ),
-                graphiques.construire(self._graphique_niveau(res), 260),
+                graphiques.construire(self._graphique_niveau(res), 240),
             ]
-            zone.update()
+            try:
+                zone.update()
+            except Exception:
+                pass
 
         return ft.Column(
             [
                 ft.ResponsiveRow(
                     [
-                        ft.Container(duree, col={"xs": 6, "md": 4}),
-                        ft.Container(recurrence, col={"xs": 6, "md": 3}),
+                        ft.Container(duree, col={"xs": 12, "sm": 6, "md": 4}),
+                        ft.Container(recurrence, col={"xs": 12, "sm": 6, "md": 3}),
                         ft.Container(theme.bouton_principal("Simuler", ft.Icons.PLAY_ARROW, lancer),
                                      col={"xs": 12, "md": 3}),
                     ],

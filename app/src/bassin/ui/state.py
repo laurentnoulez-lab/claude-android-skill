@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ..core import hydro, orifice, rainfall, simulation
 from ..core.model import (
@@ -22,23 +22,53 @@ from ..reports.dossier import ORDRE_SCENARIOS, Dossier, construire
 CLE_STOCKAGE = "hydrobassin.projet"
 
 
-def repertoire_documents() -> str:
-    """Repertoire ou deposer les rapports (Android : stockage applicatif)."""
+def _ecriture_possible(chemin: str) -> bool:
+    """Vérifie réellement qu'on peut écrire dans ce répertoire."""
+    try:
+        os.makedirs(chemin, exist_ok=True)
+        temoin = os.path.join(chemin, ".hydrobassin_test")
+        with open(temoin, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(temoin)
+        return True
+    except Exception:
+        return False
+
+
+def repertoires_candidats() -> List[str]:
+    """Répertoires de destination possibles, du plus souhaitable au plus sûr."""
+    candidats: List[str] = []
+    # Android : dossier de téléchargement public, puis stockage applicatif fourni par Flet
+    for public in ("/storage/emulated/0/Download", "/sdcard/Download"):
+        if os.path.isdir(public):
+            candidats.append(os.path.join(public, "HydroBassin"))
     for var in ("FLET_APP_STORAGE_DATA", "FLET_APP_STORAGE_TEMP"):
-        chemin = os.environ.get(var)
-        if chemin and os.path.isdir(chemin):
-            cible = os.path.join(chemin, "rapports")
-            os.makedirs(cible, exist_ok=True)
-            return cible
+        base = os.environ.get(var)
+        if base:
+            candidats.append(os.path.join(base, "rapports"))
+    # Bureau
     for base in (os.path.join(os.path.expanduser("~"), "Documents"), os.path.expanduser("~")):
         if os.path.isdir(base):
-            cible = os.path.join(base, "HydroBassin")
-            try:
-                os.makedirs(cible, exist_ok=True)
-                return cible
-            except OSError:
-                continue
+            candidats.append(os.path.join(base, "HydroBassin"))
+    candidats.append(os.path.join(tempfile.gettempdir(), "HydroBassin"))
+    vus = []
+    for c in candidats:
+        if c not in vus:
+            vus.append(c)
+    return vus
+
+
+def repertoire_documents() -> str:
+    """Premier répertoire réellement accessible en écriture."""
+    for chemin in repertoires_candidats():
+        if _ecriture_possible(chemin):
+            return chemin
     return tempfile.gettempdir()
+
+
+def diagnostic_stockage() -> List[Tuple[str, bool]]:
+    """(répertoire, accessible en écriture) — affiché en cas de problème."""
+    return [(c, _ecriture_possible(c)) for c in repertoires_candidats()]
 
 
 class EtatApplication:

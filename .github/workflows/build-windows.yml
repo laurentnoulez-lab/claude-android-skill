@@ -10,69 +10,21 @@ on:
       - ".github/workflows/build-*.yml"
 
 # La console des exécuteurs Windows est en cp1252 : les caractères affichés par
-# flet (rich) provoquent alors une UnicodeEncodeError. On force l'UTF-8.
+# flet (rich) provoquent alors une UnicodeEncodeError. On force l'UTF-8 et la
+# sortie non interactive.
 env:
   PYTHONIOENCODING: "utf-8"
   PYTHONUTF8: "1"
-  # Sortie non interactive : journaux lisibles et pas d'appel à flutter doctor
   FLET_CLI_NO_RICH_OUTPUT: "1"
+  VERSION: "1.0.0"
 
 concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  exe-portable:
-    name: Exécutable portable (.exe unique)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Installer les dépendances
-        run: |
-          python -m pip install --upgrade pip
-          pip install "flet[all]==0.28.3" openpyxl pyinstaller
-
-      - name: Empaqueter avec flet pack (PyInstaller)
-        working-directory: app
-        shell: pwsh
-        run: |
-          chcp 65001 | Out-Null
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          flet pack src/main.py `
-            --name HydroBassin `
-            --product-name HydroBassin `
-            --file-description "Dimensionnement de bassins d'orage" `
-            --product-version 1.0.0 `
-            --file-version 1.0.0.${{ github.run_number }} `
-            --copyright "HydroBassin" `
-            --icon src/assets/icon.ico `
-            --add-data "src/bassin/data/gti_rainfall.json.gz;bassin/data" `
-            --add-data "src/assets;assets" `
-            --yes
-
-      - name: Vérifier le livrable
-        working-directory: app
-        run: dir dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: HydroBassin-windows-exe
-          path: app/dist/HydroBassin.exe
-          if-no-files-found: error
-
-      - name: Publier dans la release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/dist/HydroBassin.exe
-
-  application-windows:
-    name: Application Windows (build Flutter)
+  installateur:
+    name: Installateur Windows
     # windows-latest embarque Visual Studio 2026, que Flutter 3.29.2 ne détecte
     # pas : il retombe sur le générateur CMake « Visual Studio 16 2019 », absent
     # de la machine. VS 2022 est celui que cette version de Flutter sait utiliser.
@@ -107,23 +59,54 @@ jobs:
             --org be.hydrobassin `
             --company HydroBassin `
             --copyright "HydroBassin" `
-            --build-version 1.0.0 `
+            --build-version $env:VERSION `
             --build-number ${{ github.run_number }} `
             --verbose
 
-      - name: Compresser le dossier
+      - name: Identifier l'exécutable produit
+        id: exe
         working-directory: app
         shell: pwsh
-        run: Compress-Archive -Path build/windows/* -DestinationPath ../HydroBassin-windows.zip
+        run: |
+          $exe = Get-ChildItem build/windows -Filter *.exe -Recurse |
+                 Where-Object { $_.DirectoryName -eq (Resolve-Path build/windows).Path } |
+                 Select-Object -First 1
+          if (-not $exe) { throw "Aucun exécutable trouvé dans build/windows" }
+          Write-Host "Exécutable : $($exe.Name)"
+          "nom=$($exe.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Get-ChildItem build/windows | Select-Object Name, Length | Format-Table
+
+      - name: Installer Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /? | Select-Object -First 2
+
+      - name: Compiler l'installeur
+        working-directory: app/packaging/windows
+        shell: pwsh
+        run: |
+          $source = (Resolve-Path ../../build/windows).Path
+          $sortie = Join-Path $env:GITHUB_WORKSPACE "livrables"
+          New-Item -ItemType Directory -Force -Path $sortie | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DSourceDir=$source" `
+            "/DExeName=${{ steps.exe.outputs.nom }}" `
+            "/DMaVersion=$env:VERSION" `
+            "/DOutputDir=$sortie" `
+            hydrobassin.iss
+          Get-ChildItem $sortie | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
-          name: HydroBassin-windows-app
-          path: HydroBassin-windows.zip
+          name: HydroBassin-installateur-windows
+          path: livrables/*.exe
           if-no-files-found: error
 
       - name: Publier dans la release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: HydroBassin-windows.zip
+          files: livrables/*.exe

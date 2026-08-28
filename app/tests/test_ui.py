@@ -62,6 +62,8 @@ class PageFactice:
         self.padding = 0
         self.title = ""
         self.on_resized = None
+        self.overlay = []
+        self.drawer = None
 
     def open(self, controle):
         self.ouverts.append(controle)
@@ -206,6 +208,111 @@ class TestConstructionDesVues(unittest.TestCase):
         champ.value = ""
         champ.on_change(_Evt())
         self.assertEqual(valeurs, [12.5, 0.0])
+
+
+class TestCoquilleApplication(unittest.TestCase):
+    """Construction complète de l'application (barre, navigation, première vue)."""
+
+    def test_demarrage(self):
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        self.assertTrue(page.controls)
+        self.assertGreater(parcourir(page.controls[0]), 20)
+
+    def test_demarrage_en_largeur_telephone(self):
+        import main as application
+
+        page = PageFactice()
+        page.width, page.height = 380, 780
+        application.main(page)
+        self.assertTrue(page.controls)
+        if page.on_resized:
+            page.on_resized(None)
+
+    def test_reprise_d_un_projet_enregistre(self):
+        import main as application
+
+        page = PageFactice()
+        page.client_storage.set(application.CLE_STOCKAGE, etat_complet().to_json())
+        application.main(page)
+        self.assertTrue(page.controls)
+
+
+class TestGenerationDesRapports(unittest.TestCase):
+    """La génération lancée depuis l'interface doit produire les fichiers ou dire pourquoi."""
+
+    def setUp(self):
+        import tempfile
+
+        from bassin.ui.vues import rapport as mod_rapport
+
+        self.page = PageFactice()
+        self.etat = etat_complet()
+        self.repertoire = tempfile.mkdtemp(prefix="hydrobassin_ui_")
+        self.mod = mod_rapport
+        self._destination = mod_rapport.repertoire_documents
+        mod_rapport.repertoire_documents = lambda: self.repertoire
+        self.vue = mod_rapport.VueRapport(self.page, self.etat)
+        self.vue.construire()
+
+    def tearDown(self):
+        import shutil
+
+        self.mod.repertoire_documents = self._destination
+        shutil.rmtree(self.repertoire, ignore_errors=True)
+
+    def test_les_trois_formats_sont_ecrits(self):
+        self.vue._generer(["xlsx", "docx", "pdf"])
+        self.assertEqual(self.vue.erreurs, [])
+        self.assertEqual(len(self.vue.produits), 3)
+        for chemin in self.vue.produits:
+            self.assertTrue(os.path.exists(chemin), chemin)
+            self.assertGreater(os.path.getsize(chemin), 1000, chemin)
+        self.assertTrue(self.vue.resultats())
+
+    def test_sans_surface_l_erreur_est_affichee(self):
+        etat = EtatApplication()
+        vue = self.mod.VueRapport(self.page, etat)
+        vue.construire()
+        vue._generer(["pdf"])
+        self.assertTrue(vue.erreurs)
+        self.assertIn("surface", vue.erreurs[0].lower())
+        self.assertTrue(vue.resultats())
+
+    def test_une_erreur_d_ecriture_est_remontee(self):
+        def exploser(dossier, chemin):
+            raise OSError("disque plein")
+
+        originaux = dict(self.mod.ECRIVAINS)
+        self.mod.ECRIVAINS["pdf"] = exploser
+        try:
+            self.vue._generer(["pdf"])
+        finally:
+            self.mod.ECRIVAINS.update(originaux)
+        self.assertTrue(self.vue.erreurs)
+        self.assertIn("disque plein", self.vue.erreurs[0])
+        self.assertFalse(self.vue.produits)
+        self.assertTrue(any(isinstance(c, ft.Control) for c in self.vue.resultats()))
+
+
+class TestDestinationDesRapports(unittest.TestCase):
+    def test_le_repertoire_retourne_est_accessible_en_ecriture(self):
+        from bassin.ui.state import repertoire_documents
+
+        chemin = repertoire_documents()
+        temoin = os.path.join(chemin, ".test_ecriture")
+        with open(temoin, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(temoin)
+
+    def test_diagnostic(self):
+        from bassin.ui.state import diagnostic_stockage
+
+        lignes = diagnostic_stockage()
+        self.assertTrue(lignes)
+        self.assertTrue(any(ok for _, ok in lignes))
 
 
 if __name__ == "__main__":

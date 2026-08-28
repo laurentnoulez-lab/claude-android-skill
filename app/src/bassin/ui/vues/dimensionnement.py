@@ -19,11 +19,11 @@ from .. import graphiques, theme
 from .base import Vue
 
 DESCRIPTIONS = {
-    SCENARIO_TEMPORISATION: "Le bassin est étanche : seul l'orifice calibré évacue l'eau vers l'exutoire.",
-    SCENARIO_DISPERSION: "Aucun exutoire : toute l'eau s'infiltre par le fond du bassin.",
-    SCENARIO_MIXTE: "Infiltration par le fond + orifice calibré placé au fond de l'ouvrage.",
-    SCENARIO_SEUIL: "L'orifice est surélevé : sous le seuil l'eau ne part que par infiltration, "
-                    "au-dessus l'ajutage s'y ajoute.",
+    SCENARIO_TEMPORISATION: "Bassin étanche : seul l'orifice calibré évacue l'eau.",
+    SCENARIO_DISPERSION: "Aucun exutoire : toute l'eau s'infiltre par le fond.",
+    SCENARIO_MIXTE: "Infiltration par le fond + orifice calibré au fond de l'ouvrage.",
+    SCENARIO_SEUIL: "Orifice surélevé : sous le seuil, infiltration seule ; au-dessus, "
+                    "l'ajutage s'y ajoute.",
 }
 ICONES = {
     SCENARIO_TEMPORISATION: ft.Icons.HOURGLASS_BOTTOM,
@@ -32,12 +32,78 @@ ICONES = {
     SCENARIO_SEUIL: ft.Icons.STAIRS,
 }
 
+#: Perméabilités indicatives (m/s) par nature de sol.
+SOLS = (
+    ("1e-3", "Sable grossier / gravier — 1 × 10⁻³ m/s", 1e-3),
+    ("3e-4", "Sable moyen — 3 × 10⁻⁴ m/s", 3e-4),
+    ("1e-4", "Sable fin — 1 × 10⁻⁴ m/s", 1e-4),
+    ("1e-5", "Sable limoneux — 1 × 10⁻⁵ m/s", 1e-5),
+    ("1e-6", "Limon — 1 × 10⁻⁶ m/s", 1e-6),
+    ("1e-7", "Argile limoneuse — 1 × 10⁻⁷ m/s", 1e-7),
+)
+
+MM_H = 3.6e6  # 1 m/s = 3 600 000 mm/h
+
 
 class VueDimensionnement(Vue):
     titre = "Dimensionnement"
     icone = ft.Icons.CALCULATE
     sous_titre = "Méthode rationnelle · 4 scénarios"
 
+    # ------------------------------------------------------------ formulaire
+    def _formulaire(self) -> ft.Control:
+        p = self.etat.projet
+
+        def maj(champ: str):
+            def _f(v: float) -> None:
+                setattr(p, champ, v)
+                self.etat.invalider()
+            return _f
+
+        def maj_k_mmh(v: float) -> None:
+            p.k_infiltration_ms = max(v, 0.0) / MM_H
+            self.etat.invalider()
+
+        def choisir_sol(e: ft.ControlEvent) -> None:
+            for cle, _, valeur in SOLS:
+                if cle == e.control.value:
+                    p.k_infiltration_ms = valeur
+                    self.etat.invalider()
+                    self.rafraichir()
+                    return
+
+        self._champ_k = theme.champ_nombre(
+            "Vitesse d'infiltration K", p.k_infiltration_ms * MM_H, maj_k_mmh, "mm/h",
+            f"soit {p.k_infiltration_ms:.2e} m/s · essai in situ",
+            on_valide=self.maj_resultats, col={"xs": 12, "md": 4},
+        )
+
+        return ft.ResponsiveRow(
+            [
+                theme.selecteur(
+                    "Nature du sol (valeur indicative)",
+                    next((c for c, _, v in SOLS if abs(v - p.k_infiltration_ms) < v * 0.01), None),
+                    [(c, t) for c, t, _ in SOLS], choisir_sol, col={"xs": 12, "md": 8},
+                ),
+                self._champ_k,
+                theme.champ_nombre("Coefficient de sécurité sur K", p.coef_securite_infiltration,
+                                   maj("coef_securite_infiltration"), "—", "GTI : 2",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+                theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
+                                   maj("surface_infiltration_m2"), "m²", "fond du dispositif",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+                theme.champ_nombre("Débit d'ajutage", p.debit_ajutage_ls, maj("debit_ajutage_ls"),
+                                   "l/s", "orifice calibré", on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 3}),
+                theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
+                                   maj("temps_vidange_max_h"), "h", "GTI : 48 h",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+            ],
+            spacing=12,
+            run_spacing=12,
+        )
+
+    # ------------------------------------------------------------- résultats
     def _carte_scenario(self, cle: str) -> ft.Control:
         res = self.etat.resultats[cle]
         actif = cle == self.etat.scenario_principal
@@ -45,7 +111,7 @@ class VueDimensionnement(Vue):
 
         def choisir(_=None) -> None:
             self.etat.scenario_principal = cle
-            self.rafraichir()
+            self.maj_resultats()
 
         details = [
             ("Durée critique", res.duree_critique_hm),
@@ -53,7 +119,7 @@ class VueDimensionnement(Vue):
             ("Intensité", f"{res.intensite_ls_ha:.0f} l/s/ha"),
             ("Débit entrant", f"{res.debit_entrant_ls:.1f} l/s"),
             ("Débit de sortie", f"{res.debit_sortant_ls:.2f} l/s"),
-            ("Temps de vidange", res.temps_vidange_hm if res.temps_vidange_h != float("inf") else "—"),
+            ("Temps de vidange", res.temps_vidange_hm),
         ]
         return ft.Container(
             content=ft.Column(
@@ -61,45 +127,41 @@ class VueDimensionnement(Vue):
                     ft.Row(
                         [
                             ft.Icon(ICONES[cle], color=couleur, size=20),
-                            ft.Text(LIBELLES_SCENARIOS[cle], size=13.5, weight=ft.FontWeight.W_700,
-                                    expand=True),
+                            ft.Text(LIBELLES_SCENARIOS[cle], size=13, weight=ft.FontWeight.W_700,
+                                    expand=True, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Icon(ft.Icons.CHECK_CIRCLE if actif else ft.Icons.RADIO_BUTTON_UNCHECKED,
                                     color=theme.BLEU if actif else theme.GRIS, size=18),
                         ],
                         spacing=8,
                     ),
-                    ft.Text(DESCRIPTIONS[cle], size=11.5, color=theme.GRIS),
+                    ft.Text(DESCRIPTIONS[cle], size=11, color=theme.GRIS, max_lines=3),
                     ft.Row(
                         [
-                            ft.Text(f"{res.volume_m3:.1f}", size=30, weight=ft.FontWeight.W_800, color=couleur),
-                            ft.Text("m³ de temporisation", size=12, color=theme.GRIS),
+                            ft.Text(f"{res.volume_m3:.1f}", size=28, weight=ft.FontWeight.W_800,
+                                    color=couleur),
+                            ft.Text("m³ de temporisation", size=11, color=theme.GRIS, expand=True),
                         ],
                         spacing=8,
                         vertical_alignment=ft.CrossAxisAlignment.END,
                     ),
                     ft.Column(
                         [
-                            ft.Row(
-                                [ft.Text(k, size=11.5, color=theme.GRIS, expand=True),
-                                 ft.Text(v, size=11.5, weight=ft.FontWeight.W_600)],
-                            )
+                            ft.Row([ft.Text(k, size=11, color=theme.GRIS, expand=True),
+                                    ft.Text(v, size=11, weight=ft.FontWeight.W_600, no_wrap=True)])
                             for k, v in details
                         ],
                         spacing=2,
                     ),
-                    ft.Container(
-                        content=theme.etiquette(
-                            "Conforme" if res.conforme else "Non conforme",
-                            theme.VERT if res.conforme else theme.ROUGE,
-                            theme.VERT_CLAIR if res.conforme else theme.ROUGE_CLAIR,
-                            ft.Icons.CHECK if res.conforme else ft.Icons.PRIORITY_HIGH,
-                        ),
-                        margin=ft.margin.only(top=4),
+                    theme.etiquette(
+                        "Conforme" if res.conforme else "Non conforme",
+                        theme.VERT if res.conforme else theme.ROUGE,
+                        theme.VERT_CLAIR if res.conforme else theme.ROUGE_CLAIR,
+                        ft.Icons.CHECK if res.conforme else ft.Icons.PRIORITY_HIGH,
                     ),
                 ],
                 spacing=8,
             ),
-            padding=16,
+            padding=14,
             border_radius=theme.RAYON,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border=ft.border.all(2 if actif else 1,
@@ -109,46 +171,21 @@ class VueDimensionnement(Vue):
             col={"xs": 12, "sm": 6, "xl": 3},
         )
 
-    def construire(self) -> List[ft.Control]:
+    def resultats(self) -> List[ft.Control]:
         p = self.etat.projet
         res = self.etat.resultat
-
-        def maj(champ: str):
-            def _f(v: float) -> None:
-                self.etat.definir(champ, v)
-                self.rafraichir()
-            return _f
-
-        parametres = ft.ResponsiveRow(
-            [
-                theme.champ_nombre("Vitesse d'infiltration K", p.k_infiltration_ms, maj("k_infiltration_ms"),
-                                   "m/s", "Essai in situ ; 1e-5 m/s = sol sableux limoneux",
-                                   scientifique=True, col={"xs": 12, "md": 4}),
-                theme.champ_nombre("Coefficient de sécurité sur K", p.coef_securite_infiltration,
-                                   maj("coef_securite_infiltration"), "-", "GTI : 2", decimales=1,
-                                   col={"xs": 6, "md": 2}),
-                theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
-                                   maj("surface_infiltration_m2"), "m²", "Fond du dispositif",
-                                   decimales=1, col={"xs": 6, "md": 3}),
-                theme.champ_nombre("Débit d'ajutage", p.debit_ajutage_ls, maj("debit_ajutage_ls"),
-                                   "l/s", "Orifice calibré", decimales=3, col={"xs": 6, "md": 3}),
-                theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
-                                   maj("temps_vidange_max_h"), "h", "GTI : 48 h", decimales=1,
-                                   col={"xs": 6, "md": 3}),
-            ],
-            spacing=12,
-            run_spacing=12,
-        )
-
         q_inf = res.debit_infiltration_ls
+
         info_debits = ft.Row(
             [
                 theme.etiquette(f"Q infiltration = {q_inf:.3f} l/s", theme.VERT, theme.VERT_CLAIR,
                                 ft.Icons.WATER_DROP),
-                theme.etiquette(f"Q ajutage = {p.debit_ajutage_ls:.3f} l/s", theme.BLEU, theme.BLEU_CLAIR,
-                                ft.Icons.CIRCLE_OUTLINED),
+                theme.etiquette(f"Q ajutage = {p.debit_ajutage_ls:.3f} l/s", theme.BLEU,
+                                theme.BLEU_CLAIR, ft.Icons.CIRCLE_OUTLINED),
                 theme.etiquette(f"Débit de fuite admissible = {p.debit_fuite_admissible_ls:.3f} l/s",
                                 theme.GRIS, theme.GRIS_CLAIR, ft.Icons.RULE),
+                theme.etiquette(f"K = {p.k_infiltration_ms:.2e} m/s", theme.ARDOISE,
+                                theme.GRIS_CLAIR, ft.Icons.TERRAIN),
             ],
             wrap=True,
             spacing=8,
@@ -159,20 +196,20 @@ class VueDimensionnement(Vue):
             [
                 ft.Container(theme.tuile(f"{res.volume_m3:.1f}", "Volume à mettre en œuvre", "m³",
                                          theme.BLEU, ft.Icons.WATER),
-                             col={"xs": 6, "md": 3}),
+                             col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(res.duree_critique_hm, "Durée de pluie critique", "",
                                          theme.ARDOISE, ft.Icons.TIMER),
-                             col={"xs": 6, "md": 3}),
+                             col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(
                     "—" if res.surface_infiltration_min_m2 is None else f"{res.surface_infiltration_min_m2:.1f}",
                     "Surface d'infiltration minimale", "m²", theme.VERT, ft.Icons.GRASS,
                     f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
-                    col={"xs": 6, "md": 3}),
+                    col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(
                     "—" if res.debit_ajutage_min_ls is None else f"{res.debit_ajutage_min_ls:.3f}",
                     "Débit d'ajutage minimal", "l/s", theme.ORANGE, ft.Icons.TUNE,
                     f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
-                    col={"xs": 6, "md": 3}),
+                    col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,
             run_spacing=12,
@@ -181,18 +218,13 @@ class VueDimensionnement(Vue):
         alertes = [theme.message(a, "alerte") for a in res.alertes]
         alertes += [theme.message(m, "info") for m in res.messages]
 
-        graphique = graphiques.construire(self._graphique_volume(), hauteur=300)
-
         return [
-            theme.section("Sol, exutoire et contraintes",
-                          ft.Column([parametres, info_debits], spacing=14),
-                          ft.Icons.TERRAIN,
-                          "Q_infiltration = 1000 × S × K / coefficient de sécurité"),
+            info_debits,
             theme.section(
                 "Scénarios étudiés",
                 ft.Column(
                     [
-                        ft.Text("Cliquez sur un scénario pour le retenir comme scénario de projet.",
+                        ft.Text("Touchez un scénario pour le retenir comme scénario de projet.",
                                 size=12, color=theme.GRIS),
                         ft.ResponsiveRow([self._carte_scenario(s) for s in ORDRE_SCENARIOS],
                                          spacing=12, run_spacing=12),
@@ -203,10 +235,30 @@ class VueDimensionnement(Vue):
             ),
             theme.section(
                 f"Résultat retenu — {LIBELLES_SCENARIOS[self.etat.scenario_principal]}",
-                ft.Column([tuiles] + alertes + [graphique], spacing=14),
+                ft.Column([tuiles] + alertes + [graphiques.construire(self._graphique_volume(), 280)],
+                          spacing=14),
                 ft.Icons.INSIGHTS,
                 "V(t) = h(t) × S_pondérée / 1000 − Q_sortie × t × 60 / 1000",
             ),
+        ]
+
+    def construire(self) -> List[ft.Control]:
+        self.zone.controls = self.resultats()
+        return [
+            theme.section(
+                "Sol, exutoire et contraintes",
+                ft.Column(
+                    [
+                        self._formulaire(),
+                        ft.Row([theme.bouton_secondaire("Recalculer", ft.Icons.REFRESH,
+                                                        lambda _: self.maj_resultats())]),
+                    ],
+                    spacing=14,
+                ),
+                ft.Icons.TERRAIN,
+                "Q_infiltration = 1000 × S × K / coefficient de sécurité",
+            ),
+            self.zone,
         ]
 
     def _graphique_volume(self):

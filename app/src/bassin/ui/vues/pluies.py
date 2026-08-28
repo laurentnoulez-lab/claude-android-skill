@@ -27,14 +27,14 @@ class VuePluies(Vue):
             self._unite = e.control.value
             self.rafraichir()
 
-        selecteur = ft.SegmentedButton(
-            selected={unite},
-            allow_multiple_selection=False,
-            on_change=changer_unite,
-            segments=[
-                ft.Segment("mm", label=ft.Text("Hauteurs [mm]"), icon=ft.Icon(ft.Icons.WATER_DROP)),
-                ft.Segment("lsha", label=ft.Text("Intensités [l/s/ha]"), icon=ft.Icon(ft.Icons.SPEED)),
-            ],
+        selecteur = ft.ResponsiveRow(
+            [
+                theme.selecteur(
+                    "Unité du tableau", unite,
+                    [("mm", "Hauteurs de pluie [mm]"), ("lsha", "Intensités [l/s/ha]")],
+                    changer_unite, col={"xs": 12, "md": 5},
+                )
+            ]
         )
 
         table = (rainfall.table_qdf_mm(p.commune_ins, src.source) if unite == "mm"
@@ -66,11 +66,9 @@ class VuePluies(Vue):
                 )))
             lignes.append(ft.DataRow(cells=cellules))
 
-        tableau = ft.Row(
-            [ft.Column([ft.DataTable(columns=colonnes, rows=lignes, column_spacing=16,
-                                     heading_row_height=38, data_row_max_height=40,
-                                     divider_thickness=0.4)], scroll=ft.ScrollMode.AUTO)],
-            scroll=ft.ScrollMode.AUTO,
+        tableau = theme.tableau_defilant(
+            ft.DataTable(columns=colonnes, rows=lignes, column_spacing=12,
+                         heading_row_height=36, data_row_max_height=38, divider_thickness=0.4)
         )
 
         info: List[ft.Control] = []

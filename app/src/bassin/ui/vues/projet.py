@@ -19,7 +19,9 @@ class VueProjet(Vue):
 
     # ---------------------------------------------------------------- commune
     def _ouvrir_selecteur_commune(self, e=None) -> None:
-        resultats = ft.ListView(spacing=2, height=340)
+        hauteur_ecran = self.page.height or 800
+        largeur_ecran = self.page.width or 1000
+        resultats = ft.ListView(spacing=2, height=max(200, min(360, hauteur_ecran - 320)))
         champ = ft.TextField(
             label="Rechercher une commune ou un code INS",
             autofocus=True,
@@ -67,8 +69,10 @@ class VueProjet(Vue):
         dialogue = ft.AlertDialog(
             modal=True,
             title=ft.Text("Choisir la commune"),
-            content=ft.Container(ft.Column([champ, filtre_wallonnes, resultats], spacing=10, tight=True),
-                                 width=460),
+            content=ft.Container(
+                ft.Column([champ, filtre_wallonnes, resultats], spacing=10, tight=True),
+                width=min(460, largeur_ecran - 60),
+            ),
             actions=[ft.TextButton("Fermer", on_click=lambda _: self.page.close(dialogue))],
         )
         self.page.open(dialogue)
@@ -106,20 +110,24 @@ class VueProjet(Vue):
             content=ft.ResponsiveRow(
                 [
                     ft.Container(libelle, col={"xs": 12, "md": 5},
-                                 alignment=ft.alignment.center_left),
+                                 alignment=ft.alignment.center_left,
+                                 padding=ft.padding.only(bottom=2)),
                     ft.Container(
-                        theme.champ_nombre("Coefficient", surface.coefficient, maj_coef, "-", decimales=2),
+                        theme.champ_nombre("Coefficient", surface.coefficient, maj_coef, "—",
+                                           on_valide=self._maj_totaux, compact=True),
                         col={"xs": 5, "md": 2},
                     ),
                     ft.Container(
-                        theme.champ_nombre("Surface", surface.aire_m2, maj_aire, "m²", decimales=1),
+                        theme.champ_nombre("Surface", surface.aire_m2, maj_aire, "m²",
+                                           on_valide=self._maj_totaux, compact=True),
                         col={"xs": 7, "md": 3},
                     ),
                     ft.Container(
                         ft.Row(
                             [
                                 ft.Text(f"{surface.aire_ponderee_m2:.1f} m² actifs", size=12,
-                                        color=theme.BLEU, weight=ft.FontWeight.W_600),
+                                        color=theme.BLEU, weight=ft.FontWeight.W_600,
+                                        no_wrap=True),
                                 ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=18, tooltip="Supprimer",
                                               on_click=supprimer) if personnalisee else ft.Container(),
                             ],
@@ -309,7 +317,7 @@ class VueProjet(Vue):
                                 ft.Container(
                                     theme.champ_nombre("Surface de référence du projet",
                                                        p.surface_reference_m2, maj_sref, "m²",
-                                                       "Parcelle concernée par le projet", decimales=1),
+                                                       "parcelle concernée par le projet"),
                                     col={"xs": 12, "md": 5},
                                 ),
                             ]
