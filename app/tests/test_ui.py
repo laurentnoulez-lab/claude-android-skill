@@ -144,6 +144,32 @@ def parcourir(controle, profondeur: int = 0) -> int:
     return total
 
 
+def textes(controle, profondeur: int = 0) -> list:
+    """Rassemble les libellés visibles d'un arbre de contrôles."""
+    trouves = []
+    if profondeur > 40:
+        return trouves
+    # La « value » d'une liste déroulante est une clé interne, pas un libellé.
+    lisibles = ("label", "tooltip", "hint_text", "helper_text", "text")
+    if not isinstance(controle, ft.Dropdown):
+        lisibles = ("value",) + lisibles
+    for attribut in lisibles:
+        valeur = getattr(controle, attribut, None)
+        if isinstance(valeur, str):
+            trouves.append(valeur)
+    for attribut in ("controls", "content", "actions", "cells", "rows", "columns",
+                     "destinations", "segments", "options", "data_series", "label", "leading",
+                     "title", "subtitle"):
+        valeur = getattr(controle, attribut, None)
+        if valeur is None:
+            continue
+        elements = valeur if isinstance(valeur, (list, tuple)) else [valeur]
+        for element in elements:
+            if isinstance(element, ft.Control):
+                trouves.extend(textes(element, profondeur + 1))
+    return trouves
+
+
 class TestConstructionDesVues(unittest.TestCase):
     def setUp(self):
         self.page = PageFactice()
@@ -183,6 +209,18 @@ class TestConstructionDesVues(unittest.TestCase):
             vue = classe(self.page, self.etat)
             self.assertIsInstance(vue.afficher(), ft.Column)
             vue.rafraichir()
+
+    def test_les_nombres_affiches_utilisent_la_virgule(self):
+        """Aucun séparateur décimal anglo-saxon ne doit apparaître à l'écran."""
+        for classe in VUES:
+            with self.subTest(vue=classe.__name__):
+                vue = classe(self.page, self.etat)
+                vue.afficher()
+                for texte in textes(vue.corps):
+                    self.assertIsNone(
+                        re.search(r"\d\.\d", texte),
+                        f"{classe.__name__} affiche « {texte} » avec un point décimal",
+                    )
 
     def test_selecteur_de_commune(self):
         vue = VueProjet(self.page, self.etat)
@@ -440,6 +478,22 @@ class TestCoquilleApplication(unittest.TestCase):
         page.route = "/vue/zzz"
         application.main(page)
         self.assertTrue(page.controls)
+
+    def test_route_tardive_ouvre_la_bonne_section(self):
+        """Sur le web, Flet ne transmet l'URL qu'après le premier rendu."""
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertIn("Projet", titres)
+        self.assertNotIn("Ajutage", titres)
+
+        page.route = "/vue/4"
+        self.assertIsNotNone(page.on_route_change)
+        page.on_route_change(None)
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertIn("Ajutage", titres)
 
     def test_diagnostic_accessible(self):
         import main as application

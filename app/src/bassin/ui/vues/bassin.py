@@ -116,10 +116,10 @@ class VueBassin(Vue):
         details = ft.Row(
             [
                 theme.etiquette_statut(sim.statut),
-                theme.etiquette(f"Pluie critique : {sim.hauteur_pluie_mm:.1f} mm en "
-                                f"{sim.duree_pluie_min:.0f} min", theme.BLEU, theme.BLEU_CLAIR,
+                theme.etiquette(theme.fr(f"Pluie critique : {sim.hauteur_pluie_mm:.1f} mm en "
+                                         f"{sim.duree_pluie_min:.0f} min"), theme.BLEU, theme.BLEU_CLAIR,
                                 ft.Icons.WATER_DROP_OUTLINED),
-                theme.etiquette(f"Volume ruisselé : {sim.volume_ruissele_m3:.1f} m³", theme.GRIS,
+                theme.etiquette(theme.fr(f"Volume ruisselé : {sim.volume_ruissele_m3:.1f} m³"), theme.GRIS,
                                 theme.GRIS_CLAIR, ft.Icons.SHOWER),
                 theme.etiquette(f"T = {p.periode_retour} ans", theme.ARDOISE, theme.GRIS_CLAIR,
                                 ft.Icons.EVENT_REPEAT),
@@ -204,11 +204,11 @@ class VueBassin(Vue):
             axe_y="Volume stocké [m³]",
             series=[charts.Serie("Volume stocké", [(p.t_min, p.volume_m3) for p in sim.pas],
                                  charts.BLEU, aire=True)],
-            reperes=[charts.Repere(b.volume_total_m3, f"Capacité {b.volume_total_m3:.1f} m³", charts.ROUGE)],
+            reperes=[charts.Repere(b.volume_total_m3, theme.nombre(b.volume_total_m3, 1, "m³ de capacité"), charts.ROUGE)],
         )
         if b.volume_sous_ajutage_m3 > 0:
             g.reperes.append(charts.Repere(b.volume_sous_ajutage_m3,
-                                           f"Axe de l'ajutage {b.volume_sous_ajutage_m3:.1f} m³",
+                                           theme.nombre(b.volume_sous_ajutage_m3, 1, "m³ · axe de l'ajutage"),
                                            charts.VIOLET))
         g.reperes.append(charts.Repere(sim.duree_pluie_min, "Fin de la pluie", charts.GRIS, vertical=True))
         return g

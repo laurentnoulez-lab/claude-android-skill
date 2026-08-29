@@ -13,6 +13,8 @@ import zlib
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
+from ..formats import fr
+
 Couleur = Tuple[int, int, int]
 
 BLEU = (37, 99, 235)
@@ -198,6 +200,11 @@ def graduations(vmin: float, vmax: float, n: int = 5) -> List[float]:
 
 
 def format_nombre(v: float) -> str:
+    """Graduation d'axe, virgule décimale comprise (la police 5x7 a la virgule)."""
+    return fr(_format_nombre(v))
+
+
+def _format_nombre(v: float) -> str:
     a = abs(v)
     if a >= 100:
         return f"{v:.0f}"

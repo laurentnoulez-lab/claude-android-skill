@@ -168,14 +168,16 @@ class VueRapport(Vue):
                     ("Projet", p.nom_projet or "—"),
                     ("Commune", f"{p.commune_nom} (INS {p.commune_ins})"),
                     ("Période de retour", f"{p.periode_retour} ans"),
-                    ("Surface active pondérée", f"{p.aire_ponderee_m2:.1f} m²"),
+                    ("Surface active pondérée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
                     ("Scénario retenu", LIBELLES_SCENARIOS[etat.scenario_principal]),
                     ("Volume de temporisation",
-                     f"{res.volume_m3:.1f} m³" if res.dimensionnable else "— (aucun débit de sortie)"),
+                     theme.nombre(res.volume_m3, 1, "m³") if res.dimensionnable
+                     else "— (aucun débit de sortie)"),
                     ("Durée critique", res.duree_critique_hm if res.dimensionnable else "—"),
                     ("Vidange après la pluie", res.temps_vidange_hm if res.dimensionnable else "—"),
                     ("Ouvrage encodé",
-                     f"{etat.bassin.volume_total_m3:.1f} m³" if etat.bassin_valide else "non encodé"),
+                     theme.nombre(etat.bassin.volume_total_m3, 1, "m³") if etat.bassin_valide
+                     else "non encodé"),
                 ]
             ],
             spacing=2,

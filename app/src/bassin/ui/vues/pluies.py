@@ -57,7 +57,7 @@ class VuePluies(Vue):
             for j, v in enumerate(ligne):
                 selection = rainfall.RETURN_PERIODS[j] == p.periode_retour
                 cellules.append(ft.DataCell(ft.Container(
-                    ft.Text("—" if v is None else (f"{v:.1f}" if unite == "mm" else f"{v:.0f}"),
+                    ft.Text("—" if v is None else theme.fr(f"{v:.1f}" if unite == "mm" else f"{v:.0f}"),
                             size=12, weight=ft.FontWeight.W_700 if selection else None,
                             color=theme.BLEU if selection else None),
                     bgcolor=theme.BLEU_CLAIR if selection else None,

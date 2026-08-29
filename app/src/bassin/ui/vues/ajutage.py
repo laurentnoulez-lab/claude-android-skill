@@ -52,7 +52,7 @@ class VueAjutage(Vue):
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
                                    col={"xs": 12, "sm": 6, "md": 3}),
                 theme.selecteur("Coefficient de débit Cd", str(p.coef_debit_orifice),
-                                [(str(v), f"{v:.2f} — {lib}") for lib, v in orifice.COEFFICIENTS_DEBIT],
+                                [(str(v), theme.fr(f"{v:.2f} — {lib}")) for lib, v in orifice.COEFFICIENTS_DEBIT],
                                 maj_cd, col={"xs": 12, "md": 6}),
             ],
             spacing=12,
@@ -89,11 +89,12 @@ class VueAjutage(Vue):
 
         calcul = ft.Column(
             [
-                ft.Text(f"A = Q / (Cd × √(2 g h)) = {res.debit_ls / 1000:.6f} / "
-                        f"({res.coef_debit:.2f} × √(2 × 9,81 × {res.charge_m:.2f})) = "
-                        f"{res.section_m2:.6f} m²", size=12, color=theme.GRIS, selectable=True),
-                ft.Text(f"d = √(4 A / π) = {res.diametre_mm:.1f} mm  ·  "
-                        f"vitesse dans l'orifice v = {res.vitesse_ms:.2f} m/s",
+                ft.Text(theme.fr(f"A = Q / (Cd × √(2 g h)) = {res.debit_ls / 1000:.6f} / "
+                                 f"({res.coef_debit:.2f} × √(2 × 9,81 × {res.charge_m:.2f})) = "
+                                 f"{res.section_m2:.6f} m²"),
+                        size=12, color=theme.GRIS, selectable=True),
+                ft.Text(theme.fr(f"d = √(4 A / π) = {res.diametre_mm:.1f} mm  ·  "
+                                 f"vitesse dans l'orifice v = {res.vitesse_ms:.2f} m/s"),
                         size=12, color=theme.GRIS, selectable=True),
             ],
             spacing=4,
@@ -109,8 +110,8 @@ class VueAjutage(Vue):
                             ft.DataCell(ft.Text(f"{d}", size=12,
                                                 weight=ft.FontWeight.W_700
                                                 if d == res.diametre_commercial_mm else None)),
-                            ft.DataCell(ft.Text(f"{s:.2f}", size=12)),
-                            ft.DataCell(ft.Text(f"{q:.3f}", size=12,
+                            ft.DataCell(ft.Text(theme.fr(f"{s:.2f}"), size=12)),
+                            ft.DataCell(ft.Text(theme.fr(f"{q:.3f}"), size=12,
                                                 color=theme.VERT if q <= res.debit_ls else theme.ROUGE)),
                         ],
                         selected=d == res.diametre_commercial_mm,
@@ -132,7 +133,7 @@ class VueAjutage(Vue):
                 orifice.courbe_hauteur_debit(res.diametre_commercial_mm or res.diametre_mm,
                                              max(res.charge_m, 0.1), res.coef_debit),
                 charts.VERT)],
-            reperes=[charts.Repere(res.debit_ls, f"Débit de projet {res.debit_ls:.2f} l/s", charts.ROUGE)],
+            reperes=[charts.Repere(res.debit_ls, theme.nombre(res.debit_ls, 2, "l/s de projet"), charts.ROUGE)],
         )
 
         return [
@@ -142,7 +143,8 @@ class VueAjutage(Vue):
                           "Le débit réel varie avec la charge ; le dimensionnement retient la charge "
                           "maximale."),
             theme.section("Abaque des diamètres commerciaux", tableau, ft.Icons.LIST_ALT,
-                          f"Charge h = {p.hauteur_charge_m:.2f} m · Cd = {p.coef_debit_orifice:.2f}"),
+                          theme.fr(f"Charge h = {p.hauteur_charge_m:.2f} m · "
+                                   f"Cd = {p.coef_debit_orifice:.2f}")),
         ]
 
     def construire(self) -> List[ft.Control]:

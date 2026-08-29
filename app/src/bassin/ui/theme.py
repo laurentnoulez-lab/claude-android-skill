@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from typing import Callable, List, Optional, Sequence
 
 import flet as ft
+
+from ..formats import fr, nombre  # noqa: F401  (réexporté pour les vues)
 
 BLEU = "#1D4ED8"
 BLEU_CLAIR = "#DBEAFE"
@@ -78,7 +79,7 @@ def tuile(valeur: str, libelle: str, unite: str = "", couleur: str = BLEU,
         ),
         ft.Row(
             [
-                ft.Text(valeur, size=26, weight=ft.FontWeight.W_800, color=couleur),
+                ft.Text(fr(valeur), size=26, weight=ft.FontWeight.W_800, color=couleur),
                 ft.Text(unite, size=13, color=GRIS, weight=ft.FontWeight.W_600),
             ],
             spacing=5,
@@ -87,7 +88,7 @@ def tuile(valeur: str, libelle: str, unite: str = "", couleur: str = BLEU,
         ),
     ]
     if aide:
-        contenu.append(ft.Text(aide, size=11, color=GRIS))
+        contenu.append(ft.Text(fr(aide), size=11, color=GRIS))
     return ft.Container(
         content=ft.Column(contenu, spacing=3),
         padding=ft.padding.symmetric(14, 16),
@@ -116,16 +117,6 @@ def etiquette_statut(statut: str) -> ft.Control:
              "DEBORDEMENT": ft.Icons.ERROR}.get(statut, ft.Icons.INFO)
     return etiquette(LIBELLES_STATUT.get(statut, statut), couleur, fond, icone)
 
-
-def fr(texte: str) -> str:
-    """Virgule décimale francophone dans un texte déjà formaté."""
-    return re.sub(r"(?<=\d)\.(?=\d)", ",", texte)
-
-
-def nombre(valeur: float, decimales: int = 1, unite: str = "") -> str:
-    """Nombre affiché à la française, avec unité facultative."""
-    texte = fr(f"{valeur:.{decimales}f}")
-    return f"{texte} {unite}".strip() if unite else texte
 
 
 def formater_nombre(valeur: float, decimales: int = 3) -> str:

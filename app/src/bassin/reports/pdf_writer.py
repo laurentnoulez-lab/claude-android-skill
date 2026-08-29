@@ -11,6 +11,8 @@ import zlib
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from ..formats import fr
+
 A4 = (595.28, 841.89)  # points
 
 # Largeurs Helvetica (unités/1000) pour l'ASCII imprimable.
@@ -75,8 +77,13 @@ ORANGE_PALE = rgb(254, 243, 199)
 BLEU_PALE = rgb(219, 234, 254)
 
 
-def nettoyer(texte: str) -> str:
-    """Remplace les caractères hors WinAnsi."""
+def nettoyer(texte: str, convertir: bool = True) -> str:
+    """Virgule décimale francophone, puis caractères hors WinAnsi remplacés.
+
+    convertir=False pour les titres : la numérotation « 1.1 » garde son point.
+    """
+    if convertir:
+        texte = fr(texte)
     for k, v in _SUBST.items():
         texte = texte.replace(k, v)
     return "".join(c if ord(c) < 256 else "?" for c in texte)
@@ -155,9 +162,10 @@ class Pdf:
         )
 
     def _texte_brut(self, x: float, y: float, texte: str, taille: float,
-                    couleur: Couleur = NOIR, gras: bool = False, italique: bool = False) -> None:
+                    couleur: Couleur = NOIR, gras: bool = False, italique: bool = False,
+                    convertir: bool = True) -> None:
         police = "F2" if gras else ("F3" if italique else "F1")
-        contenu = nettoyer(texte).replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+        contenu = nettoyer(texte, convertir).replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
         octets = "".join(f"\\{ord(c):03o}" if ord(c) > 126 else c for c in contenu)
         self._flux.append(
             f"BT /{police} {taille} Tf {couleur[0]:.3f} {couleur[1]:.3f} {couleur[2]:.3f} rg "
@@ -185,13 +193,14 @@ class Pdf:
 
     def titre(self, texte: str, taille: float = 17.0, couleur: Couleur = BLEU) -> None:
         self.besoin(taille * 2.2)
-        self._texte_brut(self.marge, self.y + taille, texte, taille, couleur, True)
+        self._texte_brut(self.marge, self.y + taille, texte, taille, couleur, True,
+                         convertir=False)
         self.y += taille * 1.5
 
     def titre1(self, texte: str) -> None:
         self.besoin(46)
         self.y += 8
-        self._texte_brut(self.marge, self.y + 12, texte, 12.5, BLEU, True)
+        self._texte_brut(self.marge, self.y + 12, texte, 12.5, BLEU, True, convertir=False)
         self.y += 17
         self.ligne(self.marge, self.y, self.largeur - self.marge, self.y, rgb(191, 219, 254), 1.0)
         self.y += 8
@@ -199,7 +208,7 @@ class Pdf:
     def titre2(self, texte: str) -> None:
         self.besoin(30)
         self.y += 5
-        self._texte_brut(self.marge, self.y + 10.5, texte, 10.5, NOIR, True)
+        self._texte_brut(self.marge, self.y + 10.5, texte, 10.5, NOIR, True, convertir=False)
         self.y += 16
 
     def encadre(self, texte: str, fond: Couleur = BLEU_PALE, couleur: Couleur = NOIR,

@@ -82,7 +82,7 @@ class VueDimensionnement(Vue):
         champs_k = theme.champs_convertis(
             "Vitesse d'infiltration K", "m/s", p.k_infiltration_ms,
             "soit", "mm/h", MM_H, maj_k, on_valide=self.maj_resultats,
-            aide_a="essai in situ · 1e-5, 0,00001 ou 0.00001",
+            aide_a="essai in situ · 1e-5 ou 0,00001",
             aide_b="équivalent, modifiable aussi",
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
@@ -172,7 +172,7 @@ class VueDimensionnement(Vue):
                     ft.Text(DESCRIPTIONS[cle], size=11, color=theme.GRIS, max_lines=3),
                     ft.Row(
                         [
-                            ft.Text(res.volume_affiche, size=28, weight=ft.FontWeight.W_800,
+                            ft.Text(theme.fr(res.volume_affiche), size=28, weight=ft.FontWeight.W_800,
                                     color=couleur),
                             ft.Text("m³ de temporisation", size=11, color=theme.GRIS, expand=True),
                         ],
@@ -182,7 +182,7 @@ class VueDimensionnement(Vue):
                     ft.Column(
                         [
                             ft.Row([ft.Text(k, size=11, color=theme.GRIS, expand=True),
-                                    ft.Text(v, size=11, weight=ft.FontWeight.W_600, no_wrap=True)])
+                                    ft.Text(theme.fr(v), size=11, weight=ft.FontWeight.W_600, no_wrap=True)])
                             for k, v in details
                         ],
                         spacing=2,
@@ -314,7 +314,7 @@ class VueDimensionnement(Vue):
             axe_y="Volume [m³]",
             x_log=True,
             series=[charts.Serie("Volume à maîtriser", pts, charts.BLEU, aire=True)],
-            reperes=[charts.Repere(res.volume_m3, f"Volume retenu {res.volume_m3:.1f} m³", charts.ROUGE)],
+            reperes=[charts.Repere(res.volume_m3, theme.nombre(res.volume_m3, 1, "m³ retenus"), charts.ROUGE)],
         )
         if res.duree_critique_min:
             g.reperes.append(charts.Repere(res.duree_critique_min,

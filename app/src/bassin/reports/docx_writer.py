@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 from xml.sax.saxutils import escape
 
+from ..formats import fr
+
 EMU_PAR_CM = 360000
 TWIP_PAR_CM = 567
 
@@ -43,17 +45,19 @@ class DocxBuilder:
 
     # -- contenu -----------------------------------------------------------
     def titre_principal(self, texte: str, sous_titre: str = "") -> None:
-        self._corps.append(self._p(texte, taille=32, gras=True, couleur="1D4ED8", espace_apres=60))
+        self._corps.append(self._p(texte, taille=32, gras=True, couleur="1D4ED8", espace_apres=60,
+                                   convertir=False))
         if sous_titre:
             self._corps.append(self._p(sous_titre, taille=20, italique=True, couleur="475569", espace_apres=240))
 
     def titre1(self, texte: str) -> None:
         self._corps.append(self._p(texte, taille=26, gras=True, couleur="1D4ED8",
-                                   espace_avant=280, espace_apres=120, bordure_bas=True))
+                                   espace_avant=280, espace_apres=120, bordure_bas=True,
+                                   convertir=False))
 
     def titre2(self, texte: str) -> None:
         self._corps.append(self._p(texte, taille=22, gras=True, couleur="0F172A",
-                                   espace_avant=200, espace_apres=80))
+                                   espace_avant=200, espace_apres=80, convertir=False))
 
     def paragraphe(self, texte: str = "", gras: bool = False, italique: bool = False,
                    taille: int = 20, couleur: str = "0F172A", puce: bool = False) -> None:
@@ -132,7 +136,8 @@ class DocxBuilder:
     def _p(texte: str, taille: int = 20, gras: bool = False, italique: bool = False,
            couleur: str = "0F172A", fond: Optional[str] = None, alignement: str = "left",
            espace_avant: int = 0, espace_apres: int = 60, retrait: int = 0,
-           bordure_bas: bool = False) -> str:
+           bordure_bas: bool = False, convertir: bool = True) -> str:
+        # convertir=False pour les titres : la numérotation « 1.1 » garde son point.
         props = [f'<w:spacing w:before="{espace_avant}" w:after="{espace_apres}"/>']
         if alignement != "left":
             props.append(f'<w:jc w:val="{alignement}"/>')
@@ -148,7 +153,7 @@ class DocxBuilder:
         for i, morceau in enumerate(texte.split("\n")):
             if i:
                 contenu += "<w:r><w:br/></w:r>"
-            contenu += f'<w:r>{rpr}<w:t xml:space="preserve">{escape(morceau)}</w:t></w:r>'
+            contenu += f'<w:r>{rpr}<w:t xml:space="preserve">{escape(fr(morceau) if convertir else morceau)}</w:t></w:r>'
         return f'<w:p><w:pPr>{"".join(props)}</w:pPr>{contenu}</w:p>'
 
     # -- ecriture ----------------------------------------------------------

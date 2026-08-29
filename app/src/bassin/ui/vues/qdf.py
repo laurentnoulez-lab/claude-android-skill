@@ -69,17 +69,18 @@ class VueTableQDF(Vue):
                 cellules.append(
                     ft.DataCell(
                         ft.Container(
-                            ft.Text(texte, size=12, color=couleur, weight=ft.FontWeight.W_600,
+                            ft.Text(theme.fr(texte), size=12, color=couleur, weight=ft.FontWeight.W_600,
                                     text_align=ft.TextAlign.CENTER),
                             bgcolor=fond,
                             padding=ft.padding.symmetric(4, 8),
                             border_radius=6,
                             alignment=ft.alignment.center,
-                            tooltip=(f"{rainfall.QDF_DURATION_LABELS[i]} · T = {c.periode_retour} ans\n"
-                                     f"Pluie : {c.hauteur_mm:.1f} mm\n"
-                                     f"Volume requis : {c.volume_requis_m3:.1f} m³ / "
-                                     f"{c.capacite_m3:.1f} m³\n"
-                                     f"Vidange : {c.temps_vidange_h:.1f} h"),
+                            tooltip=theme.fr(
+                                f"{rainfall.QDF_DURATION_LABELS[i]} · T = {c.periode_retour} ans\n"
+                                f"Pluie : {c.hauteur_mm:.1f} mm\n"
+                                f"Volume requis : {c.volume_requis_m3:.1f} m³ / "
+                                f"{c.capacite_m3:.1f} m³\n"
+                                f"Vidange : {c.temps_vidange_h:.1f} h"),
                         )
                     )
                 )
@@ -130,7 +131,7 @@ class VueTableQDF(Vue):
                 "Capacité d'absorption du bassin",
                 ft.Column([bandeau, bandeau_2, legende], spacing=12),
                 ft.Icons.VERIFIED,
-                f"Bassin de {self.etat.bassin.volume_total_m3:.1f} m³ · "
+                f"Bassin de {theme.nombre(self.etat.bassin.volume_total_m3, 1, 'm³')} · "
                 f"{self.etat.projet.commune_nom}",
             ),
             theme.section(

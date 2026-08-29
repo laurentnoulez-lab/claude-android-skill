@@ -1,12 +1,14 @@
 """Tests des générateurs de rapports (XLSX, DOCX, PDF) et des graphiques."""
 
 import os
+import re
 import shutil
 import struct
 import sys
 import tempfile
 import unittest
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
@@ -157,6 +159,44 @@ class TestWord(BaseRapport):
             self.assertIn(media, rels)
         for i in range(1, len(medias) + 1):
             self.assertIn(f'r:embed="rIdImg{i}"', document)
+
+
+class TestVirguleDecimale(BaseRapport):
+    """Les rapports francophones affichent une virgule décimale, pas un point."""
+
+    #: Les numéros de section (« 1.1 Surfaces incidentes ») gardent leur point.
+    TITRE = re.compile(r"^\d+(?:\.\d+)* ")
+
+    def _fautifs(self, textes):
+        return [t for t in textes
+                if re.search(r"\d\.\d", t) and not self.TITRE.match(t.strip())]
+
+    def test_word(self):
+        chemin = docx_report.ecrire(self.dossier, self.chemin("virgules.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        textes = re.findall(r"<w:t[^>]*>(.*?)</w:t>", document, re.S)
+        self.assertTrue(any(re.search(r"\d,\d", t) for t in textes))
+        self.assertEqual(self._fautifs(textes), [])
+
+    def test_pdf(self):
+        chemin = pdf_report.ecrire(self.dossier, self.chemin("virgules.pdf"))
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        textes = [t[1:-1] for t in re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))]
+        self.assertTrue(any(re.search(r"\d,\d", t) for t in textes))
+        self.assertEqual(self._fautifs(textes), [])
+
+    def test_graduations_de_graphique(self):
+        self.assertEqual(charts.format_nombre(66.3), "66,3")
+        self.assertEqual(charts.format_nombre(1200), "1200")
+        self.assertIn(",", charts._FONT)  # la police 5x7 sait tracer la virgule
 
 
 class TestPdf(BaseRapport):
