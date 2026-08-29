@@ -321,13 +321,14 @@ def main(page: ft.Page) -> None:
 
     def sur_changement_de_route(_=None) -> None:
         """Flet ne connaît l'URL qu'après connexion du client : on la relit ici."""
+        trace(f"route reçue : {getattr(page, 'route', None)!r}")
         demandee = vue_demandee()
         if demandee != index["courant"]:
             afficher(demandee)
 
     page.on_route_change = sur_changement_de_route
 
-    trace("contrôles construits")
+    trace(f"contrôles construits · route au démarrage : {getattr(page, 'route', None)!r}")
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     page_prete["oui"] = True
     trace("coquille affichée")

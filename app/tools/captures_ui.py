@@ -53,6 +53,39 @@ def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str
         print(f"  ! défilement impossible ({nom_format}/{nom}) : {str(exc)[:80]}")
 
 
+def etiquettes(page) -> list:
+    """Libellés exposés par l'arbre d'accessibilité de Flutter (diagnostic)."""
+    try:
+        return page.evaluate(
+            """() => Array.from(document.querySelectorAll('flt-semantics[aria-label]'))
+                      .map(e => e.getAttribute('aria-label')).filter(Boolean).slice(0, 60)"""
+        )
+    except Exception as exc:  # pragma: no cover
+        return [f"illisible : {str(exc)[:80]}"]
+
+
+def cliquer_etiquette(page, libelle: str, delai: int = 4000) -> bool:
+    """Clique un élément de l'arbre d'accessibilité par son libellé exact."""
+    try:
+        page.locator(f'flt-semantics[aria-label="{libelle}"]').first.click(timeout=delai)
+        return True
+    except Exception:
+        return False
+
+
+def ouvrir_section(page, vue: str, compact: bool) -> bool:
+    """Ouvre une section comme le ferait l'utilisateur : tiroir ou rail lateral."""
+    if compact and not cliquer_etiquette(page, "Sections"):
+        return False
+    if compact:
+        page.wait_for_timeout(1200)
+    if cliquer_etiquette(page, vue):
+        return True
+    if compact:  # le tiroir reste ouvert : on le referme pour ne pas fausser la suite
+        page.keyboard.press("Escape")
+    return False
+
+
 def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -67,8 +100,10 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             page = navigateur.new_page(viewport={"width": largeur, "height": hauteur})
             erreurs: list[str] = []
             page.on("pageerror", lambda e: erreurs.append(f"[{nom_format}] pageerror : {str(e)[:400]}"))
-            page.on("console", lambda m: erreurs.append(f"[{nom_format}] {m.type} : {m.text[:400]}")
-                    if m.type in ("error", "warning") else None)
+            # Tous les messages sont conservés : les jalons de démarrage écrits par
+            # l'application (print côté Pyodide) arrivent en type « log » et sont la
+            # seule fenêtre sur ce qui se passe dans le navigateur.
+            page.on("console", lambda m: erreurs.append(f"[{nom_format}] {m.type} : {m.text[:400]}"))
             page.goto(url, wait_until="load", timeout=90000)
             page.wait_for_timeout(15000)
             # Flutter dessine dans un canvas : sans l'arbre d'accessibilité, aucun
@@ -78,19 +113,25 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 page.wait_for_timeout(2000)
             except Exception as exc:
                 print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
+            erreurs.append(f"[{nom_format}] étiquettes accessibles : {etiquettes(page)}")
             page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
             defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
-            # La navigation se fait par la route (#/vue/N) : dans le canvas Flutter,
-            # les libellés ne sont pas toujours atteignables par un clic scripté.
+            # La navigation se fait dans l'application elle-même, par l'arbre
+            # d'accessibilité : c'est ce que fait l'utilisateur, et cela ne dépend
+            # ni de la stratégie d'URL de Flet ni du serveur de fichiers.
+            compact = largeur < 840
             for i, vue in enumerate(VUES[1:], start=1):
                 nom = vue.replace(" ", "_")
                 try:
-                    page.goto(f"{url}vue/{i}", wait_until="load", timeout=90000)
-                    page.wait_for_timeout(12000)
+                    if not ouvrir_section(page, vue, compact):
+                        erreurs.append(f"[{nom_format}] section « {vue} » inatteignable")
+                        continue
+                    page.wait_for_timeout(2500)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
                 except Exception as exc:  # pragma: no cover - dépend du rendu
                     print(f"  ! {nom_format} / {vue} : {str(exc)[:120]}")
+                    erreurs.append(f"[{nom_format}] {vue} : {str(exc)[:200]}")
             journal.extend(erreurs)
             if erreurs:
                 print(f"  ! {len(erreurs)} message(s) console ({nom_format})")
