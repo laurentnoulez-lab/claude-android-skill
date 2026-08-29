@@ -4,7 +4,7 @@ Application de dimensionnement et de vérification de bassins d'orage par la **m
 rationnelle**, à partir des **pluies statistiques du GTI** (Guide Technique d'Infiltration,
 Région wallonne) embarquées dans l'application.
 
-Livrables : **APK Android** et **exécutable Windows (.exe)**, à partir d'un code unique
+Livrables : **APK Android** et **installateur Windows**, à partir d'un code unique
 (Python + [Flet](https://flet.dev)).
 
 ![Icône](src/assets/icon.png)
@@ -14,7 +14,7 @@ Livrables : **APK Android** et **exécutable Windows (.exe)**, à partir d'un co
 | Onglet | Contenu |
 |---|---|
 | **Projet** | Commune (574 communes, dont les 262 communes wallonnes), période de retour (2 → 200 ans), surfaces incidentes et coefficients de ruissellement du GTI |
-| **Dimensionnement** | Vitesse d'infiltration K, débit d'ajutage, temps de vidange maximum ; comparaison des **4 scénarios** ; volume, durée critique, surface d'infiltration minimale, débit d'ajutage minimal |
+| **Dimensionnement** | Vitesse d'infiltration K (en **m/s**, équivalent mm/h complété tout seul), débit d'ajutage (en **l/s** ou **l/(s·ha)**, au choix), temps de vidange maximum ; comparaison des **4 scénarios** ; volume, durée critique, surface d'infiltration minimale, débit d'ajutage minimal |
 | **Bassin** | Encodage de l'ouvrage (volume tampon, volume sous l'ajutage, surface de dispersion, débit d'ajutage) et **simulation complète** du remplissage / vidange |
 | **Table QDF** | Tableau récurrences × durées : quelles pluies l'ouvrage encaisse sans déborder |
 | **Ajutage** | Dimensionnement de l'orifice (Torricelli), abaque des diamètres commerciaux |
@@ -98,10 +98,23 @@ app/
 │       │   ├── docx_report.py   rapport Word
 │       │   ├── pdf_writer.py    générateur PDF sans dépendance native
 │       │   └── pdf_report.py    rapport PDF (graphiques vectoriels)
+│       ├── formats.py           virgule décimale, partagée écran et rapports
 │       └── ui/                  thème, état, graphiques Flet et 7 vues
-├── tests/                       66 tests unitaires
+├── tests/                       107 tests unitaires
 └── tools/                       génération de l'icône et du dossier de démonstration
 ```
+
+## Saisie
+
+* Les nombres s'affichent à la française (**virgule décimale**), à l'écran comme dans les
+  rapports Word et PDF. Le classeur Excel garde des cellules numériques, mises en forme
+  par Excel selon la langue du poste.
+* La saisie accepte indifféremment `1e-5`, `0,00001` ou `0.00001`. Une valeur fautive
+  n'est signalée qu'une fois le champ quitté : taper `1e-5` passe par `1e`, qui n'est pas
+  un nombre sans que l'utilisateur ait commis d'erreur.
+* Les champs couplés (K en m/s ↔ mm/h, ajutage en l/s ↔ l/s/ha) se complètent dans les
+  deux sens ; la conversion en l/s/ha s'appuie sur les surfaces raccordées et reste
+  désactivée tant qu'elles ne sont pas encodées.
 
 Aucune dépendance native n'est utilisée (ni matplotlib, ni Pillow, ni lxml, ni reportlab) :
 les graphiques, le DOCX et le PDF sont produits en Python pur, ce qui garantit le
