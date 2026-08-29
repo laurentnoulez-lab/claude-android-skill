@@ -40,6 +40,11 @@ def _etiquettes_x(g: charts.Graphique, xmin: float, xmax: float, log: bool) -> L
     return etiquettes
 
 
+def _bulle(nom: str, valeur: float) -> str:
+    """Info-bulle d'un point de courbe, à la française."""
+    return f"{nom} : {theme.nombre(valeur, 2)}"
+
+
 def construire(g: charts.Graphique, hauteur: int = 300) -> ft.Control:
     """Construit un graphique Flet a partir de la description commune."""
     if not any(s.points for s in g.series):
@@ -61,7 +66,12 @@ def construire(g: charts.Graphique, hauteur: int = 300) -> ft.Control:
             continue
         series.append(
             ft.LineChartData(
-                data_points=[ft.LineChartDataPoint(tx(x), round(y, 3)) for x, y in s.points],
+                # Sans info-bulle explicite, Flet affiche la valeur brute, avec un
+                # point décimal.
+                data_points=[
+                    ft.LineChartDataPoint(tx(x), round(y, 3), tooltip=_bulle(s.nom, y))
+                    for x, y in s.points
+                ],
                 color=_couleur(s.couleur),
                 stroke_width=2.2,
                 stroke_cap_round=True,

@@ -259,6 +259,17 @@ class TestConstructionDesVues(unittest.TestCase):
         ):
             self.assertIsInstance(controle, ft.Control)
 
+    def test_les_info_bulles_des_courbes_sont_francaises(self):
+        """Flet affiche sinon la valeur brute, avec un point décimal."""
+        self.assertEqual(graphiques._bulle("Volume stocké", 1234.5), "Volume stocké : 1234,50")
+        vue = VueBassin(self.page, self.etat)
+        vue.afficher()
+        bulles = [p.tooltip for serie in _rechercher(vue.corps, ft.LineChart)
+                  for d in serie.data_series for p in d.data_points if p.tooltip]
+        self.assertTrue(bulles)
+        for bulle in bulles:
+            self.assertIsNone(re.search(r"\d\.\d", bulle), f"« {bulle} » garde un point décimal")
+
     def test_graphique_flet(self):
         vue = VueDimensionnement(self.page, self.etat)
         self.assertGreater(parcourir(graphiques.construire(vue._graphique_volume(), 260)), 3)

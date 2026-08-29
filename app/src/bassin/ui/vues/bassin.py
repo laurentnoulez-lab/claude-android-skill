@@ -255,8 +255,16 @@ class VueBassin(Vue):
             self.etat.invalider()
             self.rafraichir()
 
-        interrupteur = ft.Switch(label="Un bassin d'orage se déverse dans cet ouvrage",
-                                 value=amont.actif, on_change=basculer_amont)
+        # Le libellé d'un ft.Switch ne se replie pas : sur téléphone il était coupé.
+        interrupteur = ft.Row(
+            [
+                ft.Switch(value=amont.actif, on_change=basculer_amont),
+                ft.Text("Un bassin d'orage se déverse dans cet ouvrage", size=13,
+                        expand=True, no_wrap=False),
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
         if not amont.actif:
             return ft.Column([interrupteur], spacing=12)
 
