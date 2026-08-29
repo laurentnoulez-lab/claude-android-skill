@@ -84,6 +84,11 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 page.click("body", position={"x": largeur // 2, "y": hauteur - 30})
             except Exception:
                 pass
+            # Un projet complet : sans données, tableaux et graphiques restent
+            # remplacés par « encodez d'abord… » et leur mise en page échappe
+            # à la vérification.
+            page.keyboard.press("Control+e")
+            page.wait_for_timeout(4000)
             page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
             defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
             # L'application lit elle-même l'adresse du navigateur : Flet ne

@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flet as ft  # noqa: E402
 
 from bassin import __app_name__, __version__  # noqa: E402
-from bassin.core import rainfall  # noqa: E402
+from bassin.core import exemple, rainfall  # noqa: E402
 from bassin.core.model import LIBELLES_SCENARIOS  # noqa: E402
 from bassin.ui import theme  # noqa: E402
 from bassin.ui.state import CLE_STOCKAGE, EtatApplication  # noqa: E402
@@ -186,6 +186,13 @@ def main(page: ft.Page) -> None:
             trace(f"résumé en erreur : {traceback.format_exc(limit=1).strip()}")
         if page_prete["oui"]:
             page.update()
+        # Changer de section doit montrer le haut de la nouvelle : sans cela, le
+        # défilement de la section précédente est conservé et la page s'ouvre au
+        # milieu, voire sous un grand vide quand la nouvelle est plus courte.
+        try:
+            zone.scroll_to(offset=0, duration=0)
+        except Exception:
+            pass
         # L'enregistrement vient après l'affichage : un stockage lent ou
         # indisponible ne doit jamais retarder le rendu.
         try:
@@ -205,6 +212,12 @@ def main(page: ft.Page) -> None:
         page.theme_mode = ft.ThemeMode.DARK if clair else ft.ThemeMode.LIGHT
         ecrire_stockage("hydrobassin.sombre", clair)
         page.update()
+
+    def charger_exemple(_=None) -> None:
+        """Remplit l'application avec un projet complet, pour la découvrir."""
+        etat.projet = exemple.projet_demonstration()
+        etat.invalider()
+        afficher(index["courant"])
 
     def reinitialiser(_=None) -> None:
         def confirmer(_=None) -> None:
@@ -265,6 +278,8 @@ def main(page: ft.Page) -> None:
                 ),
                 ft.Column([titre_page, resume], spacing=0, expand=True, tight=True),
                 ft.IconButton(ft.Icons.INFO_OUTLINE, tooltip="Diagnostic", on_click=diagnostic),
+                ft.IconButton(ft.Icons.LIGHTBULB_OUTLINE, tooltip="Charger un exemple (Ctrl+E)",
+                              on_click=charger_exemple),
                 ft.IconButton(ft.Icons.RESTART_ALT, tooltip="Nouveau projet", on_click=reinitialiser),
                 ft.IconButton(ft.Icons.DARK_MODE, tooltip="Thème clair / sombre",
                               on_click=basculer_theme),
@@ -373,6 +388,8 @@ def main(page: ft.Page) -> None:
         touche = str(getattr(e, "key", ""))
         if touche.isdigit() and 1 <= int(touche) <= len(vues):
             afficher(int(touche) - 1)
+        elif touche.upper() == "E":
+            charger_exemple()
 
     page.on_keyboard_event = sur_touche
 

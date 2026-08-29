@@ -618,6 +618,36 @@ class TestCoquilleApplication(unittest.TestCase):
 
         page.on_keyboard_event(_Touche("a", ctrl=True))  # ne doit pas lever
 
+    def test_charger_un_exemple_remplit_le_projet(self):
+        """Ctrl+E charge un projet complet, de quoi découvrir l'application."""
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        page.on_keyboard_event(_Touche("e", ctrl=True))
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertTrue(any("Lotissement Les Sources" == t for t in titres)
+                        or any("Bütgenbach" in (t or "") for t in titres))
+
+        boutons = _rechercher(page.controls[0], ft.IconButton)
+        self.assertTrue([b for b in boutons if b.tooltip and "exemple" in b.tooltip])
+
+    def test_le_defilement_revient_en_haut_a_chaque_section(self):
+        """Une section plus courte ne doit pas s'ouvrir sous un grand vide."""
+        import main as application
+
+        appels = []
+        origine = ft.Column.scroll_to
+        ft.Column.scroll_to = lambda self, **kw: appels.append(kw)
+        try:
+            page = PageFactice()
+            application.main(page)
+            appels.clear()
+            page.on_keyboard_event(_Touche("4", ctrl=True))
+        finally:
+            ft.Column.scroll_to = origine
+        self.assertIn({"offset": 0, "duration": 0}, appels)
+
     def test_diagnostic_accessible(self):
         import main as application
 
