@@ -104,6 +104,11 @@ app/
 └── tools/                       génération de l'icône et du dossier de démonstration
 ```
 
+## Navigation
+
+Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+7** pour passer
+directement à une section.
+
 ## Saisie
 
 * Les nombres s'affichent à la française (**virgule décimale**), à l'écran comme dans les

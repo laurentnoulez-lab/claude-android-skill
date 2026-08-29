@@ -35,17 +35,34 @@ def trace(etape: str) -> None:
     print(f"[HydroBassin] {etape}", flush=True)
 
 
+#: Pourquoi l'adresse du navigateur a pu être lue, ou non (visible au Diagnostic).
+ORIGINE_ADRESSE = {"origine": "non tentée"}
+
+
 def _adresse_navigateur() -> str:
     """Adresse de la page dans la version web ; chaîne vide ailleurs.
 
-    ``js`` n'existe que sous Pyodide, c'est-à-dire dans l'application web.
+    ``js`` n'existe que sous Pyodide (application web). Selon que le code tourne
+    dans la page ou dans un « worker », l'objet global s'appelle ``window``,
+    ``self`` ou ``js`` lui-même : les trois sont essayés.
     """
     try:
         import js  # type: ignore[import-not-found]
-
-        return f"{js.window.location.pathname}{js.window.location.hash}"
-    except Exception:
+    except Exception as exc:
+        ORIGINE_ADRESSE["origine"] = f"module js absent ({type(exc).__name__})"
         return ""
+    echecs = []
+    for nom in ("window", "self", None):
+        try:
+            portee = getattr(js, nom) if nom else js
+            lieu = portee.location
+            adresse = f"{lieu.pathname}{lieu.hash}"
+            ORIGINE_ADRESSE["origine"] = f"js.{nom}.location" if nom else "js.location"
+            return adresse
+        except Exception as exc:
+            echecs.append(f"{nom or 'js'}:{type(exc).__name__}")
+    ORIGINE_ADRESSE["origine"] = "js présent mais sans location — " + ", ".join(echecs)
+    return ""
 
 
 def main(page: ft.Page) -> None:
@@ -349,8 +366,18 @@ def main(page: ft.Page) -> None:
 
     page.on_route_change = sur_changement_de_route
 
+    def sur_touche(e) -> None:
+        """Ctrl+1 à Ctrl+7 ouvrent une section, comme les onglets d'un navigateur."""
+        if not getattr(e, "ctrl", False):
+            return
+        touche = str(getattr(e, "key", ""))
+        if touche.isdigit() and 1 <= int(touche) <= len(vues):
+            afficher(int(touche) - 1)
+
+    page.on_keyboard_event = sur_touche
+
     trace(f"contrôles construits · route {getattr(page, 'route', None)!r} · "
-          f"adresse {_adresse_navigateur()!r}")
+          f"adresse {_adresse_navigateur()!r} ({ORIGINE_ADRESSE['origine']})")
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     page_prete["oui"] = True
     trace("coquille affichée")

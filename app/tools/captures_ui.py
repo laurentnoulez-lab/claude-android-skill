@@ -80,16 +80,24 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 page.wait_for_timeout(2000)
             except Exception as exc:
                 print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
+            try:  # le canvas doit avoir le focus pour recevoir les touches
+                page.click("body", position={"x": largeur // 2, "y": hauteur - 30})
+            except Exception:
+                pass
             page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
             defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
             # L'application lit elle-même l'adresse du navigateur : Flet ne
             # transmet pas le chemin de l'URL dans la version web, et l'arbre
             # d'accessibilité de Flutter reste vide sans interaction humaine.
+            # Le clavier atteint le canvas Flutter à coup sûr, contrairement à
+            # l'URL (Flet n'en transmet pas le chemin sur le web) et à l'arbre
+            # d'accessibilité (vide sans interaction humaine). Ctrl+1..7 est aussi
+            # un raccourci offert à l'utilisateur.
             for i, vue in enumerate(VUES[1:], start=1):
                 nom = vue.replace(" ", "_")
                 try:
-                    page.goto(f"{url}vue/{i}", wait_until="load", timeout=90000)
-                    page.wait_for_timeout(12000)
+                    page.keyboard.press(f"Control+{i + 1}")
+                    page.wait_for_timeout(3000)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
                 except Exception as exc:  # pragma: no cover - dépend du rendu

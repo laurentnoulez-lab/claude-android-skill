@@ -102,6 +102,15 @@ def etat_complet() -> EtatApplication:
     return etat
 
 
+class _Touche:
+    """Événement clavier Flet minimal."""
+
+    def __init__(self, key: str, ctrl: bool = False):
+        self.key = key
+        self.ctrl = ctrl
+        self.shift = self.alt = self.meta = False
+
+
 class _Evenement:
     """Événement Flet minimal (control + index sélectionné)."""
 
@@ -586,6 +595,28 @@ class TestCoquilleApplication(unittest.TestCase):
 
         self.assertNotIn("js", sys.modules)
         self.assertEqual(application._adresse_navigateur(), "")
+
+    def test_raccourcis_clavier_ouvrent_les_sections(self):
+        """Ctrl+1 à Ctrl+7 ouvrent une section ; sans Ctrl, rien ne bouge."""
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        self.assertIsNotNone(page.on_keyboard_event)
+
+        page.on_keyboard_event(_Touche("5", ctrl=True))
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertIn("Ajutage", titres)
+
+        page.on_keyboard_event(_Touche("1", ctrl=False))
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertIn("Ajutage", titres)  # inchangé : la touche seule ne navigue pas
+
+        page.on_keyboard_event(_Touche("9", ctrl=True))
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+        self.assertIn("Ajutage", titres)  # hors des sept sections : ignoré
+
+        page.on_keyboard_event(_Touche("a", ctrl=True))  # ne doit pas lever
 
     def test_diagnostic_accessible(self):
         import main as application
