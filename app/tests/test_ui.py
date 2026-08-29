@@ -560,6 +560,33 @@ class TestCoquilleApplication(unittest.TestCase):
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
         self.assertIn("Ajutage", titres)
 
+    def test_adresse_du_navigateur_ouvre_la_bonne_section(self):
+        """Sur le web, Flet ne transmet pas le chemin : l'adresse est lue directement."""
+        import types
+
+        import main as application
+
+        faux_js = types.ModuleType("js")
+        faux_js.window = types.SimpleNamespace(
+            location=types.SimpleNamespace(pathname="/vue/5", hash=""))
+        sys.modules["js"] = faux_js
+        try:
+            self.assertEqual(application._adresse_navigateur(), "/vue/5")
+            page = PageFactice()
+            page.route = "/"  # ce que Flet transmet réellement dans la version web
+            application.main(page)
+            titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
+            self.assertIn("Pluies GTI", titres)
+        finally:
+            del sys.modules["js"]
+
+    def test_sans_navigateur_l_adresse_est_vide(self):
+        """Sur Android et Windows, le module « js » n'existe pas : pas d'erreur."""
+        import main as application
+
+        self.assertNotIn("js", sys.modules)
+        self.assertEqual(application._adresse_navigateur(), "")
+
     def test_diagnostic_accessible(self):
         import main as application
 

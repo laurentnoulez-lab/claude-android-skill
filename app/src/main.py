@@ -35,6 +35,19 @@ def trace(etape: str) -> None:
     print(f"[HydroBassin] {etape}", flush=True)
 
 
+def _adresse_navigateur() -> str:
+    """Adresse de la page dans la version web ; chaîne vide ailleurs.
+
+    ``js`` n'existe que sous Pyodide, c'est-à-dire dans l'application web.
+    """
+    try:
+        import js  # type: ignore[import-not-found]
+
+        return f"{js.window.location.pathname}{js.window.location.hash}"
+    except Exception:
+        return ""
+
+
 def main(page: ft.Page) -> None:
     trace("démarrage")
     page.title = f"{__app_name__} — dimensionnement de bassins d'orage"
@@ -310,17 +323,25 @@ def main(page: ft.Page) -> None:
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
     def vue_demandee() -> int:
-        """Section demandée par la route (#/vue/3), utile aux captures et aux liens."""
-        route = (getattr(page, "route", "") or "").strip("/")
-        if route.startswith("vue/"):
-            try:
-                return max(0, min(len(vues) - 1, int(route.split("/")[1])))
-            except (ValueError, IndexError):
-                return 0
+        """Section demandée par l'adresse (« /vue/3 »), pour les liens directs.
+
+        La version web de Flet ne transmet pas le chemin de l'URL : ``page.route``
+        y vaut toujours « / » et ``on_route_change`` ne se déclenche jamais. Comme
+        Python s'exécute dans le navigateur (Pyodide), l'adresse est lue
+        directement en second recours ; sur Android et Windows, ce module n'existe
+        pas et seul ``page.route`` sert.
+        """
+        for adresse in (getattr(page, "route", "") or "", _adresse_navigateur()):
+            morceaux = adresse.strip("/#").split("/")
+            if len(morceaux) >= 2 and morceaux[-2] == "vue":
+                try:
+                    return max(0, min(len(vues) - 1, int(morceaux[-1])))
+                except ValueError:
+                    continue
         return 0
 
     def sur_changement_de_route(_=None) -> None:
-        """Flet ne connaît l'URL qu'après connexion du client : on la relit ici."""
+        """Utile là où Flet transmet bien la route (applications installées)."""
         trace(f"route reçue : {getattr(page, 'route', None)!r}")
         demandee = vue_demandee()
         if demandee != index["courant"]:
@@ -328,7 +349,8 @@ def main(page: ft.Page) -> None:
 
     page.on_route_change = sur_changement_de_route
 
-    trace(f"contrôles construits · route au démarrage : {getattr(page, 'route', None)!r}")
+    trace(f"contrôles construits · route {getattr(page, 'route', None)!r} · "
+          f"adresse {_adresse_navigateur()!r}")
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     page_prete["oui"] = True
     trace("coquille affichée")
