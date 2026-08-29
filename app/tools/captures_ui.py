@@ -19,8 +19,19 @@ VUES = ["Projet", "Dimensionnement", "Bassin", "Table QDF", "Ajutage", "Pluies G
 FORMATS = {"telephone": (390, 844), "tablette": (820, 1180), "bureau": (1440, 960)}
 
 
+class _GestionnaireSPA(http.server.SimpleHTTPRequestHandler):
+    """Renvoie index.html pour toute route inconnue (routage côté application)."""
+
+    def do_GET(self):  # noqa: N802 - nom imposé par http.server
+        chemin = self.translate_path(self.path)
+        if not os.path.exists(chemin) or os.path.isdir(chemin) and not os.path.exists(
+                os.path.join(chemin, "index.html")):
+            self.path = "/index.html"
+        return super().do_GET()
+
+
 def servir(racine: str, port: int) -> socketserver.TCPServer:
-    gestionnaire = functools.partial(http.server.SimpleHTTPRequestHandler, directory=racine)
+    gestionnaire = functools.partial(_GestionnaireSPA, directory=racine)
     socketserver.TCPServer.allow_reuse_address = True
     serveur = socketserver.TCPServer(("127.0.0.1", port), gestionnaire)
     threading.Thread(target=serveur.serve_forever, daemon=True).start()
@@ -74,7 +85,7 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             for i, vue in enumerate(VUES[1:], start=1):
                 nom = vue.replace(" ", "_")
                 try:
-                    page.goto(f"{url}#/vue/{i}", wait_until="load", timeout=90000)
+                    page.goto(f"{url}vue/{i}", wait_until="load", timeout=90000)
                     page.wait_for_timeout(12000)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
