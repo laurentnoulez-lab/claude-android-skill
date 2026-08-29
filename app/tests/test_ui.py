@@ -261,6 +261,71 @@ class TestConstructionDesVues(unittest.TestCase):
         etat.reprendre_dimensionnement()
         self.assertGreater(etat.bassin.volume_total_m3, 0)
 
+    def test_notation_scientifique_sans_erreur_pendant_la_frappe(self):
+        """« 1e-5 » passe par « 1e » et « 1e- » : aucun message ne doit clignoter."""
+        valeurs = []
+        champ = theme.champ_nombre("K", 0.0, valeurs.append, "m/s")
+        champ.update = lambda: None
+
+        class _Evt:
+            control = champ
+
+        for frappe in ("1", "1e", "1e-", "1e-5"):
+            champ.value = frappe
+            champ.on_change(_Evt())
+            self.assertIsNone(champ.error_text, f"erreur affichée en tapant « {frappe} »")
+        self.assertEqual(valeurs[-1], 1e-5)
+
+        champ.on_blur(_Evt())
+        self.assertIsNone(champ.error_text)
+        self.assertEqual(champ.value, "0,00001")
+
+    def test_saisie_invalide_signalee_a_la_sortie_du_champ(self):
+        champ = theme.champ_nombre("K", 0.0, lambda v: None, "m/s")
+        champ.update = lambda: None
+
+        class _Evt:
+            control = champ
+
+        champ.value = "abc"
+        champ.on_change(_Evt())
+        self.assertIsNone(champ.error_text)
+        champ.on_blur(_Evt())
+        self.assertEqual(champ.error_text, "Nombre invalide")
+        # La saisie fautive reste affichée : elle doit pouvoir être corrigée.
+        self.assertEqual(champ.value, "abc")
+
+    def test_champs_couples_se_completent(self):
+        """Encoder l'une des deux unités remplit l'autre, dans les deux sens."""
+        enregistres = []
+        champs = theme.champs_convertis("K", "m/s", 1e-5, "soit", "mm/h", 3.6e6,
+                                        enregistres.append)
+        a, b = champs[0], champs[1]
+        a.update = b.update = lambda: None
+
+        class _EvtA:
+            control = a
+
+        class _EvtB:
+            control = b
+
+        a.value = "2e-5"
+        a.on_change(_EvtA())
+        self.assertEqual(enregistres[-1], 2e-5)
+        self.assertEqual(theme.lire_nombre(b.value), 72.0)
+
+        b.value = "36"
+        b.on_change(_EvtB())
+        self.assertAlmostEqual(enregistres[-1], 1e-5)
+        self.assertAlmostEqual(theme.lire_nombre(a.value), 1e-5)
+
+    def test_champ_couple_desactive_sans_facteur(self):
+        champs = theme.champs_convertis("Débit", "l/s", 1.0, "soit", "l/s/ha", None,
+                                        lambda v: None,
+                                        indisponible_b="encodez d'abord les surfaces")
+        self.assertTrue(champs[1].disabled)
+        self.assertIn("surfaces", champs[1].helper_text)
+
     def test_champ_nombre_accepte_la_virgule(self):
         valeurs = []
         champ = theme.champ_nombre("Test", 0.0, valeurs.append, "m")

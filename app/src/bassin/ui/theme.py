@@ -159,6 +159,13 @@ def _champ_texte(libelle: str, valeur: float, unite: str, aide: str, decimales: 
     )
 
 
+def _signaler(champ: ft.Control, erreur: Optional[str]) -> None:
+    """Affiche (ou efface) le message d'erreur d'un champ, sans rafraîchir pour rien."""
+    if champ.error_text != erreur:
+        champ.error_text = erreur
+        _rafraichir(champ)
+
+
 def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None],
                  unite: str = "", aide: str = "", decimales: int = 3,
                  col: Optional[dict] = None, on_valide: Optional[Callable[[], None]] = None,
@@ -172,18 +179,21 @@ def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None]
     """
 
     def _change(e: ft.ControlEvent) -> None:
+        # Pendant la frappe on reste muet : « 1e-5 » passe par « 1e » et « 1e- »,
+        # qui sont invalides sans que l'utilisateur ait fait la moindre faute.
+        _signaler(e.control, None)
         valeur_num = lire_nombre(e.control.value)
-        erreur = "Nombre invalide" if valeur_num is None else None
-        if e.control.error_text != erreur:
-            e.control.error_text = erreur
-            _rafraichir(e.control)
         if valeur_num is not None:
             on_change(valeur_num)
 
     def _valide(e: ft.ControlEvent) -> None:
         valeur_num = lire_nombre(e.control.value)
         if valeur_num is None:
+            # La saisie est conservée telle quelle : l'utilisateur doit pouvoir
+            # corriger ce qu'il a tapé plutôt que de le voir disparaître.
+            _signaler(e.control, "Nombre invalide")
             return
+        _signaler(e.control, None)
         on_change(valeur_num)
         texte = formater_nombre(valeur_num, decimales)
         if e.control.value != texte:
@@ -238,12 +248,11 @@ def champs_convertis(
 
     def _sur_a(e: ft.ControlEvent, valider: bool) -> None:
         valeur = lire_nombre(e.control.value)
-        erreur = "Nombre invalide" if valeur is None else None
-        if e.control.error_text != erreur:
-            e.control.error_text = erreur
-            _rafraichir(e.control)
         if valeur is None:
+            # Muet pendant la frappe, explicite une fois le champ quitté.
+            _signaler(e.control, "Nombre invalide" if valider else None)
             return
+        _signaler(e.control, None)
         appliquer(valeur)
         if facteur:
             _ecrire(champ_b, valeur * facteur, decimales_b)
@@ -254,11 +263,11 @@ def champs_convertis(
 
     def _sur_b(e: ft.ControlEvent, valider: bool) -> None:
         valeur = lire_nombre(e.control.value)
-        erreur = "Nombre invalide" if valeur is None else None
-        if e.control.error_text != erreur:
-            e.control.error_text = erreur
-            _rafraichir(e.control)
-        if valeur is None or not facteur:
+        if valeur is None:
+            _signaler(e.control, "Nombre invalide" if valider else None)
+            return
+        _signaler(e.control, None)
+        if not facteur:
             return
         equivalent = valeur / facteur
         appliquer(equivalent)
