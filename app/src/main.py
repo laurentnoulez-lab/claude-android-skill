@@ -309,12 +309,22 @@ def main(page: ft.Page) -> None:
     page.on_resized = adapter
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
+    def vue_demandee() -> int:
+        """Section demandée par la route (#/vue/3), utile aux captures et aux liens."""
+        route = (getattr(page, "route", "") or "").strip("/")
+        if route.startswith("vue/"):
+            try:
+                return max(0, min(len(vues) - 1, int(route.split("/")[1])))
+            except (ValueError, IndexError):
+                return 0
+        return 0
+
     trace("contrôles construits")
     page.add(ft.SafeArea(ft.Column([barre, corps], expand=True, spacing=0), expand=True))
     page_prete["oui"] = True
     trace("coquille affichée")
     try:
-        afficher(0)
+        afficher(vue_demandee())
         adapter()
         trace("première vue affichée")
     except BaseException:

@@ -67,16 +67,15 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 page.wait_for_timeout(2000)
             except Exception as exc:
                 print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
-            page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_accueil.png"))
-            defiler_et_capturer(page, sortie, nom_format, 0, "accueil")
+            page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
+            defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
+            # La navigation se fait par la route (#/vue/N) : dans le canvas Flutter,
+            # les libellés ne sont pas toujours atteignables par un clic scripté.
             for i, vue in enumerate(VUES[1:], start=1):
+                nom = vue.replace(" ", "_")
                 try:
-                    if largeur < 840:  # navigation par le tiroir
-                        page.get_by_role("button").first.click(timeout=8000)
-                        page.wait_for_timeout(1200)
-                    page.get_by_text(vue, exact=True).first.click(timeout=10000)
-                    page.wait_for_timeout(3000)
-                    nom = vue.replace(" ", "_")
+                    page.goto(f"{url}#/vue/{i}", wait_until="load", timeout=90000)
+                    page.wait_for_timeout(12000)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
                 except Exception as exc:  # pragma: no cover - dépend du rendu

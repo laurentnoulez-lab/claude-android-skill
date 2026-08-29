@@ -70,6 +70,7 @@ class PageFactice:
         self.drawer = None
         self.platform = None
         self.web = False
+        self.route = "/"
 
     def open(self, controle):
         self.ouverts.append(controle)
@@ -418,6 +419,27 @@ class TestCoquilleApplication(unittest.TestCase):
                                         indisponible_b="encodez d'abord les surfaces")
         self.assertTrue(champs[1].disabled)
         self.assertIn("surfaces", champs[1].helper_text)
+
+    def test_ouverture_directe_d_une_section(self):
+        """La route #/vue/N ouvre directement la section demandée."""
+        import main as application
+
+        page = PageFactice()
+        page.route = "/vue/3"
+        application.main(page)
+        titres = [t.value for t in _rechercher(page.controls[0], ft.Text)
+                  if t.value in {v.titre for v in
+                                 (VueProjet, VueDimensionnement, VueBassin, VueTableQDF,
+                                  VueAjutage, VuePluies, VueRapport)}]
+        self.assertIn(VueTableQDF.titre, titres)
+
+    def test_route_invalide_ouvre_le_projet(self):
+        import main as application
+
+        page = PageFactice()
+        page.route = "/vue/zzz"
+        application.main(page)
+        self.assertTrue(page.controls)
 
     def test_diagnostic_accessible(self):
         import main as application
