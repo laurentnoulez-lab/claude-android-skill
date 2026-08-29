@@ -119,8 +119,7 @@ class EtatApplication:
     @property
     def simulation(self) -> Optional[simulation.ResultatSimulation]:
         if self._simulation is None and self.bassin_valide:
-            duree, hauteur = simulation.evenement_critique(self.projet, self.bassin)
-            self._simulation = simulation.simuler(self.projet, self.bassin, hauteur, duree)
+            self._simulation = simulation.simuler_evenement_critique(self.projet, self.bassin)
         return self._simulation
 
     @property
@@ -163,7 +162,7 @@ class EtatApplication:
         """Pre-remplit l'ouvrage avec le resultat du scenario retenu."""
         res = self.resultat
         b = self.projet.bassin
-        b.volume_total_m3 = round(res.volume_m3 * 1.05, 1)
+        # Les exutoires d'abord : le volume requis en dépend.
         b.surface_dispersion_m2 = (
             self.projet.surface_infiltration_m2
             if self.scenario_principal != SCENARIO_TEMPORISATION else 0.0
@@ -171,6 +170,14 @@ class EtatApplication:
         b.debit_ajutage_ls = (
             self.projet.debit_ajutage_ls if self.scenario_principal != SCENARIO_DISPERSION else 0.0
         )
+        volume = res.volume_m3
+        if self.projet.amont.actif:
+            # Un bassin amont se déverse ici : le volume à prévoir est celui de
+            # l'événement critique combiné, et non celui du seul bassin versant
+            # propre — sinon l'ouvrage proposé déborderait en simulation.
+            duree, hauteur = simulation.evenement_critique(self.projet, b)
+            volume = max(volume, simulation.volume_requis_m3(self.projet, b, hauteur, duree))
+        b.volume_total_m3 = round(volume * 1.05, 1)
         self.invalider()
 
     # -- persistance -------------------------------------------------------

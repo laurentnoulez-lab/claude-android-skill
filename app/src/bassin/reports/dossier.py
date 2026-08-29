@@ -129,7 +129,7 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
     duree, hauteur = 0.0, 0.0
     if avec_simulation and bassin.volume_total_m3 > 0 and projet.aire_ponderee_m2 > 0:
         duree, hauteur = simulation.evenement_critique(projet, bassin)
-        sim = simulation.simuler(projet, bassin, hauteur, duree)
+        sim = simulation.simuler_evenement_critique(projet, bassin)
         table = simulation.table_acceptation(projet, bassin)
     q_ajutage = bassin.debit_ajutage_ls or projet.debit_ajutage_ls
     res_orifice = None

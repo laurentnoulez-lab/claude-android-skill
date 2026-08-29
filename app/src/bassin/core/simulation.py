@@ -303,6 +303,18 @@ def hydrogramme_amont(projet: Projet, hauteur_mm: float, duree_pluie_min: float)
     return Apport(fusionnes)
 
 
+def simuler_evenement_critique(projet: Projet, bassin: Bassin,
+                               n_points: int = 400) -> ResultatSimulation:
+    """Simule la pluie la plus défavorable pour cet ouvrage, apport amont compris.
+
+    Point d'entrée unique de l'application et des rapports : il garantit que
+    l'écran de synthèse, la table QDF et le dossier décrivent le même événement.
+    """
+    duree, hauteur = evenement_critique(projet, bassin)
+    apport = hydrogramme_amont(projet, hauteur, duree)
+    return simuler(projet, bassin, hauteur, duree, n_points=n_points, apport=apport)
+
+
 def volume_requis_m3(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_min: float) -> float:
     """Volume de stockage requis, apport du bassin amont compris.
 

@@ -499,6 +499,39 @@ class TestBassinAmont(unittest.TestCase):
         self.assertGreater(petit.q_amont_max_ls, juste.q_amont_max_ls)
         self.assertGreater(petit.volume_max_m3, juste.volume_max_m3)
 
+    def test_toutes_les_vues_decrivent_le_meme_evenement(self):
+        """Écran de synthèse, table QDF et rapport doivent concorder."""
+        from bassin.ui.state import EtatApplication
+
+        p = self.projet_avec_amont()
+        p.bassin = Bassin(volume_total_m3=400.0, volume_sous_ajutage_m3=0.0,
+                          surface_dispersion_m2=0.0, debit_ajutage_ls=3.0)
+        etat = EtatApplication()
+        etat.projet = p
+        sim = etat.simulation
+        self.assertIsNotNone(sim)
+        self.assertGreater(sim.volume_amont_m3, 0, "l'apport amont doit être pris en compte")
+        requis = simulation.volume_requis_m3(p, p.bassin, sim.hauteur_pluie_mm, sim.duree_pluie_min)
+        self.assertAlmostEqual(sim.volume_max_m3, min(requis, 400.0), places=6)
+
+    def test_reprendre_le_dimensionnement_donne_un_ouvrage_qui_tient(self):
+        """Le volume proposé (+5 %) ne doit pas déborder, même avec un amont."""
+        from bassin.ui.state import EtatApplication
+
+        for actif in (False, True):
+            with self.subTest(amont=actif):
+                p = self.projet_avec_amont()
+                p.amont.actif = actif
+                p.bassin = Bassin()
+                etat = EtatApplication()
+                etat.projet = p
+                etat.scenario_principal = SCENARIO_TEMPORISATION
+                etat.reprendre_dimensionnement()
+                self.assertGreater(p.bassin.volume_total_m3, 0)
+                sim = etat.simulation
+                self.assertFalse(sim.debordement,
+                                 "l'ouvrage proposé déborde dès la pluie de projet")
+
     def test_la_table_qdf_tient_compte_de_l_amont(self):
         """La table d'acceptation ne doit pas contredire la simulation."""
         p = self.projet_avec_amont()

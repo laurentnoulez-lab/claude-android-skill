@@ -71,15 +71,23 @@ def _largeurs(ws, largeurs: Dict[str, int]) -> None:
 
 
 def _grille_durees(dossier: Dossier) -> List[float]:
-    """Grille de durées log + durées remarquables (QDF, durées critiques)."""
+    """Durées balayées par le classeur, calquées sur celles de l'application.
+
+    Avec les tables QDF, seules les 19 durées normalisées ont un sens : ajouter
+    une grille logarithmique ferait retenir au classeur une durée critique
+    interpolée, différente de celle affichée par l'application.
+    """
     durees = set(float(d) for d in rainfall.QDF_DURATIONS_MIN)
-    for i in range(101):
-        durees.add(round(10 * (8640 ** (i / 100.0)), 1))
-    for r in dossier.resultats.values():
-        if r.duree_critique_min:
-            durees.add(float(r.duree_critique_min))
-    if dossier.duree_critique_min:
-        durees.add(float(dossier.duree_critique_min))
+    src = rainfall.SourcePluie(dossier.projet.commune_ins, dossier.projet.periode_retour,
+                               dossier.projet.source_pluie)
+    if not src.durees_tabulees:
+        for i in range(101):
+            durees.add(round(10 * (8640 ** (i / 100.0)), 1))
+        for r in dossier.resultats.values():
+            if r.duree_critique_min:
+                durees.add(float(r.duree_critique_min))
+        if dossier.duree_critique_min:
+            durees.add(float(dossier.duree_critique_min))
     return sorted(d for d in durees if 10 <= d <= 86400)
 
 
@@ -225,8 +233,12 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier) -> None:
     ws["A2"] = dossier.libelle_source
     ws["A2"].font = Font(italic=True, color="475569")
 
+    # Les coefficients de Montana ne servent que si l'utilisateur a choisi cette
+    # source : sinon le classeur recalculait des intensités de Montana alors que
+    # l'application affichait les mesures QDF.
+    src_pluie = rainfall.SourcePluie(projet.commune_ins, projet.periode_retour, projet.source_pluie)
     montana = None
-    if rainfall.a_donnees_montana(projet.commune_ins):
+    if src_pluie.source == rainfall.SOURCE_MONTANA:
         montana = rainfall.montana_coeffs(projet.commune_ins, projet.periode_retour)
         _entete(ws, 4, ["Coefficients de Montana", "a1", "b1", "a2", "b2", "a3", "b3"])
         ws.cell(row=5, column=1, value="i [mm/h] = a x t[min]^(-b)")

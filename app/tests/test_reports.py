@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
+from bassin.core import rainfall  # noqa: E402
 from bassin.core.model import Bassin, BassinAmont, Projet  # noqa: E402
 from bassin.reports import charts, docx_report, dossier as mod_dossier, pdf_report, xlsx_report  # noqa: E402
 from bassin.reports.pdf_writer import Pdf, largeur_texte, nettoyer  # noqa: E402
@@ -134,6 +135,56 @@ class TestExcel(BaseRapport):
             self.assertAlmostEqual(valeur("SCÉNARIOS", f"{colonne}6"), attendu.duree_critique_min, places=6)
             self.assertAlmostEqual(valeur("SCÉNARIOS", f"{colonne}12"), attendu.temps_vidange_h, places=6)
         self.assertAlmostEqual(valeur("AJUTAGE", "B10"), self.dossier.orifice.diametre_mm, places=6)
+
+
+class TestExcelQDF(unittest.TestCase):
+    """Avec les tables QDF, le classeur doit balayer les mêmes durées que l'application."""
+
+    @classmethod
+    def setUpClass(cls):
+        p = projet_complet()
+        p.source_pluie = "qdf"
+        cls.dossier = mod_dossier.construire(p)
+        cls.repertoire = tempfile.mkdtemp(prefix="hydrobassin_qdf_")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repertoire, ignore_errors=True)
+
+    def test_le_classeur_ne_balaie_que_les_durees_tabulees(self):
+        import openpyxl
+
+        chemin = xlsx_report.ecrire(self.dossier, os.path.join(self.repertoire, "qdf.xlsx"))
+        classeur = openpyxl.load_workbook(chemin)
+        feuille = classeur["Pluie de projet"]
+        durees = [c.value for c in feuille["A"][8:] if isinstance(c.value, (int, float))]
+        self.assertEqual(sorted(durees), sorted(float(d) for d in rainfall.QDF_DURATIONS_MIN))
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_les_formules_qdf_reproduisent_le_moteur(self):
+        import formulas
+
+        chemin = xlsx_report.ecrire(self.dossier, os.path.join(self.repertoire, "verif_qdf.xlsx"))
+        modele = formulas.ExcelModel().loads(chemin).finish()
+        solution = modele.calculate()
+        base = os.path.basename(chemin).upper()
+
+        def valeur(feuille, cellule):
+            cle = f"'[{base}]{feuille}'!{cellule}"
+            for k, v in solution.items():
+                if k.upper().endswith(cle):
+                    try:
+                        return float(v.value[0, 0])
+                    except Exception:
+                        return v
+            raise KeyError(cle)
+
+        for colonne, scenario in zip("BCDE", mod_dossier.ORDRE_SCENARIOS):
+            attendu = self.dossier.resultats[scenario]
+            self.assertAlmostEqual(valeur("SCÉNARIOS", f"{colonne}5"), attendu.volume_m3, places=6)
+            self.assertAlmostEqual(valeur("SCÉNARIOS", f"{colonne}6"),
+                                   attendu.duree_critique_min, places=6)
 
 
 class TestWord(BaseRapport):
