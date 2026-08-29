@@ -60,17 +60,14 @@ class VueDimensionnement(Vue):
                 self.etat.invalider()
             return _f
 
-        def maj_k_mmh(v: float) -> None:
-            p.k_infiltration_ms = max(v, 0.0) / MM_H
+        def maj_k(v: float) -> None:
+            p.k_infiltration_ms = max(v, 0.0)
             self.etat.invalider()
-            champ = getattr(self, "_champ_k", None)
-            interne = getattr(champ, "content", champ)
-            if interne is not None:
-                interne.helper_text = f"soit {p.k_infiltration_ms:.2e} m/s · essai in situ"
-                try:
-                    interne.update()
-                except Exception:
-                    pass
+
+        def maj_ajutage(v: float) -> None:
+            p.debit_ajutage_ls = max(v, 0.0)
+            p.bassin.debit_ajutage_ls = p.debit_ajutage_ls
+            self.etat.invalider()
 
         def choisir_sol(e: ft.ControlEvent) -> None:
             for cle, _, valeur in SOLS:
@@ -80,35 +77,65 @@ class VueDimensionnement(Vue):
                     self.rafraichir()
                     return
 
-        self._champ_k = theme.champ_nombre(
-            "Vitesse d'infiltration K", p.k_infiltration_ms * MM_H, maj_k_mmh, "mm/h",
-            f"soit {p.k_infiltration_ms:.2e} m/s · essai in situ",
-            on_valide=self.maj_resultats, col={"xs": 12, "md": 4},
+        # K est encodé en m/s (grandeur de référence) ; l'équivalent en mm/h se
+        # complète tout seul, et inversement.
+        champs_k = theme.champs_convertis(
+            "Vitesse d'infiltration K", "m/s", p.k_infiltration_ms,
+            "soit", "mm/h", MM_H, maj_k, on_valide=self.maj_resultats,
+            aide_a="essai in situ · 1e-5, 0,00001 ou 0.00001",
+            aide_b="équivalent, modifiable aussi",
+            col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
-        return ft.ResponsiveRow(
+        # L'ajutage s'encode en l/s ou en l/s/ha : la case laissée vide se remplit.
+        hectares = p.aire_totale_m2 / 10000.0
+        champs_ajutage = theme.champs_convertis(
+            "Débit d'ajutage", "l/s", p.debit_ajutage_ls,
+            "soit", "l/s/ha", (1.0 / hectares) if hectares > 0 else None,
+            maj_ajutage, on_valide=self.maj_resultats,
+            aide_a="orifice calibré",
+            aide_b=f"rapporté aux {p.aire_totale_m2:.0f} m² raccordés"
+                   f" · maximum GTI : 5 l/s/ha",
+            indisponible_b="encodez d'abord les surfaces incidentes",
+            decimales_a=3, decimales_b=2,
+            col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
+        )
+
+        return ft.Column(
             [
-                theme.selecteur(
-                    "Nature du sol (valeur indicative)",
-                    next((c for c, _, v in SOLS if abs(v - p.k_infiltration_ms) < v * 0.01), None),
-                    [(c, t) for c, t, _ in SOLS], choisir_sol, col={"xs": 12, "md": 8},
+                ft.ResponsiveRow(
+                    [
+                        theme.selecteur(
+                            "Nature du sol (valeur indicative)",
+                            next((c for c, _, v in SOLS
+                                  if abs(v - p.k_infiltration_ms) < v * 0.01), None),
+                            [(c, t) for c, t, _ in SOLS], choisir_sol,
+                            col={"xs": 12, "md": 6},
+                        ),
+                        champs_k[0],
+                        champs_k[1],
+                        theme.champ_nombre("Coefficient de sécurité sur K",
+                                           p.coef_securite_infiltration,
+                                           maj("coef_securite_infiltration"), "—", "GTI : 2",
+                                           on_valide=self.maj_resultats,
+                                           col={"xs": 12, "sm": 6, "md": 3}),
+                        theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
+                                           maj("surface_infiltration_m2"), "m²",
+                                           "fond du dispositif", on_valide=self.maj_resultats,
+                                           col={"xs": 12, "sm": 6, "md": 3}),
+                        champs_ajutage[0],
+                        champs_ajutage[1],
+                        theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
+                                           maj("temps_vidange_max_h"), "h",
+                                           "après la pluie · GTI : 48 h",
+                                           on_valide=self.maj_resultats,
+                                           col={"xs": 12, "sm": 6, "md": 3}),
+                    ],
+                    spacing=12,
+                    run_spacing=12,
                 ),
-                self._champ_k,
-                theme.champ_nombre("Coefficient de sécurité sur K", p.coef_securite_infiltration,
-                                   maj("coef_securite_infiltration"), "—", "GTI : 2",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
-                theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
-                                   maj("surface_infiltration_m2"), "m²", "fond du dispositif",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
-                theme.champ_nombre("Débit d'ajutage", p.debit_ajutage_ls, maj("debit_ajutage_ls"),
-                                   "l/s", "orifice calibré", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
-                theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
-                                   maj("temps_vidange_max_h"), "h", "GTI : 48 h",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,
-            run_spacing=12,
         )
 
     # ------------------------------------------------------------- résultats
@@ -127,7 +154,7 @@ class VueDimensionnement(Vue):
             ("Intensité", f"{res.intensite_ls_ha:.0f} l/s/ha"),
             ("Débit entrant", f"{res.debit_entrant_ls:.1f} l/s"),
             ("Débit de sortie", f"{res.debit_sortant_ls:.2f} l/s"),
-            ("Temps de vidange", res.temps_vidange_hm),
+            ("Vidange après la pluie", res.temps_vidange_hm),
         ]
         return ft.Container(
             content=ft.Column(

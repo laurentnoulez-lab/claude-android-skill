@@ -152,7 +152,7 @@ def synthese_scenarios(dossier: Dossier) -> List[List[str]]:
     """Tableau de synthèse (entete + lignes) pour les rapports."""
     lignes = [[
         "Scénario", "Volume [m³]", "Durée critique", "Pluie [mm]",
-        "Q sortie [l/s]", "Vidange", "S infiltration min [m²]", "Q ajutage min [l/s]",
+        "Q sortie [l/s]", "Vidange après pluie", "S infiltration min [m²]", "Q ajutage min [l/s]",
     ]]
     for s in ORDRE_SCENARIOS:
         r = dossier.resultats[s]

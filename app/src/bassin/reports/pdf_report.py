@@ -133,7 +133,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     pdf.encadre(
         f"Volume de temporisation : {res.volume_m3:.1f} m³    |    "
         f"Durée de pluie critique : {res.duree_critique_hm}    |    "
-        f"Temps de vidange : {res.temps_vidange_hm}",
+        f"Vidange après la pluie : {res.temps_vidange_hm}",
         fond=BLEU_PALE if res.conforme else ROUGE_PALE,
     )
 
@@ -159,7 +159,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
             ["Débit d'infiltration Q = 1000 x S x K / coef.", f"{res.debit_infiltration_ls:.3f}", "l/s"],
             ["Débit d'ajutage (orifice calibré)", f"{p.debit_ajutage_ls:.3f}", "l/s"],
             ["Débit de fuite admissible (5 l/s/ha)", f"{p.debit_fuite_admissible_ls:.3f}", "l/s"],
-            ["Temps de vidange maximum admis", f"{p.temps_vidange_max_h:.0f}", "h"],
+            ["Temps de vidange maximum admis (après la pluie)", f"{p.temps_vidange_max_h:.0f}", "h"],
         ],
         [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
     )

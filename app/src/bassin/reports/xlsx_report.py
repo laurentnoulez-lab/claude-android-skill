@@ -141,7 +141,7 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     c_cs = _label(ws, l, "Coefficient de sécurité sur K", projet.coef_securite_infiltration, "[-]", "0.0"); l += 1
     c_sinf = _label(ws, l, "Surface d'infiltration du dispositif", projet.surface_infiltration_m2, "m²", "0.0"); l += 1
     c_qaj = _label(ws, l, "Débit d'ajutage (orifice calibré)", projet.debit_ajutage_ls, "l/s", "0.000"); l += 1
-    c_tvid = _label(ws, l, "Temps de vidange maximum admis", projet.temps_vidange_max_h, "h", "0.0"); l += 1
+    c_tvid = _label(ws, l, "Temps de vidange maximum admis (après la pluie)", projet.temps_vidange_max_h, "h", "0.0"); l += 1
     c_qinf = _label(ws, l, "Débit d'infiltration Q = 1000.S.K/coef",
                     f"=1000*{c_sinf.coordinate}*{c_k.coordinate}/{c_cs.coordinate}", "l/s", "0.000",
                     fond=VERT_PALE)
@@ -307,7 +307,7 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
     l_debit = ligne
     ligne += 1
 
-    ws.cell(row=ligne, column=1, value="Temps de vidange [h]").font = Font(bold=True)
+    ws.cell(row=ligne, column=1, value="Temps de vidange après la pluie [h]").font = Font(bold=True)
     for j, s in enumerate(ORDRE_SCENARIOS):
         col_lettre = get_column_letter(2 + j)
         if s == SCENARIO_SEUIL:
@@ -380,7 +380,7 @@ def _feuille_bassin(wb: Workbook, dossier: Dossier) -> None:
         _label(ws, 12, "Volume stocké maximum", sim.volume_max_m3, "m³", "0.0")
         _label(ws, 13, "Taux de remplissage", sim.taux_remplissage, "[-]", "0.0%")
         _label(ws, 14, "Volume déborde", sim.volume_debordement_m3, "m³", "0.00")
-        _label(ws, 15, "Temps de vidange", sim.temps_vidange_h, "h", "0.0")
+        _label(ws, 15, "Temps de vidange après la pluie", sim.temps_vidange_h, "h", "0.0")
         _label(ws, 16, "Statut", sim.statut,
                fond=VERT_PALE if not sim.debordement else ROUGE_PALE)
 

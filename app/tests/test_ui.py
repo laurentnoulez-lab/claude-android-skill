@@ -5,6 +5,7 @@ erreur d'API (paramètre inconnu, icône ou couleur inexistante) est détectée.
 """
 
 import os
+import re
 import sys
 import unittest
 
@@ -374,6 +375,49 @@ class TestCoquilleApplication(unittest.TestCase):
         page.client_storage = _StockageCasse()
         application.main(page)
         self.assertTrue(page.controls)
+
+    def test_affichage_francophone_des_nombres(self):
+        """Les valeurs affichées utilisent la virgule décimale."""
+        self.assertEqual(theme.nombre(1575.0, 1), "1575,0")
+        self.assertEqual(theme.nombre(0.787, 3), "0,787")
+        self.assertEqual(theme.fr("volume 66.3 m³"), "volume 66,3 m³")
+        vue = VueProjet(PageFactice(), etat_complet())
+        controles = vue.construire()
+        textes = [t.value for c in controles for t in _rechercher(c, ft.Text) if t.value]
+        self.assertTrue(any("m² actifs" in t for t in textes))
+        self.assertFalse(any(re.search(r"\d\.\d", t) for t in textes if "m² actifs" in t),
+                         "les surfaces actives doivent s'afficher avec une virgule")
+
+    def test_champs_convertis_se_completent(self):
+        """Encoder l'une des deux unités remplit l'autre."""
+        enregistre = []
+        champs = theme.champs_convertis("K", "m/s", 1e-5, "soit", "mm/h", 3.6e6,
+                                        enregistre.append)
+        champ_a, champ_b = champs
+        self.assertEqual(champ_a.value, "0,00001")
+        self.assertEqual(champ_b.value, "36")
+        champ_a.update = champ_b.update = lambda: None
+
+        class _Evt:
+            def __init__(self, control):
+                self.control = control
+
+        champ_b.value = "72"
+        champ_b.on_blur(_Evt(champ_b))
+        self.assertAlmostEqual(enregistre[-1], 2e-5)
+        self.assertEqual(champ_a.value, "0,00002")
+
+        champ_a.value = "0,00003"
+        champ_a.on_blur(_Evt(champ_a))
+        self.assertAlmostEqual(enregistre[-1], 3e-5)
+        self.assertEqual(champ_b.value, "108")
+
+    def test_champs_convertis_sans_facteur(self):
+        champs = theme.champs_convertis("Débit", "l/s", 1.0, "soit", "l/s/ha", None,
+                                        lambda v: None,
+                                        indisponible_b="encodez d'abord les surfaces")
+        self.assertTrue(champs[1].disabled)
+        self.assertIn("surfaces", champs[1].helper_text)
 
     def test_diagnostic_accessible(self):
         import main as application

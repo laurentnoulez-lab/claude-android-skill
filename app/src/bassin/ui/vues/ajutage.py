@@ -37,9 +37,17 @@ class VueAjutage(Vue):
 
         return ft.ResponsiveRow(
             [
-                theme.champ_nombre("Débit d'ajutage visé", debit, maj_debit, "l/s",
-                                   "débit de fuite autorisé", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                *theme.champs_convertis(
+                    "Débit d'ajutage visé", "l/s", debit,
+                    "soit", "l/s/ha",
+                    (10000.0 / p.aire_totale_m2) if p.aire_totale_m2 > 0 else None,
+                    maj_debit, on_valide=self.maj_resultats,
+                    aide_a="débit de fuite autorisé",
+                    aide_b=f"rapporté aux {p.aire_totale_m2:.0f} m² raccordés"
+                           " · maximum GTI : 5 l/s/ha",
+                    indisponible_b="encodez d'abord les surfaces incidentes",
+                    decimales_a=3, decimales_b=2,
+                    col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge h", p.hauteur_charge_m, maj_charge, "m",
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
                                    col={"xs": 12, "sm": 6, "md": 3}),

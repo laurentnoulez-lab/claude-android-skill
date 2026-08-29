@@ -332,6 +332,60 @@ class TestSimulation(unittest.TestCase):
             self.assertLessEqual(simulation.volume_necessaire(p, b, h, t), v + 1e-9)
 
 
+class TestTempsDeVidange(unittest.TestCase):
+    """Le temps de vidange annoncé doit être celui mesuré APRÈS la pluie."""
+
+    def _projet(self) -> Projet:
+        p = projet_type()
+        p.surface_infiltration_m2 = 120.0
+        return p
+
+    def _comparer(self, bassin: Bassin, tolerance_relative: float = 0.02) -> None:
+        p = self._projet()
+        p.bassin = bassin
+        duree, hauteur = simulation.evenement_critique(p, bassin)
+        res = simulation.simuler(p, bassin, hauteur, duree, n_points=20000)
+        annonce = res.temps_vidange_h * 60.0                 # calcul analytique
+        mesure = res.temps_retour_a_vide_min                 # fin de pluie -> bassin vide
+        self.assertGreater(mesure, 0)
+        self.assertAlmostEqual(annonce, mesure, delta=max(tolerance_relative * mesure, 1.0))
+
+    def test_temporisation_seule(self):
+        self._comparer(Bassin(volume_total_m3=1e6, surface_dispersion_m2=0.0, debit_ajutage_ls=1.0))
+
+    def test_dispersion_seule(self):
+        self._comparer(Bassin(volume_total_m3=1e6, surface_dispersion_m2=120.0, debit_ajutage_ls=0.0))
+
+    def test_temporisation_et_dispersion(self):
+        self._comparer(Bassin(volume_total_m3=1e6, surface_dispersion_m2=120.0, debit_ajutage_ls=1.0))
+
+    def test_ajutage_sureleve(self):
+        """Deux régimes successifs : infiltration + ajutage, puis infiltration seule."""
+        self._comparer(Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=10.0,
+                              surface_dispersion_m2=120.0, debit_ajutage_ls=1.0))
+
+    def test_le_volume_mort_allonge_la_vidange(self):
+        p = self._projet()
+        sans = Bassin(volume_total_m3=1e6, surface_dispersion_m2=120.0, debit_ajutage_ls=1.0)
+        avec = Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=10.0,
+                      surface_dispersion_m2=120.0, debit_ajutage_ls=1.0)
+        durees = []
+        for bassin in (sans, avec):
+            p.bassin = bassin
+            duree, hauteur = simulation.evenement_critique(p, bassin)
+            durees.append(simulation.simuler(p, bassin, hauteur, duree).temps_vidange_h)
+        self.assertGreater(durees[1], durees[0])
+
+    def test_la_vidange_commence_a_la_fin_de_la_pluie(self):
+        """Le volume de pointe est atteint en fin de pluie : la vidange part de là."""
+        p = self._projet()
+        bassin = Bassin(volume_total_m3=1e6, surface_dispersion_m2=120.0, debit_ajutage_ls=1.0)
+        p.bassin = bassin
+        duree, hauteur = simulation.evenement_critique(p, bassin)
+        res = simulation.simuler(p, bassin, hauteur, duree, n_points=20000)
+        self.assertAlmostEqual(res.t_volume_max_min, duree, delta=max(0.02 * duree, 1.0))
+
+
 class TestOrifice(unittest.TestCase):
     def test_torricelli(self):
         q = orifice.debit_orifice_ls(100.0, 1.0, 0.6)

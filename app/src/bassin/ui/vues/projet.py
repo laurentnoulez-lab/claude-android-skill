@@ -80,12 +80,12 @@ class VueProjet(Vue):
 
     # --------------------------------------------------------------- surfaces
     def _ligne_surface(self, index: int, surface: SurfaceIncidente) -> ft.Control:
-        actifs = ft.Text(f"{surface.aire_ponderee_m2:.1f} m² actifs", size=12, color=theme.BLEU,
+        actifs = ft.Text(theme.nombre(surface.aire_ponderee_m2, 1, "m² actifs"), size=12, color=theme.BLEU,
                          weight=ft.FontWeight.W_600, no_wrap=True)
 
         def rafraichir_ligne() -> None:
             """Met à jour la surface active de la ligne et les totaux, sans tout reconstruire."""
-            actifs.value = f"{surface.aire_ponderee_m2:.1f} m² actifs"
+            actifs.value = theme.nombre(surface.aire_ponderee_m2, 1, "m² actifs")
             try:
                 actifs.update()
             except Exception:
@@ -161,9 +161,9 @@ class VueProjet(Vue):
     def _maj_totaux(self) -> None:
         p = self.etat.projet
         self._total.value = (
-            f"Surface totale : {p.aire_totale_m2:.0f} m²    ·    "
-            f"Surface active pondérée : {p.aire_ponderee_m2:.1f} m²    ·    "
-            f"Coefficient moyen : {p.coefficient_moyen:.3f}"
+            f"Surface totale : {theme.nombre(p.aire_totale_m2, 0)} m²    ·    "
+            f"Surface active pondérée : {theme.nombre(p.aire_ponderee_m2, 1)} m²    ·    "
+            f"Coefficient moyen : {theme.nombre(p.coefficient_moyen, 3)}"
         )
         try:
             self._total.update()
@@ -213,9 +213,9 @@ class VueProjet(Vue):
             self.etat.definir("source_pluie", e.control.value)
             self.rafraichir()
 
-        sources = [ft.dropdown.Option(rainfall.SOURCE_MONTANA, "Montana (formule continue)")]
+        sources = [ft.dropdown.Option(rainfall.SOURCE_MONTANA, "Montana")]
         if commune and commune.a_qdf:
-            sources.append(ft.dropdown.Option(rainfall.SOURCE_QDF, "QDF (valeurs tabulées)"))
+            sources.append(ft.dropdown.Option(rainfall.SOURCE_QDF, "Tables QDF"))
         source_effective = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie).source
 
         pluie = ft.ResponsiveRow(
@@ -288,9 +288,9 @@ class VueProjet(Vue):
                 "les tables QDF sont utilisées (interpolation logarithmique).", "info"))
 
         self._total = ft.Text(
-            f"Surface totale : {p.aire_totale_m2:.0f} m²    ·    "
-            f"Surface active pondérée : {p.aire_ponderee_m2:.1f} m²    ·    "
-            f"Coefficient moyen : {p.coefficient_moyen:.3f}",
+            f"Surface totale : {theme.nombre(p.aire_totale_m2, 0)} m²    ·    "
+            f"Surface active pondérée : {theme.nombre(p.aire_ponderee_m2, 1)} m²    ·    "
+            f"Coefficient moyen : {theme.nombre(p.coefficient_moyen, 3)}",
             size=13,
             weight=ft.FontWeight.W_700,
             color=theme.BLEU,

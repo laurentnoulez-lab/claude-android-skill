@@ -70,12 +70,21 @@ V_évacué(t) = Q_infiltration × t + Q_ajutage × max(t − t_seuil, 0)
 
 `Q_entrant` étant le débit ruisselé de la pluie de projet (intensité constante).
 
-## 5. Temps de vidange
+## 5. Temps de vidange (après la pluie)
+
+Le temps annoncé est celui qui sépare **la fin de la pluie** du retour à un
+ouvrage vide. Pour une pluie de projet à intensité constante, le volume stocké
+croît tant que le débit entrant dépasse le débit de sortie : la pointe est donc
+atteinte à la fin de l'averse, et la vidange part de cette pointe.
 
 ```
-t_vidange = V / Q_sortie          (volume au-dessus de l'ajutage : Q_inf + Q_aj)
+t_vidange = V_pointe / Q_sortie   (volume au-dessus de l'ajutage : Q_inf + Q_aj)
                                   (volume sous l'ajutage : Q_inf seul)
 ```
+
+Ce calcul est vérifié par des tests qui comparent la valeur annoncée au temps
+réellement mesuré en simulation, entre la fin de la pluie et le bassin vide,
+pour les quatre scénarios (écart inférieur à 0,1 %).
 
 Le GTI impose **48 h** au maximum (valeur modifiable dans l'application). Si le temps de
 vidange est dépassé, l'application signale que la surface d'infiltration doit être

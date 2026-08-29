@@ -173,7 +173,7 @@ class VueRapport(Vue):
                     ("Volume de temporisation",
                      f"{res.volume_m3:.1f} m³" if res.dimensionnable else "— (aucun débit de sortie)"),
                     ("Durée critique", res.duree_critique_hm if res.dimensionnable else "—"),
-                    ("Temps de vidange", res.temps_vidange_hm if res.dimensionnable else "—"),
+                    ("Vidange après la pluie", res.temps_vidange_hm if res.dimensionnable else "—"),
                     ("Ouvrage encodé",
                      f"{etat.bassin.volume_total_m3:.1f} m³" if etat.bassin_valide else "non encodé"),
                 ]

@@ -41,7 +41,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     doc.encadre(
         f"Volume de temporisation à mettre en oeuvre : {res.volume_m3:.1f} m³   |   "
         f"Durée de pluie critique : {res.duree_critique_hm}   |   "
-        f"Temps de vidange : {res.temps_vidange_hm}",
+        f"Vidange après la pluie : {res.temps_vidange_hm}",
         fond=BLEU if res.conforme else ROUGE,
     )
 
@@ -71,7 +71,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
              f"{res.debit_infiltration_ls:.3f}", "l/s"],
             ["Débit d'ajutage (orifice calibré)", f"{p.debit_ajutage_ls:.3f}", "l/s"],
             ["Débit de fuite admissible (5 l/s/ha)", f"{p.debit_fuite_admissible_ls:.3f}", "l/s"],
-            ["Temps de vidange maximum admis", f"{p.temps_vidange_max_h:.0f}", "h"],
+            ["Temps de vidange maximum admis (après la pluie)", f"{p.temps_vidange_max_h:.0f}", "h"],
         ],
         largeurs=[9.0, 4.0, 3.0],
     )
