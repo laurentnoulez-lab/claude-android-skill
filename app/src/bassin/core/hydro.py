@@ -30,9 +30,12 @@ from .model import (
     POURCENTAGE_SURFACE_INFILTRATION_LIMITE,
 )
 
-#: Grille de durées de pluie balayée (minutes) : 10 min à 60 jours, pas de 5 min.
+#: Grille de durées de pluie balayée (minutes), calquée sur la fiche de calcul du
+#: GTI : sa feuille « Pluie » compte 17 280 lignes, de 10 min à 86 405 min par pas
+#: de 5 min. Le dernier point compte : quand le débit de sortie est très faible, le
+#: volume croît encore en fin de grille et c'est lui qui donne le maximum.
 DUREE_MIN = 10
-DUREE_MAX = 86400
+DUREE_MAX = 86405
 PAS_DUREE = 5
 
 

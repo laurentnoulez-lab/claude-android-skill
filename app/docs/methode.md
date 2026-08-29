@@ -70,6 +70,35 @@ V_évacué(t) = Q_infiltration × t + Q_ajutage × max(t − t_seuil, 0)
 
 `Q_entrant` étant le débit ruisselé de la pluie de projet (intensité constante).
 
+## Conformité à la fiche de calcul du GTI
+
+Le moteur reproduit la fiche officielle du Service public de Wallonie, cellule par
+cellule (feuille « Pluie », colonnes A à K) :
+
+| Fiche GTI | Formule | Application |
+|---|---|---|
+| `Pluie!A`, `Pluie!B` | `SI(t<25 ; a1 ; SI(t<=6000 ; a2 ; a3))` | `intensite_montana` |
+| `Pluie!D` | `i = a × t^(−b)` | idem |
+| `Pluie!E` | `h = i × t / 60` | `hauteur_montana` |
+| `Pluie!F` | `V_in = h × S_pondérée / 1000` | `volume_a_maitriser` |
+| `Pluie!G`, `Pluie!J` | `V_out = Q × t × 60 / 1000` | idem |
+| `Pluie!H`, `Pluie!K` | `V = MAX(V_in − V_out ; 0)` | idem |
+| `Calcul!B33`, `F33` | `MAX` sur les 17 280 durées | idem |
+| `Infiltration seule!B36` | `Q = 1000 × S × K / 2` | `debit_infiltration_ls` |
+| `Infiltration et rejet!B38` | `Q_rejet = 5 l/s/ha × surface raccordée` | `debit_fuite_admissible_ls` |
+| `Calcul!F27` | `Q_total = Q_rejet + Q_infiltration` | scénario « temporisation et dispersion » |
+
+La grille de durées est celle de la fiche : **17 280 valeurs, de 10 à 86 405 minutes
+par pas de 5**. Le dernier point compte : lorsque le débit de sortie est très faible,
+le volume croît encore en fin de grille et c'est lui qui donne le maximum.
+
+Vérification : les 6 756 couples (commune, récurrence) de coefficients de Montana sont
+identiques à ceux du classeur ; 960 comparaisons de dimensionnement (40 communes
+tirées au sort × 12 récurrences × 2 scénarios) concordent à 10⁻¹² m³ ; et les 17 280
+intensités mises en cache par Excel dans le classeur sont reproduites à 10⁻¹⁴ mm/h.
+Les tests correspondants sont dans `app/tests/test_gti.py`, avec un jeu de cas figé
+(`donnees_gti.json`) rejoué même en l'absence du classeur.
+
 ## Sources de pluie et durées balayées
 
 * **Montana** est une formule continue : le balayage des durées est fin (pas de 5 min,
