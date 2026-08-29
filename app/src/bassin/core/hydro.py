@@ -217,6 +217,48 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     return res
 
 
+def dimensionner_amont(projet: Projet) -> Resultat:
+    """Dimensionne le bassin d'orage amont sur son propre bassin versant.
+
+    Même méthode rationnelle et même pluie de projet que pour l'ouvrage aval :
+    le volume renvoyé est le minimum pour que le bassin amont ne déborde pas.
+    """
+    amont = projet.amont
+    q_inf = amont.debit_infiltration_ls(projet.coef_securite_infiltration)
+    q_aj = amont.debit_ajutage_ls
+    res = Resultat(scenario="amont", libelle="Bassin d'orage amont")
+    res.debit_infiltration_ls = q_inf
+    res.debit_ajutage_ls = q_aj
+    res.debit_sortant_ls = q_inf + q_aj
+    res.surface_infiltration_m2 = amont.surface_dispersion_m2
+    s_pond = amont.aire_ponderee_m2
+    if s_pond <= 0:
+        return res
+    v, t, h = volume_a_maitriser(serie_projet(projet), s_pond, res.debit_sortant_ls)
+    res.volume_m3 = v
+    res.duree_critique_min = t
+    res.hauteur_pluie_mm = h
+    res.intensite_mmh = h * 60.0 / t if t else 0.0
+    res.intensite_ls_ha = res.intensite_mmh * 10000.0 / 3600.0
+    res.debit_entrant_ls = res.intensite_ls_ha * s_pond / 10000.0
+    res.temps_vidange_h = temps_vidange_h(v, q_inf, q_aj, 0.0)
+    if res.debit_sortant_ls <= 0:
+        res.conforme = False
+        res.alertes.append(
+            "Le bassin amont n'a ni ajutage ni infiltration : il ne se vidange pas."
+        )
+    elif res.temps_vidange_h > projet.temps_vidange_max_h:
+        res.alertes.append(
+            f"Vidange du bassin amont en {res.temps_vidange_hm}, au-dela du maximum admis."
+        )
+    return res
+
+
+def volume_amont_minimal_m3(projet: Projet) -> float:
+    """Volume de temporisation minimal du bassin amont pour éviter tout débordement."""
+    return dimensionner_amont(projet).volume_m3
+
+
 def temps_vidange_h(volume_m3: float, q_infiltration_ls: float, q_ajutage_ls: float,
                     volume_sous_ajutage_m3: float = 0.0) -> float:
     """Temps de vidange gravitaire du volume stocké [h]."""

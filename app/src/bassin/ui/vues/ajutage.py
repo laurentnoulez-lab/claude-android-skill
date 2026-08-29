@@ -40,10 +40,10 @@ class VueAjutage(Vue):
                 *theme.champs_convertis(
                     "Débit d'ajutage visé", "l/s", debit,
                     "soit", "l/s/ha",
-                    (10000.0 / p.aire_totale_m2) if p.aire_totale_m2 > 0 else None,
+                    (10000.0 / p.aire_raccordee_m2) if p.aire_raccordee_m2 > 0 else None,
                     maj_debit, on_valide=self.maj_resultats,
                     aide_a="débit de fuite autorisé",
-                    aide_b=f"rapporté aux {p.aire_totale_m2:.0f} m² raccordés"
+                    aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                            " · maximum GTI : 5 l/s/ha",
                     indisponible_b="encodez d'abord les surfaces incidentes",
                     decimales_a=3, decimales_b=2,

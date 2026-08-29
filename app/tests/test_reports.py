@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from bassin.core.model import Bassin, Projet  # noqa: E402
+from bassin.core.model import Bassin, BassinAmont, Projet  # noqa: E402
 from bassin.reports import charts, docx_report, dossier as mod_dossier, pdf_report, xlsx_report  # noqa: E402
 from bassin.reports.pdf_writer import Pdf, largeur_texte, nettoyer  # noqa: E402
 
@@ -159,6 +159,51 @@ class TestWord(BaseRapport):
             self.assertIn(media, rels)
         for i in range(1, len(medias) + 1):
             self.assertIn(f'r:embed="rIdImg{i}"', document)
+
+
+class TestRapportAvecAmont(unittest.TestCase):
+    """Les trois formats documentent le bassin d'orage amont."""
+
+    @classmethod
+    def setUpClass(cls):
+        p = projet_complet()
+        p.amont = BassinAmont(actif=True, surface_bv_m2=8000.0, coef_ruissellement=0.8,
+                              debit_ajutage_ls=2.0, surface_dispersion_m2=100.0,
+                              k_infiltration_ms=1e-5, volume_temporisation_m3=300.0,
+                              inclure_bv_dans_ajutage=True)
+        cls.dossier = mod_dossier.construire(p)
+        cls.repertoire = tempfile.mkdtemp(prefix="hydrobassin_amont_")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repertoire, ignore_errors=True)
+
+    def chemin(self, nom: str) -> str:
+        return os.path.join(self.repertoire, nom)
+
+    def test_word_decrit_le_bassin_amont(self):
+        chemin = docx_report.ecrire(self.dossier, self.chemin("amont.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        ET.fromstring(document)
+        self.assertIn("bassin versant amont", document)
+        self.assertIn("Volume de temporisation amont", document)
+
+    def test_pdf_decrit_le_bassin_amont(self):
+        chemin = pdf_report.ecrire(self.dossier, self.chemin("amont.pdf"))
+        self.assertGreater(os.path.getsize(chemin), 5000)
+        with open(chemin, "rb") as fh:
+            self.assertTrue(fh.read().startswith(b"%PDF"))
+
+    def test_excel_compte_la_surface_amont(self):
+        import openpyxl
+
+        chemin = xlsx_report.ecrire(self.dossier, self.chemin("amont.xlsx"))
+        classeur = openpyxl.load_workbook(chemin)
+        libelles = [c.value for ligne in classeur["Projet"].iter_rows()
+                    for c in ligne if isinstance(c.value, str)]
+        self.assertTrue(any("Bassin d'orage amont" in (l or "") for l in libelles))
+        self.assertTrue(any("BV amont compris" in (l or "") for l in libelles))
 
 
 class TestVirguleDecimale(BaseRapport):

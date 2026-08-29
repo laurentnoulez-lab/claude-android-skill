@@ -146,7 +146,34 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
             ],
             largeurs=[9.0, 4.0, 3.0],
         )
-        doc.titre2("4.1 Événement critique simule")
+        amont = p.amont
+        if amont.actif:
+            doc.titre2("4.1 Bassin d'orage amont")
+            doc.paragraphe(
+                "Un bassin d'orage situé en amont se déverse dans l'ouvrage étudié. Il reçoit la "
+                "meme pluie de projet sur son propre bassin versant, la tamponne, puis la restitue "
+                "a son débit de fuite.")
+            doc.tableau(
+                [
+                    ["Caractéristique", "Valeur", "Unité"],
+                    ["Surface du bassin versant amont", f"{amont.surface_bv_m2:.0f}", "m²"],
+                    ["Coefficient de ruissellement moyen", f"{amont.coef_ruissellement:.2f}", "-"],
+                    ["Surface active amont", f"{amont.aire_ponderee_m2:.0f}", "m²"],
+                    ["Volume de temporisation amont", f"{amont.volume_temporisation_m3:.1f}", "m³"],
+                    ["Surface de dispersion amont", f"{amont.surface_dispersion_m2:.1f}", "m²"],
+                    ["Vitesse d'infiltration amont", f"{amont.k_infiltration_ms:.2e}", "m/s"],
+                    ["Débit d'ajutage amont", f"{amont.debit_ajutage_ls:.3f}", "l/s"],
+                    ["Volume restitué a l'ouvrage aval", f"{sim.volume_amont_m3:.1f}", "m³"],
+                    ["Débit de pointe restitué", f"{sim.q_amont_max_ls:.3f}", "l/s"],
+                ],
+                largeurs=[9.0, 4.0, 3.0],
+            )
+            if amont.inclure_bv_dans_ajutage:
+                doc.paragraphe(
+                    f"La surface du bassin versant amont est comptée dans la surface raccordée : "
+                    f"{p.aire_raccordee_m2:.0f} m², soit un débit de fuite admissible de "
+                    f"{p.debit_fuite_admissible_ls:.3f} l/s.", puce=True)
+        doc.titre2("4.2 Événement critique simule" if p.amont.actif else "4.1 Événement critique simule")
         doc.tableau(
             [
                 ["Grandeur", "Valeur"],

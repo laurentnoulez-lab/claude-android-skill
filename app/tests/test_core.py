@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from bassin.core import hydro, orifice, rainfall, simulation  # noqa: E402
 from bassin.core.model import (  # noqa: E402
     Bassin,
+    BassinAmont,
     Projet,
     SCENARIO_DISPERSION,
     SCENARIO_MIXTE,
@@ -289,12 +290,17 @@ class TestMethodeRationnelle(unittest.TestCase):
         self.assertEqual(hydro.formater_duree(2880), "2 j")
 
 
-class TestSimulation(unittest.TestCase):
+class _AvecBassin(unittest.TestCase):
+    """Fabrique commune aux tests de simulation."""
+
     def bassin_type(self, **kw) -> Bassin:
         params = dict(volume_total_m3=90.0, volume_sous_ajutage_m3=0.0,
                       surface_dispersion_m2=120.0, debit_ajutage_ls=1.0)
         params.update(kw)
         return Bassin(**params)
+
+
+class TestSimulation(_AvecBassin):
 
     def test_simulation_conserve_les_volumes(self):
         p = projet_type()
@@ -423,6 +429,131 @@ class TestSimulation(unittest.TestCase):
         self.assertGreater(cas, 20)
         self.assertLess(pire, 1e-6, "le bassin dimensionné déborde en simulation")
 
+class TestBassinAmont(unittest.TestCase):
+    """Bassin d'orage amont qui se déverse dans l'ouvrage étudié."""
+
+    def projet_avec_amont(self, **kw) -> Projet:
+        p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=25,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="qdf")
+        p.surfaces[7].aire_m2 = 5000.0
+        p.debit_ajutage_ls = 3.0
+        params = dict(actif=True, surface_bv_m2=8000.0, coef_ruissellement=0.8,
+                      debit_ajutage_ls=2.0, surface_dispersion_m2=0.0,
+                      k_infiltration_ms=1e-5, volume_temporisation_m3=1e6)
+        params.update(kw)
+        p.amont = BassinAmont(**params)
+        p.bassin = Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=0.0,
+                          surface_dispersion_m2=0.0, debit_ajutage_ls=3.0)
+        return p
+
+    def test_ce_qui_tombe_en_amont_arrive_ou_s_infiltre(self):
+        """Conservation : la pluie du bassin versant amont s'infiltre ou descend."""
+        for surface_dispersion in (0.0, 150.0):
+            with self.subTest(surface_dispersion=surface_dispersion):
+                p = self.projet_avec_amont(surface_dispersion_m2=surface_dispersion)
+                res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+                h, t = res.hauteur_pluie_mm, res.duree_critique_min
+                apport = simulation.hydrogramme_amont(p, h, t)
+                tombe = h * p.amont.aire_ponderee_m2 / 1000.0
+                q_inf = p.amont.debit_infiltration_ls(p.coef_securite_infiltration)
+                self.assertLessEqual(apport.volume_m3, tombe + 1e-6)
+                if q_inf == 0:
+                    self.assertAlmostEqual(apport.volume_m3, tombe, places=6)
+                else:
+                    self.assertLess(apport.volume_m3, tombe)
+
+    def test_un_amont_inactif_ne_change_rien(self):
+        p = self.projet_avec_amont(actif=False)
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        h, t = res.hauteur_pluie_mm, res.duree_critique_min
+        apport = simulation.hydrogramme_amont(p, h, t)
+        self.assertEqual(apport.segments, [])
+        sans = simulation.simuler(p, p.bassin, h, t)
+        avec = simulation.simuler(p, p.bassin, h, t, apport=apport)
+        self.assertAlmostEqual(sans.volume_max_m3, avec.volume_max_m3, places=9)
+
+    def test_l_amont_augmente_la_pointe_aval(self):
+        p = self.projet_avec_amont()
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        h, t = res.hauteur_pluie_mm, res.duree_critique_min
+        apport = simulation.hydrogramme_amont(p, h, t)
+        sans = simulation.simuler(p, p.bassin, h, t)
+        avec = simulation.simuler(p, p.bassin, h, t, apport=apport)
+        self.assertGreater(avec.volume_max_m3, sans.volume_max_m3)
+        self.assertAlmostEqual(avec.volume_amont_m3, apport.volume_m3, places=6)
+
+    def test_un_amont_sous_dimensionne_deborde_et_restitue_plus_vite(self):
+        """Sous le volume minimal, le trop-plein amont arrive d'un coup en aval."""
+        p = self.projet_avec_amont()
+        minimal = hydro.volume_amont_minimal_m3(p)
+        self.assertGreater(minimal, 0)
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        h, t = res.hauteur_pluie_mm, res.duree_critique_min
+
+        p.amont.volume_temporisation_m3 = minimal
+        juste = simulation.simuler(p, p.bassin, h, t,
+                                   apport=simulation.hydrogramme_amont(p, h, t))
+        p.amont.volume_temporisation_m3 = minimal * 0.5
+        petit = simulation.simuler(p, p.bassin, h, t,
+                                   apport=simulation.hydrogramme_amont(p, h, t))
+        self.assertGreater(petit.q_amont_max_ls, juste.q_amont_max_ls)
+        self.assertGreater(petit.volume_max_m3, juste.volume_max_m3)
+
+    def test_la_table_qdf_tient_compte_de_l_amont(self):
+        """La table d'acceptation ne doit pas contredire la simulation."""
+        p = self.projet_avec_amont()
+        p.bassin = Bassin(volume_total_m3=300.0, volume_sous_ajutage_m3=0.0,
+                          surface_dispersion_m2=0.0, debit_ajutage_ls=3.0)
+        p.amont.actif = False
+        sans = simulation.table_acceptation(p, p.bassin)
+        p.amont.actif = True
+        avec = simulation.table_acceptation(p, p.bassin)
+        i = len(sans.durees_min) // 2
+        j = len(sans.periodes_retour) - 1
+        self.assertGreater(avec.cellules[i][j].volume_requis_m3,
+                           sans.cellules[i][j].volume_requis_m3)
+
+    def test_l_evenement_critique_reste_exact_malgre_le_balayage_en_deux_passes(self):
+        """Le balayage dégrossi puis affiné doit retrouver le vrai maximum."""
+        p = self.projet_avec_amont()
+        p.source_pluie = "montana"
+        p.bassin = Bassin(volume_total_m3=300.0, volume_sous_ajutage_m3=0.0,
+                          surface_dispersion_m2=0.0, debit_ajutage_ls=3.0)
+        duree, hauteur = simulation.evenement_critique(p, p.bassin)
+        retenu = simulation.volume_requis_m3(p, p.bassin, hauteur, duree)
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
+        for t in range(10, 20000, 250):
+            autre = simulation.volume_requis_m3(p, p.bassin, src.hauteur(t), float(t))
+            self.assertLessEqual(autre, retenu * (1 + 1e-6))
+
+    def test_le_volume_minimal_amont_evite_le_debordement(self):
+        p = self.projet_avec_amont()
+        p.amont.volume_temporisation_m3 = hydro.volume_amont_minimal_m3(p)
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        apport = simulation.hydrogramme_amont(p, res.hauteur_pluie_mm, res.duree_critique_min)
+        # Sans débordement, le débit restitué ne dépasse jamais l'ajutage amont.
+        self.assertLessEqual(max(q for _, _, q in apport.segments),
+                             p.amont.debit_ajutage_ls + 1e-6)
+
+    def test_la_surface_amont_ne_compte_que_si_elle_est_cochee(self):
+        p = self.projet_avec_amont(inclure_bv_dans_ajutage=False)
+        self.assertAlmostEqual(p.aire_raccordee_m2, 5000.0)
+        p.amont.inclure_bv_dans_ajutage = True
+        self.assertAlmostEqual(p.aire_raccordee_m2, 13000.0)
+        self.assertAlmostEqual(p.debit_fuite_admissible_ls, 5.0 * 13000.0 / 10000.0)
+        p.amont.actif = False
+        self.assertAlmostEqual(p.aire_raccordee_m2, 5000.0)
+
+    def test_un_projet_ancien_se_recharge(self):
+        """Un enregistrement antérieur ne connaît pas le bassin amont."""
+        ancien = {"commune_ins": "81001", "commune_nom": "Arlon", "periode_retour": 25,
+                  "surfaces": [], "bassin": {"volume_total_m3": 40.0}}
+        p = Projet.from_dict(ancien)
+        self.assertFalse(p.amont.actif)
+        self.assertAlmostEqual(p.bassin.volume_total_m3, 40.0)
+
+
+class TestTableAcceptation(_AvecBassin):
     def test_table_acceptation(self):
         p = projet_type()
         b = self.bassin_type(volume_total_m3=90.0)

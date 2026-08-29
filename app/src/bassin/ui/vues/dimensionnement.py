@@ -88,13 +88,13 @@ class VueDimensionnement(Vue):
         )
 
         # L'ajutage s'encode en l/s ou en l/s/ha : la case laissée vide se remplit.
-        hectares = p.aire_totale_m2 / 10000.0
+        hectares = p.aire_raccordee_m2 / 10000.0
         champs_ajutage = theme.champs_convertis(
             "Débit d'ajutage", "l/s", p.debit_ajutage_ls,
             "soit", "l/s/ha", (1.0 / hectares) if hectares > 0 else None,
             maj_ajutage, on_valide=self.maj_resultats,
             aide_a="orifice calibré",
-            aide_b=f"rapporté aux {p.aire_totale_m2:.0f} m² raccordés"
+            aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                    f" · maximum GTI : 5 l/s/ha",
             indisponible_b="encodez d'abord les surfaces incidentes",
             decimales_a=3, decimales_b=2,

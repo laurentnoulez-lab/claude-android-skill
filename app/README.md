@@ -15,7 +15,7 @@ Livrables : **APK Android** et **installateur Windows**, à partir d'un code uni
 |---|---|
 | **Projet** | Commune (574 communes, dont les 262 communes wallonnes), période de retour (2 → 200 ans), surfaces incidentes et coefficients de ruissellement du GTI |
 | **Dimensionnement** | Vitesse d'infiltration K (en **m/s**, équivalent mm/h complété tout seul), débit d'ajutage (en **l/s** ou **l/(s·ha)**, au choix), temps de vidange maximum ; comparaison des **4 scénarios** ; volume, durée critique, surface d'infiltration minimale, débit d'ajutage minimal |
-| **Bassin** | Encodage de l'ouvrage (volume tampon, volume sous l'ajutage, surface de dispersion, débit d'ajutage) et **simulation complète** du remplissage / vidange |
+| **Bassin** | Encodage de l'ouvrage (volume tampon, volume sous l'ajutage, surface de dispersion, débit d'ajutage), **bassin d'orage amont** éventuel, et **simulation** d'une ou plusieurs durées de pluie à la fois |
 | **Table QDF** | Tableau récurrences × durées : quelles pluies l'ouvrage encaisse sans déborder |
 | **Ajutage** | Dimensionnement de l'orifice (Torricelli), abaque des diamètres commerciaux |
 | **Pluies GTI** | Tables QDF en mm et en l/s/ha, coefficients de Montana, courbes IDF |

@@ -67,6 +67,38 @@ class Bassin:
 
 
 @dataclass
+class BassinAmont:
+    """Bassin d'orage situé en amont, qui se déverse dans l'ouvrage étudié.
+
+    Son propre bassin versant ruisselle vers lui pendant la même averse ; il
+    tamponne puis restitue à son débit de fuite, lequel devient un apport
+    supplémentaire pour le bassin aval.
+    """
+
+    actif: bool = False
+    surface_bv_m2: float = 0.0
+    coef_ruissellement: float = 0.9
+    debit_ajutage_ls: float = 0.0
+    surface_dispersion_m2: float = 0.0
+    k_infiltration_ms: float = 1e-5
+    volume_temporisation_m3: float = 0.0
+    #: La surface du bassin versant amont compte-t-elle pour le débit de fuite
+    #: admissible et l'ajutage spécifique du bassin aval ?
+    inclure_bv_dans_ajutage: bool = False
+
+    @property
+    def aire_ponderee_m2(self) -> float:
+        return max(self.surface_bv_m2, 0.0) * max(self.coef_ruissellement, 0.0)
+
+    def debit_infiltration_ls(self, coef_securite: float = COEF_SECURITE_INFILTRATION) -> float:
+        return debit_infiltration_ls(self.surface_dispersion_m2, self.k_infiltration_ms, coef_securite)
+
+    def debit_sortant_ls(self, coef_securite: float = COEF_SECURITE_INFILTRATION) -> float:
+        """Débit restitué vers l'aval : ajutage + infiltration."""
+        return self.debit_ajutage_ls + self.debit_infiltration_ls(coef_securite)
+
+
+@dataclass
 class Projet:
     """Ensemble des données d'entrée d'un dimensionnement."""
 
@@ -87,6 +119,9 @@ class Projet:
 
     # Ouvrage a verifier
     bassin: Bassin = field(default_factory=Bassin)
+
+    # Bassin d'orage amont eventuel
+    amont: BassinAmont = field(default_factory=BassinAmont)
 
     # Ajutage (Torricelli)
     hauteur_charge_m: float = 1.0
@@ -113,9 +148,21 @@ class Projet:
         return self.aire_ponderee_m2 / tot if tot > 0 else 0.0
 
     @property
+    def aire_raccordee_m2(self) -> float:
+        """Surface raccordée à l'ouvrage, bassin versant amont compris s'il est pris en compte.
+
+        C'est cette surface qui sert au débit de fuite admissible et à la
+        conversion de l'ajutage en l/(s·ha).
+        """
+        aire = self.aire_totale_m2
+        if self.amont.actif and self.amont.inclure_bv_dans_ajutage:
+            aire += max(self.amont.surface_bv_m2, 0.0)
+        return aire
+
+    @property
     def debit_fuite_admissible_ls(self) -> float:
-        """Débit de rejet maximal admissible (5 l/s/ha de surface active)."""
-        return DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA * self.aire_totale_m2 / 10000.0
+        """Débit de rejet maximal admissible (5 l/s/ha de surface raccordée)."""
+        return DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA * self.aire_raccordee_m2 / 10000.0
 
     def surfaces_non_vides(self) -> List[SurfaceIncidente]:
         return [s for s in self.surfaces if s.aire_m2 > 0]
@@ -132,10 +179,21 @@ class Projet:
     def from_dict(cls, data: Dict) -> "Projet":
         data = dict(data)
         surfaces = [SurfaceIncidente(**s) for s in data.pop("surfaces", [])]
-        bassin = Bassin(**data.pop("bassin", {}))
+        bassin = Bassin(**_champs_connus(Bassin, data.pop("bassin", {})))
+        amont = BassinAmont(**_champs_connus(BassinAmont, data.pop("amont", {})))
         champs = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         propre = {k: v for k, v in data.items() if k in champs}
-        return cls(surfaces=surfaces, bassin=bassin, **propre)
+        return cls(surfaces=surfaces, bassin=bassin, amont=amont, **propre)
+
+
+def _champs_connus(classe, data: Dict) -> Dict:
+    """Filtre un dictionnaire enregistré sur les champs actuels d'une dataclasse.
+
+    Un projet enregistré par une version antérieure ne connaît pas les champs
+    ajoutés depuis : il doit pouvoir se recharger malgré tout.
+    """
+    champs = set(classe.__dataclass_fields__)
+    return {k: v for k, v in dict(data).items() if k in champs}
 
 
 def debit_infiltration_ls(surface_m2: float, k_ms: float, coef_securite: float = COEF_SECURITE_INFILTRATION) -> float:

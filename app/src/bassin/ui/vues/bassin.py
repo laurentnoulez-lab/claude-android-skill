@@ -6,7 +6,7 @@ from typing import List
 
 import flet as ft
 
-from ...core import rainfall, simulation
+from ...core import hydro, rainfall, simulation
 from ...reports import charts
 from .. import graphiques, theme
 from .base import Vue
@@ -46,10 +46,10 @@ class VueBassin(Vue):
                 *theme.champs_convertis(
                     "Débit d'ajutage", "l/s", b.debit_ajutage_ls,
                     "soit", "l/s/ha",
-                    (10000.0 / p.aire_totale_m2) if p.aire_totale_m2 > 0 else None,
+                    (10000.0 / p.aire_raccordee_m2) if p.aire_raccordee_m2 > 0 else None,
                     maj("debit_ajutage_ls"), on_valide=self.maj_resultats,
                     aide_a="orifice calibré",
-                    aide_b=f"rapporté aux {p.aire_totale_m2:.0f} m² raccordés",
+                    aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés",
                     indisponible_b="encodez d'abord les surfaces incidentes",
                     decimales_a=3, decimales_b=2,
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
@@ -162,8 +162,10 @@ class VueBassin(Vue):
                               ],
                               spacing=10),
                           ft.Icons.SHOW_CHART),
-            theme.section("Simuler une autre pluie", self._simulateur_manuel(), ft.Icons.TUNE,
-                          "Choisissez une durée et une récurrence"),
+            theme.section("Bassin d'orage amont", self._panneau_amont(), ft.Icons.MERGE,
+                          "Ouvrage situé en amont qui se déverse dans celui-ci"),
+            theme.section("Simuler une ou plusieurs pluies", self._simulateur_manuel(), ft.Icons.TUNE,
+                          "Cochez les durées à comparer, puis lancez la simulation"),
         ]
 
     def construire(self) -> List[ft.Control]:
@@ -225,17 +227,133 @@ class VueBassin(Vue):
             ],
         )
 
+    # ------------------------------------------------- bassin d'orage amont
+    def _panneau_amont(self) -> ft.Control:
+        """Bassin d'orage situé en amont, qui se déverse dans l'ouvrage étudié."""
+        p = self.etat.projet
+        amont = p.amont
+        details = ft.Column(spacing=12, visible=amont.actif)
+
+        def maj(champ: str):
+            def _f(v: float) -> None:
+                setattr(amont, champ, v)
+                self.etat.invalider()
+            return _f
+
+        def basculer_amont(e: ft.ControlEvent) -> None:
+            amont.actif = bool(e.control.value)
+            self.etat.invalider()
+            self.rafraichir()
+
+        def basculer_surface(e: ft.ControlEvent) -> None:
+            amont.inclure_bv_dans_ajutage = bool(e.control.value)
+            self.etat.invalider()
+            self.rafraichir()
+
+        def proposer_volume(_=None) -> None:
+            amont.volume_temporisation_m3 = hydro.volume_amont_minimal_m3(p)
+            self.etat.invalider()
+            self.rafraichir()
+
+        interrupteur = ft.Switch(label="Un bassin d'orage se déverse dans cet ouvrage",
+                                 value=amont.actif, on_change=basculer_amont)
+        if not amont.actif:
+            return ft.Column([interrupteur], spacing=12)
+
+        minimal = hydro.volume_amont_minimal_m3(p)
+        res_amont = hydro.dimensionner_amont(p)
+        champs = ft.ResponsiveRow(
+            [
+                theme.champ_nombre("Surface du bassin versant amont", amont.surface_bv_m2,
+                                   maj("surface_bv_m2"), "m²", "surface qui ruisselle vers l'amont",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4}),
+                theme.champ_nombre("Coefficient de ruissellement moyen", amont.coef_ruissellement,
+                                   maj("coef_ruissellement"), "—", "pondéré sur ce bassin versant",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4}),
+                theme.champ_nombre("Débit d'ajutage amont", amont.debit_ajutage_ls,
+                                   maj("debit_ajutage_ls"), "l/s", "restitué vers cet ouvrage",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4}),
+                theme.champ_nombre("Surface de dispersion amont", amont.surface_dispersion_m2,
+                                   maj("surface_dispersion_m2"), "m²", "fond infiltrant du BO amont",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4}),
+                *theme.champs_convertis(
+                    "Vitesse d'infiltration amont", "m/s", amont.k_infiltration_ms,
+                    "soit", "mm/h", 3.6e6, maj("k_infiltration_ms"),
+                    on_valide=self.maj_resultats,
+                    aide_a="essai in situ · 1e-5 ou 0,00001",
+                    aide_b="équivalent, modifiable aussi",
+                    col_a={"xs": 12, "sm": 6, "md": 4}, col_b={"xs": 12, "sm": 6, "md": 4}),
+                theme.champ_nombre("Volume de temporisation amont", amont.volume_temporisation_m3,
+                                   maj("volume_temporisation_m3"), "m³",
+                                   f"minimum sans débordement : {theme.nombre(minimal, 1)} m³",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4}),
+            ],
+            spacing=12,
+            run_spacing=12,
+        )
+
+        manque = amont.volume_temporisation_m3 + 1e-6 < minimal
+        avis = theme.message(
+            f"Le bassin amont déborderait : {theme.nombre(amont.volume_temporisation_m3, 1)} m³ "
+            f"encodés pour {theme.nombre(minimal, 1)} m³ nécessaires. Son trop-plein arriverait "
+            "d'un coup dans l'ouvrage aval.", "alerte") if manque else theme.message(
+            f"Bassin amont suffisant : il restitue {theme.nombre(res_amont.debit_sortant_ls, 3)} l/s "
+            f"(ajutage {theme.nombre(amont.debit_ajutage_ls, 3)} l/s + infiltration "
+            f"{theme.nombre(res_amont.debit_infiltration_ls, 3)} l/s), vidange en "
+            f"{res_amont.temps_vidange_hm}.", "info")
+
+        return ft.Column(
+            [
+                interrupteur,
+                champs,
+                ft.Row(
+                    [
+                        theme.bouton_secondaire(
+                            f"Proposer le volume minimal ({theme.nombre(minimal, 1)} m³)",
+                            ft.Icons.AUTO_FIX_HIGH, proposer_volume),
+                    ],
+                    wrap=True, spacing=10,
+                ),
+                ft.Checkbox(
+                    label="Compter la surface du bassin versant amont dans le débit d'ajutage "
+                          "de cet ouvrage",
+                    value=amont.inclure_bv_dans_ajutage,
+                    on_change=basculer_surface,
+                ),
+                ft.Text(
+                    f"Surface retenue pour le débit de fuite : "
+                    f"{theme.nombre(p.aire_raccordee_m2, 0)} m² · maximum admissible "
+                    f"{theme.nombre(p.debit_fuite_admissible_ls, 3)} l/s",
+                    size=11.5, color=theme.GRIS),
+                avis,
+            ],
+            spacing=12,
+        )
+
+    # ----------------------------------------------------- simulation manuelle
+    def _durees_choisies(self) -> List[float]:
+        """Durées cochées, initialisées sur la plus proche de l'événement critique.
+
+        La durée critique issue du balayage n'est pas forcément tabulée : on
+        retient la durée normalisée la plus proche, sans quoi aucune case ne
+        serait cochée au premier affichage.
+        """
+        if getattr(self, "_selection_durees", None) is None:
+            depart = self.etat.simulation.duree_pluie_min if self.etat.simulation else 60.0
+            proche = min(rainfall.QDF_DURATIONS_MIN, key=lambda d: abs(d - depart))
+            self._selection_durees = {float(proche)}
+        return sorted(self._selection_durees)
+
     def _simulateur_manuel(self) -> ft.Control:
         etat = self.etat
         zone = ft.Column(spacing=10)
-        duree = ft.Dropdown(
-            label="Durée de pluie",
-            value=str(float(etat.simulation.duree_pluie_min)) if etat.simulation else "60.0",
-            options=[ft.dropdown.Option(str(float(d)), lib)
-                     for d, lib in zip(rainfall.QDF_DURATIONS_MIN, rainfall.QDF_DURATION_LABELS)],
-            dense=True,
-            border_radius=10,
-        )
+        choisies = set(self._durees_choisies())
+
         recurrence = ft.Dropdown(
             label="Période de retour",
             value=str(etat.projet.periode_retour),
@@ -244,30 +362,53 @@ class VueBassin(Vue):
             border_radius=10,
         )
 
+        def basculer(duree: float):
+            def _f(e: ft.ControlEvent) -> None:
+                if e.control.selected:
+                    self._selection_durees.add(duree)
+                else:
+                    self._selection_durees.discard(duree)
+            return _f
+
+        puces = ft.Row(
+            [
+                ft.Chip(
+                    label=ft.Text(libelle, size=12),
+                    selected=float(duree) in choisies,
+                    on_select=basculer(float(duree)),
+                    show_checkmark=True,
+                )
+                for duree, libelle in zip(rainfall.QDF_DURATIONS_MIN, rainfall.QDF_DURATION_LABELS)
+            ],
+            wrap=True, spacing=6, run_spacing=6,
+        )
+
+        def tout(valeur: bool):
+            def _f(_=None) -> None:
+                self._selection_durees = ({float(d) for d in rainfall.QDF_DURATIONS_MIN}
+                                          if valeur else set())
+                self.rafraichir()
+            return _f
+
         def lancer(_=None) -> None:
-            d = float(duree.value)
+            durees = sorted(self._selection_durees)
+            if not durees:
+                zone.controls = [theme.message("Cochez au moins une durée de pluie.", "info")]
+                try:
+                    zone.update()
+                except Exception:
+                    pass
+                return
             rp = int(recurrence.value)
             src = rainfall.SourcePluie(etat.projet.commune_ins, rp, etat.projet.source_pluie)
-            hauteur = src.hauteur(d)
-            res = simulation.simuler(etat.projet, etat.bassin, hauteur, d)
-            zone.controls = [
-                ft.Row(
-                    [
-                        theme.etiquette_statut(res.statut),
-                        theme.etiquette(f"Pluie {hauteur:.1f} mm", theme.BLEU, theme.BLEU_CLAIR),
-                        theme.etiquette(f"Pointe {res.volume_max_m3:.1f} m³", theme.ARDOISE,
-                                        theme.GRIS_CLAIR),
-                        theme.etiquette(f"Remplissage {res.taux_remplissage * 100:.0f} %",
-                                        theme.ARDOISE, theme.GRIS_CLAIR),
-                        theme.etiquette(f"Vidange {res.temps_vidange_h:.1f} h", theme.ARDOISE,
-                                        theme.GRIS_CLAIR),
-                    ],
-                    wrap=True,
-                    spacing=8,
-                    run_spacing=8,
-                ),
-                graphiques.construire(self._graphique_niveau(res), 240),
-            ]
+            resultats = []
+            for duree in durees:
+                hauteur = src.hauteur(duree)
+                apport = simulation.hydrogramme_amont(etat.projet, hauteur, duree)
+                resultats.append(
+                    (duree, hauteur,
+                     simulation.simuler(etat.projet, etat.bassin, hauteur, duree, apport=apport)))
+            zone.controls = self._resultats_multiples(resultats)
             try:
                 zone.update()
             except Exception:
@@ -275,18 +416,72 @@ class VueBassin(Vue):
 
         return ft.Column(
             [
+                ft.Text("Durées de pluie à simuler", size=12, weight=ft.FontWeight.W_600),
+                puces,
+                ft.Row(
+                    [
+                        theme.bouton_secondaire("Tout cocher", ft.Icons.DONE_ALL, tout(True)),
+                        theme.bouton_secondaire("Tout décocher", ft.Icons.REMOVE_DONE, tout(False)),
+                    ],
+                    wrap=True, spacing=8,
+                ),
                 ft.ResponsiveRow(
                     [
-                        ft.Container(duree, col={"xs": 12, "sm": 6, "md": 4}),
-                        ft.Container(recurrence, col={"xs": 12, "sm": 6, "md": 3}),
+                        ft.Container(recurrence, col={"xs": 12, "sm": 6, "md": 4}),
                         ft.Container(theme.bouton_principal("Simuler", ft.Icons.PLAY_ARROW, lancer),
-                                     col={"xs": 12, "md": 3}),
+                                     col={"xs": 12, "sm": 6, "md": 4}),
                     ],
-                    spacing=12,
-                    run_spacing=12,
+                    spacing=12, run_spacing=12,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 zone,
             ],
             spacing=12,
         )
+
+    def _resultats_multiples(self, resultats) -> List[ft.Control]:
+        """Tableau comparatif des durées simulées, puis courbe de la plus défavorable."""
+        lignes = []
+        for duree, hauteur, res in resultats:
+            couleur, fond = theme.COULEURS_STATUT[res.statut]
+            lignes.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(hydro.formater_duree(duree), size=12,
+                                        weight=ft.FontWeight.W_600)),
+                    ft.DataCell(ft.Text(theme.nombre(hauteur, 1), size=12)),
+                    ft.DataCell(ft.Text(theme.nombre(res.volume_max_m3, 1), size=12)),
+                    ft.DataCell(ft.Text(theme.nombre(res.taux_remplissage * 100, 0), size=12)),
+                    ft.DataCell(ft.Text(theme.nombre(res.volume_debordement_m3, 2), size=12,
+                                        color=theme.ROUGE if res.debordement else None)),
+                    ft.DataCell(ft.Text(res.temps_vidange_h_texte, size=12)),
+                    ft.DataCell(ft.Container(
+                        ft.Text(theme.LIBELLES_STATUT.get(res.statut, res.statut), size=11,
+                                color=couleur, weight=ft.FontWeight.W_700),
+                        bgcolor=fond, padding=ft.padding.symmetric(3, 8), border_radius=8)),
+                ])
+            )
+        tableau = theme.tableau_defilant(
+            ft.DataTable(
+                columns=theme.entete_tableau(
+                    ["Durée", "Pluie [mm]", "Pointe [m³]", "Remplissage [%]",
+                     "Débordement [m³]", "Vidange", "Statut"]),
+                rows=lignes,
+                column_spacing=18,
+                heading_row_height=38,
+                data_row_max_height=42,
+                divider_thickness=0.4,
+            )
+        )
+        pire = max(resultats, key=lambda r: (r[2].volume_debordement_m3, r[2].volume_max_m3))
+        controles: List[ft.Control] = [tableau]
+        amont = pire[2].volume_amont_m3
+        if amont > 0:
+            controles.append(theme.etiquette(
+                f"Apport du bassin amont : {theme.nombre(amont, 1)} m³ "
+                f"(pointe {theme.nombre(pire[2].q_amont_max_ls, 2)} l/s)",
+                theme.BLEU, theme.BLEU_CLAIR, ft.Icons.MERGE))
+        controles.append(ft.Text(
+            f"Courbe de la pluie la plus défavorable : {hydro.formater_duree(pire[0])}",
+            size=12, weight=ft.FontWeight.W_600))
+        controles.append(graphiques.construire(self._graphique_niveau(pire[2]), 240))
+        return controles

@@ -70,6 +70,42 @@ V_évacué(t) = Q_infiltration × t + Q_ajutage × max(t − t_seuil, 0)
 
 `Q_entrant` étant le débit ruisselé de la pluie de projet (intensité constante).
 
+## Sources de pluie et durées balayées
+
+* **Montana** est une formule continue : le balayage des durées est fin (pas de 5 min,
+  de 10 min à 60 jours) et la durée critique peut tomber sur n'importe quelle valeur.
+* **QDF** ne fournit que 19 durées normalisées mesurées. Le balayage s'y limite : une
+  durée critique de 12 h 05 n'existe pas dans le GTI. L'interpolation logarithmique
+  reste utilisée pour simuler une durée quelconque choisie par l'utilisateur.
+
+Aux durées tabulées, Montana s'écarte des mesures QDF de −0,2 % en médiane (3 306
+comparaisons, communes wallonnes) : les deux sources sont cohérentes, mais un écart
+local de quelques pour cent suffit à décaler le volume retenu.
+
+## Bassin d'orage amont
+
+Un bassin d'orage situé en amont peut se déverser dans l'ouvrage étudié. Il reçoit la
+même pluie de projet sur son propre bassin versant (`S_amont × C_amont`), la tamponne
+dans son volume de temporisation, puis restitue :
+
+* son **débit d'ajutage**, qui arrive dans l'ouvrage aval ;
+* son **débit d'infiltration**, qui est perdu pour l'aval ;
+* son **trop-plein**, s'il est sous-dimensionné : le surplus traverse alors sans être
+  laminé, ce qui aggrave nettement la pointe en aval.
+
+L'application propose le volume minimal du bassin amont, calculé par la même méthode
+rationnelle sur son bassin versant. La surface de ce bassin versant peut, au choix de
+l'utilisateur, être comptée dans la surface raccordée qui fixe le débit de fuite
+admissible (5 l/s/ha) et la conversion de l'ajutage en l/(s·ha).
+
+## Intégration de la simulation
+
+La simulation n'est pas échantillonnée : entre deux seuils, les débits sont constants
+et le volume évolue linéairement. L'intervalle est découpé aux instants exacts où
+l'ajutage démarre ou s'arrête, où le bassin se vide et où il atteint le trop-plein.
+Le volume maximal simulé est donc rigoureusement égal au volume annoncé par le
+dimensionnement, indépendamment de la finesse d'affichage.
+
 ## 5. Temps de vidange (après la pluie)
 
 Le temps annoncé est celui qui sépare **la fin de la pluie** du retour à un

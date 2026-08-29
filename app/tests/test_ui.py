@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 import flet as ft  # noqa: E402
 
+from bassin.core import hydro, rainfall  # noqa: E402
 from bassin.core.model import Bassin  # noqa: E402
 from bassin.reports import charts  # noqa: E402
 from bassin.ui import graphiques, theme  # noqa: E402
@@ -109,6 +110,13 @@ class _Touche:
         self.key = key
         self.ctrl = ctrl
         self.shift = self.alt = self.meta = False
+
+
+class _Controle:
+    """Contrôle Flet minimal porteur d'une valeur (case à cocher, interrupteur)."""
+
+    def __init__(self, value):
+        self.value = value
 
 
 class _Evenement:
@@ -685,6 +693,96 @@ class TestCoquilleApplication(unittest.TestCase):
         page.client_storage.set(application.CLE_STOCKAGE, etat_complet().to_json())
         application.main(page)
         self.assertTrue(page.controls)
+
+
+class TestSimulationMultiple(unittest.TestCase):
+    """Simulation de plusieurs durées et bassin d'orage amont."""
+
+    def setUp(self):
+        self.page = PageFactice()
+        self.etat = etat_complet()
+
+    def vue(self) -> VueBassin:
+        v = VueBassin(self.page, self.etat)
+        v.afficher()
+        return v
+
+    def _bouton(self, vue, libelle):
+        boutons = (_rechercher(vue.corps, ft.FilledButton)
+                   + _rechercher(vue.corps, ft.OutlinedButton)
+                   + _rechercher(vue.corps, ft.ElevatedButton))
+        for bouton in boutons:
+            libelles = [getattr(bouton, "text", None)]
+            libelles += [t.value for t in _rechercher(bouton, ft.Text)]
+            if any(libelle in (t or "") for t in libelles):
+                return bouton
+        self.fail(f"bouton « {libelle} » introuvable")
+
+    def test_les_durees_se_cochent_et_se_simulent(self):
+        vue = self.vue()
+        puces = _rechercher(vue.corps, ft.Chip)
+        self.assertEqual(len(puces), len(rainfall.QDF_DURATIONS_MIN))
+        cochees = [c for c in puces if c.selected]
+        self.assertEqual(len(cochees), 1, "une durée doit être cochée au départ")
+
+        # L'utilisateur en coche trois de plus.
+        vue._selection_durees = {60.0, 180.0, 720.0}
+        self._bouton(vue, "Simuler").on_click(None)
+        tableaux = _rechercher(vue.corps, ft.DataTable)
+        self.assertTrue(tableaux)
+        self.assertEqual(len(tableaux[-1].rows), 3)
+
+    def test_tout_cocher_puis_tout_decocher(self):
+        vue = self.vue()
+        self._bouton(vue, "Tout cocher").on_click(None)
+        self.assertEqual(len(vue._selection_durees), len(rainfall.QDF_DURATIONS_MIN))
+        self._bouton(vue, "Tout décocher").on_click(None)
+        self.assertEqual(vue._selection_durees, set())
+        self._bouton(vue, "Simuler").on_click(None)
+        textes = [t.value for t in _rechercher(vue.corps, ft.Text)]
+        self.assertTrue(any("au moins une durée" in (t or "") for t in textes))
+
+    def test_le_panneau_amont_s_ouvre_et_se_ferme(self):
+        vue = self.vue()
+        interrupteurs = _rechercher(vue.corps, ft.Switch)
+        self.assertTrue(interrupteurs)
+        amont = interrupteurs[0]
+        self.assertFalse(self.etat.projet.amont.actif)
+        # Les champs du bassin amont n'apparaissent qu'une fois activé.
+        libelles = [c.label for c in _rechercher(vue.corps, ft.TextField)]
+        self.assertNotIn("Surface du bassin versant amont", libelles)
+
+        amont.on_change(_Evenement(_Controle(True)))
+        self.assertTrue(self.etat.projet.amont.actif)
+        libelles = [c.label for c in _rechercher(vue.corps, ft.TextField)]
+        self.assertIn("Surface du bassin versant amont", libelles)
+        self.assertIn("Volume de temporisation amont", libelles)
+
+    def test_le_volume_minimal_amont_est_propose(self):
+        p = self.etat.projet
+        p.amont.actif = True
+        p.amont.surface_bv_m2 = 8000.0
+        p.amont.coef_ruissellement = 0.8
+        p.amont.debit_ajutage_ls = 2.0
+        vue = self.vue()
+        self.assertAlmostEqual(p.amont.volume_temporisation_m3, 0.0)
+        self._bouton(vue, "Proposer le volume minimal").on_click(None)
+        attendu = hydro.volume_amont_minimal_m3(p)
+        self.assertGreater(attendu, 0)
+        self.assertAlmostEqual(p.amont.volume_temporisation_m3, attendu)
+
+    def test_la_surface_amont_bascule_le_debit_admissible(self):
+        p = self.etat.projet
+        p.amont.actif = True
+        p.amont.surface_bv_m2 = 10000.0
+        avant = p.debit_fuite_admissible_ls
+        vue = self.vue()
+        cases = [c for c in _rechercher(vue.corps, ft.Checkbox)
+                 if "bassin versant amont" in (c.label or "")]
+        self.assertTrue(cases)
+        cases[0].on_change(_Evenement(_Controle(True)))
+        self.assertTrue(p.amont.inclure_bv_dans_ajutage)
+        self.assertGreater(p.debit_fuite_admissible_ls, avant)
 
 
 class TestGenerationDesRapports(unittest.TestCase):

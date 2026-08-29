@@ -146,8 +146,35 @@ def construire_classeur(dossier: Dossier) -> Workbook:
                     f"=1000*{c_sinf.coordinate}*{c_k.coordinate}/{c_cs.coordinate}", "l/s", "0.000",
                     fond=VERT_PALE)
     l_qinf = l; l += 1
-    c_qadm = _label(ws, l, "Débit de fuite admissible (5 l/s/ha)",
-                    f"=5*C{l_tot}/10000", "l/s", "0.000"); l += 2
+    # Un bassin versant amont raccordé compte dans la surface qui fixe le débit
+    # de fuite admissible, si l'utilisateur a demandé de le prendre en compte.
+    amont = projet.amont
+    if amont.actif and amont.inclure_bv_dans_ajutage:
+        c_qadm = _label(ws, l, "Débit de fuite admissible (5 l/s/ha, BV amont compris)",
+                        f"=5*(C{l_tot}+{amont.surface_bv_m2})/10000", "l/s", "0.000"); l += 2
+    else:
+        c_qadm = _label(ws, l, "Débit de fuite admissible (5 l/s/ha)",
+                        f"=5*C{l_tot}/10000", "l/s", "0.000"); l += 2
+
+    if amont.actif:
+        _titre(ws, f"A{l}", "2 bis. Bassin d'orage amont", 12)
+        l += 1
+        c_sam = _label(ws, l, "Surface du bassin versant amont", amont.surface_bv_m2, "m²", "0"); l += 1
+        c_cam = _label(ws, l, "Coefficient de ruissellement moyen amont", amont.coef_ruissellement,
+                       "[-]", "0.00"); l += 1
+        _label(ws, l, "Surface active amont",
+               f"={c_sam.coordinate}*{c_cam.coordinate}", "m²", "0.0", fond=VERT_PALE); l += 1
+        _label(ws, l, "Volume de temporisation amont", amont.volume_temporisation_m3, "m³", "0.0"); l += 1
+        c_sdam = _label(ws, l, "Surface de dispersion amont", amont.surface_dispersion_m2,
+                        "m²", "0.0"); l += 1
+        c_kam = _label(ws, l, "Vitesse d'infiltration amont", amont.k_infiltration_ms,
+                       "m/s", "0.00E+00"); l += 1
+        c_qajam = _label(ws, l, "Débit d'ajutage amont", amont.debit_ajutage_ls, "l/s", "0.000"); l += 1
+        _label(ws, l, "Débit d'infiltration amont",
+               f"=1000*{c_sdam.coordinate}*{c_kam.coordinate}/{c_cs.coordinate}", "l/s", "0.000",
+               fond=VERT_PALE); l += 1
+        _label(ws, l, "Débit restitué vers l'ouvrage aval",
+               f"={c_qajam.coordinate}", "l/s", "0.000", fond=VERT_PALE); l += 2
 
     _titre(ws, f"A{l}", "3. Ouvrage encodé", 12)
     l += 1

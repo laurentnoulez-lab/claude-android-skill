@@ -42,11 +42,30 @@ class ResultatSimulation:
     q_entrant_ls: float = 0.0
     q_infiltration_ls: float = 0.0
     q_ajutage_ls: float = 0.0
+    #: Apport du bassin d'orage amont, s'il y en a un.
+    volume_amont_m3: float = 0.0
+    q_amont_max_ls: float = 0.0
     pas: List[PasSimulation] = field(default_factory=list)
+
+    @property
+    def volume_entrant_total_m3(self) -> float:
+        """Ruissellement propre + restitution du bassin amont."""
+        return self.volume_ruissele_m3 + self.volume_amont_m3
 
     @property
     def debordement(self) -> bool:
         return self.volume_debordement_m3 > 1e-6
+
+    @property
+    def temps_vidange_h_texte(self) -> str:
+        """Temps de vidange après la pluie, en « h mm »."""
+        if self.temps_vidange_h == float("inf"):
+            return "infini"
+        heures = int(self.temps_vidange_h)
+        minutes = int(round((self.temps_vidange_h - heures) * 60))
+        if minutes == 60:
+            heures, minutes = heures + 1, 0
+        return f"{heures} h {minutes:02d}"
 
     @property
     def taux_remplissage(self) -> float:
@@ -141,7 +160,9 @@ def _debits_sortants(v: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
 
 
 def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
-             v_sous: float, v_cap: float) -> Tuple[float, float, float, Optional[float]]:
+             v_sous: float, v_cap: float,
+             journal: Optional[List[Tuple[float, float, float, float]]] = None,
+             ) -> Tuple[float, float, float, Optional[float]]:
     """Fait évoluer le volume pendant ``duree_min`` à débit entrant constant.
 
     Entre deux seuils les débits sont constants, donc le volume varie
@@ -170,11 +191,15 @@ def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_l
             if t_debord is None:
                 t_debord = ecoule
             v_max = max(v_max, v)
+            if journal is not None:
+                journal.append((reste, q_infiltre, q_ajute, pente * 1000.0 / 60.0))
             ecoule += reste
             reste = 0.0
             continue
         if abs(pente) < 1e-15:
             v_max = max(v_max, v)
+            if journal is not None:
+                journal.append((reste, q_infiltre, q_ajute, 0.0))
             ecoule += reste
             break
         # Prochain seuil franchi par le volume.
@@ -196,13 +221,111 @@ def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_l
             v = min(v, v_cap)
         v = max(v, 0.0)
         v_max = max(v_max, v)
+        if journal is not None:
+            journal.append((pas, q_infiltre, q_ajute, 0.0))
         ecoule += pas
         reste -= pas
     return v, debord, v_max, t_debord
 
 
+@dataclass
+class Apport:
+    """Hydrogramme entrant supplémentaire, en paliers ``(t_début, t_fin, débit l/s)``."""
+
+    segments: List[Tuple[float, float, float]] = field(default_factory=list)
+
+    def debit_ls(self, t_min: float) -> float:
+        for t0, t1, q in self.segments:
+            if t0 - 1e-9 <= t_min < t1 - 1e-9:
+                return q
+        return 0.0
+
+    @property
+    def fin_min(self) -> float:
+        return self.segments[-1][1] if self.segments else 0.0
+
+    def bornes(self) -> List[float]:
+        return [t0 for t0, _, _ in self.segments] + ([self.fin_min] if self.segments else [])
+
+    @property
+    def volume_m3(self) -> float:
+        return sum(q * (t1 - t0) * 60.0 / 1000.0 for t0, t1, q in self.segments)
+
+
+def hydrogramme_amont(projet: Projet, hauteur_mm: float, duree_pluie_min: float) -> Apport:
+    """Débit restitué par le bassin d'orage amont pendant et après l'averse.
+
+    Le bassin amont reçoit la même pluie sur son propre bassin versant, la
+    tamponne, puis la restitue par son ajutage ; ce qu'il infiltre est perdu
+    pour l'aval, ce qu'il déverse au trop-plein s'y ajoute.
+    """
+    amont = projet.amont
+    if not amont.actif or duree_pluie_min <= 0:
+        return Apport()
+    s_pond = amont.aire_ponderee_m2
+    v_in = hauteur_mm * s_pond / 1000.0
+    if v_in <= 0:
+        return Apport()
+    q_in = v_in * 1000.0 / (duree_pluie_min * 60.0)
+    q_inf = amont.debit_infiltration_ls(projet.coef_securite_infiltration)
+    q_aj = amont.debit_ajutage_ls
+    v_cap = max(amont.volume_temporisation_m3, 0.0)
+
+    # Horizon : l'averse puis la vidange du bassin amont.
+    v_pointe = min(max(v_in - (q_inf + q_aj) * duree_pluie_min * 60.0 / 1000.0, 0.0),
+                   v_cap if v_cap > 0 else 1e12)
+    t_vid = temps_vidange_h(v_pointe, q_inf, q_aj, 0.0) * 60.0
+    if t_vid == float("inf") or t_vid > 30 * 1440:
+        t_vid = 30 * 1440.0
+    horizon = duree_pluie_min + t_vid + 1.0
+
+    segments: List[Tuple[float, float, float]] = []
+    v = 0.0
+    t = 0.0
+    for t0, t1 in ((0.0, duree_pluie_min), (duree_pluie_min, horizon)):
+        if t1 <= t0:
+            continue
+        qi = q_in if t0 < duree_pluie_min - 1e-9 else 0.0
+        journal: List[Tuple[float, float, float, float]] = []
+        v, _, _, _ = _avancer(v, t1 - t0, qi, q_inf, q_aj, 0.0, v_cap, journal)
+        for duree, _q_inf_eff, q_aj_eff, q_deb in journal:
+            if duree <= 1e-12:
+                continue
+            segments.append((t, t + duree, q_aj_eff + q_deb))
+            t += duree
+    # Paliers consécutifs de même débit fusionnés : moins de nœuds à intégrer.
+    fusionnes: List[Tuple[float, float, float]] = []
+    for t0, t1, q in segments:
+        if fusionnes and abs(fusionnes[-1][2] - q) < 1e-12:
+            fusionnes[-1] = (fusionnes[-1][0], t1, q)
+        else:
+            fusionnes.append((t0, t1, q))
+    return Apport(fusionnes)
+
+
+def volume_requis_m3(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_min: float) -> float:
+    """Volume de stockage requis, apport du bassin amont compris.
+
+    Sans bassin amont on garde la formule analytique, immédiate. Avec, le débit
+    entrant varie dans le temps : l'intégration exacte tranche, pour que la table
+    QDF et la simulation ne puissent pas se contredire.
+    """
+    if not projet.amont.actif:
+        return volume_necessaire(projet, bassin, hauteur_mm, duree_min)
+    apport = hydrogramme_amont(projet, hauteur_mm, duree_min)
+    if not apport.segments:
+        return volume_necessaire(projet, bassin, hauteur_mm, duree_min)
+    illimite = Bassin(volume_total_m3=0.0,
+                      volume_sous_ajutage_m3=bassin.volume_sous_ajutage_m3,
+                      surface_dispersion_m2=bassin.surface_dispersion_m2,
+                      debit_ajutage_ls=bassin.debit_ajutage_ls)
+    return simuler(projet, illimite, hauteur_mm, duree_min, n_points=80,
+                   apport=apport).volume_max_m3
+
+
 def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: float,
-            n_points: int = 400, marge_vidange: float = 1.25) -> ResultatSimulation:
+            n_points: int = 400, marge_vidange: float = 1.25,
+            apport: Optional[Apport] = None) -> ResultatSimulation:
     """Simulation du remplissage puis de la vidange du bassin.
 
     Hypothèses : pluie de projet à intensité constante (bloc), infiltration
@@ -223,22 +346,31 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
         q_infiltration_ls=q_inf,
         q_ajutage_ls=q_aj,
     )
+    apport = apport if apport is not None else Apport()
     v_in_total = hauteur_mm * projet.aire_ponderee_m2 / 1000.0
     res.volume_ruissele_m3 = v_in_total
+    res.volume_amont_m3 = apport.volume_m3
     if duree_pluie_min <= 0:
         return res
     q_in = v_in_total * 1000.0 / (duree_pluie_min * 60.0)   # l/s
     res.q_entrant_ls = q_in
+    res.q_amont_max_ls = max((q for _, _, q in apport.segments), default=0.0)
 
     # Horizon : l'averse, puis la vidange estimée.
-    v_pointe = min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min),
+    v_pointe = min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min) + apport.volume_m3,
                    v_cap if v_cap > 0 else 1e12)
     t_vid = temps_vidange_h(v_pointe, q_inf, q_aj, v_sous) * 60.0
     if t_vid == float("inf") or t_vid > 30 * 1440:
         t_vid = 30 * 1440.0
     horizon = duree_pluie_min + max(t_vid * marge_vidange, duree_pluie_min * 0.25) + 1.0
+    # L'apport amont peut se prolonger bien au-delà de la vidange propre.
+    horizon = max(horizon, apport.fin_min + t_vid * marge_vidange + 1.0)
 
     noeuds = _grille(duree_pluie_min, horizon, n_points)
+    # Les paliers de l'apport amont doivent tomber sur des nœuds, sinon le débit
+    # entrant ne serait pas constant sur l'intervalle intégré.
+    if apport.segments:
+        noeuds = sorted(set(noeuds) | {b for b in apport.bornes() if 0 < b < horizon})
     v = 0.0
     v_max = 0.0
     t_vmax = 0.0
@@ -249,7 +381,7 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
 
     for t0, t1 in zip(noeuds, noeuds[1:]):
         pluie = t0 < duree_pluie_min - 1e-9
-        qi = q_in if pluie else 0.0
+        qi = (q_in if pluie else 0.0) + apport.debit_ls(t0)
         v_avant = v
         v, debord, sommet, delai_debord = _avancer(
             v, t1 - t0, qi, q_inf, q_aj, v_sous, v_cap)
@@ -337,7 +469,7 @@ def table_acceptation(projet: Projet, bassin: Bassin,
         for rp in rps:
             src = rainfall.SourcePluie(projet.commune_ins, rp, projet.source_pluie)
             h = src.hauteur(d)
-            v = volume_necessaire(projet, bassin, h, d)
+            v = volume_requis_m3(projet, bassin, h, d)
             v_stocke = min(v, bassin.volume_total_m3) if bassin.volume_total_m3 > 0 else v
             ligne.append(
                 CelluleQDF(
@@ -365,10 +497,35 @@ def evenement_critique(projet: Projet, bassin: Bassin, periode_retour: Optional[
     src = rainfall.SourcePluie(projet.commune_ins, rp, projet.source_pluie)
     from .hydro import DUREE_MAX, DUREE_MIN, PAS_DUREE
 
+    # Comme pour le dimensionnement, le balayage suit la source : les tables QDF
+    # ne connaissent que leurs durées normalisées.
+    durees = src.durees_de_balayage(DUREE_MIN, DUREE_MAX, PAS_DUREE)
+
+    def requis(t: float) -> float:
+        return volume_requis_m3(projet, bassin, src.hauteur(t), t)
+
+    # Avec un bassin amont, chaque durée demande une intégration : un balayage
+    # complet de la grille de Montana prendrait plusieurs secondes. On repère
+    # d'abord la zone du maximum sur une grille dégrossie, puis on l'affine au
+    # pas fin — le volume requis ne présente qu'un maximum en fonction de la
+    # durée, la recherche reste donc exacte.
+    COARSE = 250
+    pas = max(1, len(durees) // COARSE)
+    if pas > 1:
+        indices = list(range(0, len(durees), pas))
+        if indices[-1] != len(durees) - 1:
+            indices.append(len(durees) - 1)
+        meilleur_i = max(indices, key=lambda i: requis(durees[i]))
+        debut = max(0, meilleur_i - pas)
+        fin = min(len(durees) - 1, meilleur_i + pas)
+        candidates = durees[debut:fin + 1]
+    else:
+        candidates = durees
+
     meilleure = (float(DUREE_MIN), 0.0, -1.0)
-    for t in range(DUREE_MIN, DUREE_MAX + 1, PAS_DUREE):
+    for t in candidates:
         h = src.hauteur(t)
-        v = volume_necessaire(projet, bassin, h, float(t))
+        v = volume_requis_m3(projet, bassin, h, float(t))
         if v > meilleure[2]:
             meilleure = (float(t), h, v)
     return meilleure[0], meilleure[1]

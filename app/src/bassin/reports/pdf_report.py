@@ -218,7 +218,33 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
              ["Débit d'ajutage", f"{sim.q_ajutage_ls:.3f}", "l/s"]],
             [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
         )
-        pdf.titre2("4.1 Événement critique simule")
+        amont = p.amont
+        if amont.actif:
+            pdf.titre2("4.1 Bassin d'orage amont")
+            pdf.texte(
+                "Un bassin d'orage situé en amont se déverse dans l'ouvrage étudié. Il reçoit la "
+                "meme pluie de projet sur son propre bassin versant, la tamponne, puis la restitue "
+                "a son débit de fuite.")
+            pdf.tableau(
+                [["Caractéristique", "Valeur", "Unité"],
+                 ["Surface du bassin versant amont", f"{amont.surface_bv_m2:.0f}", "m²"],
+                 ["Coefficient de ruissellement moyen", f"{amont.coef_ruissellement:.2f}", "-"],
+                 ["Surface active amont", f"{amont.aire_ponderee_m2:.0f}", "m²"],
+                 ["Volume de temporisation amont", f"{amont.volume_temporisation_m3:.1f}", "m³"],
+                 ["Surface de dispersion amont", f"{amont.surface_dispersion_m2:.1f}", "m²"],
+                 ["Vitesse d'infiltration amont", f"{amont.k_infiltration_ms:.2e}", "m/s"],
+                 ["Débit d'ajutage amont", f"{amont.debit_ajutage_ls:.3f}", "l/s"],
+                 ["Volume restitué a l'ouvrage aval", f"{sim.volume_amont_m3:.1f}", "m³"],
+                 ["Débit de pointe restitué", f"{sim.q_amont_max_ls:.3f}", "l/s"]],
+                [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5,
+                alignements=["left", "right", "center"],
+            )
+            if amont.inclure_bv_dans_ajutage:
+                pdf.puce(
+                    f"Surface du bassin versant amont comptée dans la surface raccordée : "
+                    f"{p.aire_raccordee_m2:.0f} m², débit de fuite admissible "
+                    f"{p.debit_fuite_admissible_ls:.3f} l/s.")
+        pdf.titre2(("4.2 " if amont.actif else "4.1 ") + "Événement critique simule")
         pdf.tableau(
             [["Grandeur", "Valeur", "Grandeur", "Valeur"],
              ["Durée de pluie", f"{sim.duree_pluie_min:.0f} min", "Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
