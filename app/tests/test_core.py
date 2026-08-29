@@ -84,6 +84,47 @@ class TestPluies(unittest.TestCase):
         for i, duree in enumerate(rainfall.QDF_DURATIONS_MIN):
             self.assertAlmostEqual(rainfall.hauteur_qdf("25005", 25, duree), valeurs[i], places=6)
 
+    def test_le_balayage_qdf_se_limite_aux_durees_tabulees(self):
+        """Les tables QDF sont discrètes : pas de durée critique à 12 h 05."""
+        src = rainfall.SourcePluie("81001", 50, rainfall.SOURCE_QDF)
+        self.assertEqual(src.durees_de_balayage(), tuple(float(d) for d in rainfall.QDF_DURATIONS_MIN))
+        self.assertTrue(src.durees_tabulees)
+
+        continu = rainfall.SourcePluie("81001", 50, rainfall.SOURCE_MONTANA)
+        self.assertFalse(continu.durees_tabulees)
+        self.assertGreater(len(continu.durees_de_balayage()), 1000)
+
+    def test_duree_critique_tabulee_avec_la_source_qdf(self):
+        tabulees = {float(d) for d in rainfall.QDF_DURATIONS_MIN}
+        for T in (10, 25, 50, 100):
+            for scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE):
+                with self.subTest(periode_retour=T, scenario=scenario):
+                    p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=T,
+                               surfaces=Projet.surfaces_par_defaut(), source_pluie="qdf")
+                    p.surfaces[7].aire_m2 = 10000.0
+                    p.debit_ajutage_ls = 4.0
+                    p.surface_infiltration_m2 = 200.0
+                    res = hydro.dimensionner(p, scenario)
+                    self.assertIn(res.duree_critique_min, tabulees)
+
+    def test_les_deux_sources_restent_proches(self):
+        """Montana est un ajustement des mesures QDF : pas d'écart systématique."""
+        ecarts = []
+        for commune in rainfall.communes_wallonnes()[:40]:
+            if not (commune.a_qdf and commune.a_montana):
+                continue
+            for T in (10, 25, 100):
+                mesures = rainfall.hauteurs_qdf(commune.ins, T)
+                for duree, qdf in zip(rainfall.QDF_DURATIONS_MIN, mesures):
+                    if qdf:
+                        montana = rainfall.hauteur_montana(commune.ins, T, duree)
+                        ecarts.append((montana - qdf) / qdf)
+        self.assertGreater(len(ecarts), 500)
+        ecarts.sort()
+        mediane = ecarts[len(ecarts) // 2]
+        self.assertLess(abs(mediane), 0.02, "écart systématique entre les deux sources")
+        self.assertLess(max(abs(e) for e in ecarts), 0.25)
+
     def test_pluie_croissante_avec_la_recurrence(self):
         h = [rainfall.hauteur_montana(BUTGENBACH, rp, 120) for rp in rainfall.RETURN_PERIODS]
         self.assertEqual(h, sorted(h))
@@ -265,24 +306,70 @@ class TestSimulation(unittest.TestCase):
         self.assertAlmostEqual(res.volume_ruissele_m3, 40.0 * p.aire_ponderee_m2 / 1000.0, places=6)
         self.assertGreater(entre, 0)
 
-    def test_pointe_simulee_proche_du_calcul_analytique(self):
+    def test_pointe_simulee_egale_au_calcul_analytique(self):
+        """L'intégration est exacte entre les seuils : aucun écart, même grossièrement
+        échantillonnée."""
         p = projet_type()
         b = self.bassin_type(volume_total_m3=10000.0)
         p.bassin = b
         for duree in (30.0, 120.0, 720.0):
-            h = rainfall.hauteur_montana(BUTGENBACH, 25, duree)
-            attendu = simulation.volume_necessaire(p, b, h, duree)
-            res = simulation.simuler(p, b, h, duree, n_points=4000)
-            self.assertAlmostEqual(res.volume_max_m3, attendu, delta=max(0.02 * attendu, 0.05))
+            for points in (60, 400, 4000):
+                with self.subTest(duree=duree, points=points):
+                    h = rainfall.hauteur_montana(BUTGENBACH, 25, duree)
+                    attendu = simulation.volume_necessaire(p, b, h, duree)
+                    res = simulation.simuler(p, b, h, duree, n_points=points)
+                    self.assertAlmostEqual(res.volume_max_m3, attendu, places=6)
 
     def test_pointe_simulee_avec_ajutage_sureleve(self):
         p = projet_type()
-        b = self.bassin_type(volume_total_m3=10000.0, volume_sous_ajutage_m3=15.0)
+        for v_sous in (5.0, 15.0, 40.0):
+            with self.subTest(volume_sous_ajutage=v_sous):
+                b = self.bassin_type(volume_total_m3=10000.0, volume_sous_ajutage_m3=v_sous)
+                p.bassin = b
+                h = rainfall.hauteur_montana(BUTGENBACH, 25, 240.0)
+                attendu = simulation.volume_necessaire(p, b, h, 240.0)
+                res = simulation.simuler(p, b, h, 240.0)
+                self.assertAlmostEqual(res.volume_max_m3, attendu, places=6)
+
+    def test_la_pluie_injectee_est_exactement_la_pluie_de_projet(self):
+        """Le pas de calcul ne doit jamais déverser de pluie au-delà de l'averse."""
+        p = projet_type()
+        b = self.bassin_type(volume_total_m3=10000.0)
         p.bassin = b
-        h = rainfall.hauteur_montana(BUTGENBACH, 25, 240.0)
-        attendu = simulation.volume_necessaire(p, b, h, 240.0)
-        res = simulation.simuler(p, b, h, 240.0, n_points=6000)
-        self.assertAlmostEqual(res.volume_max_m3, attendu, delta=max(0.02 * attendu, 0.05))
+        for duree in (17.0, 725.0, 1000.0):   # durées non multiples du pas
+            with self.subTest(duree=duree):
+                h = rainfall.hauteur_montana(BUTGENBACH, 25, duree)
+                res = simulation.simuler(p, b, h, duree)
+                injecte = sum(fin.q_entrant_ls * (fin.t_min - debut.t_min) * 60.0 / 1000.0
+                              for debut, fin in zip(res.pas, res.pas[1:]))
+                self.assertAlmostEqual(injecte, res.volume_ruissele_m3, places=6)
+
+    def test_un_bassin_au_volume_dimensionne_ne_deborde_pas(self):
+        """Cas signalé : 548,2 m³ annoncés, débordement simulé à 550 m³ (Arlon, T=50)."""
+        p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=50,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="qdf")
+        p.surfaces[7].aire_m2 = 10000.0
+        p.debit_ajutage_ls = 4.0
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        b = Bassin(volume_total_m3=res.volume_m3, volume_sous_ajutage_m3=0.0,
+                   surface_dispersion_m2=0.0, debit_ajutage_ls=4.0)
+        p.bassin = b
+        sim = simulation.simuler(p, b, res.hauteur_pluie_mm, res.duree_critique_min)
+        self.assertFalse(sim.debordement)
+        self.assertAlmostEqual(sim.volume_max_m3, res.volume_m3, places=6)
+
+    def test_le_dimensionnement_est_le_volume_juste_suffisant(self):
+        """Un litre de moins et le bassin déborde : la frontière est exacte."""
+        p = projet_type()
+        p.debit_ajutage_ls = 1.0
+        res = hydro.dimensionner(p, SCENARIO_TEMPORISATION)
+        for facteur, attendu in ((1.0, False), (0.999, True)):
+            with self.subTest(facteur=facteur):
+                b = Bassin(volume_total_m3=res.volume_m3 * facteur, volume_sous_ajutage_m3=0.0,
+                           surface_dispersion_m2=0.0, debit_ajutage_ls=p.debit_ajutage_ls)
+                p.bassin = b
+                sim = simulation.simuler(p, b, res.hauteur_pluie_mm, res.duree_critique_min)
+                self.assertEqual(sim.debordement, attendu)
 
     def test_detection_de_debordement(self):
         p = projet_type()
@@ -300,6 +387,41 @@ class TestSimulation(unittest.TestCase):
         res = simulation.simuler(p, b, 30.0, 60.0, n_points=3000)
         self.assertLess(res.pas[-1].volume_m3, 1e-3)
         self.assertGreater(res.temps_vidange_h, 0)
+
+    def test_un_bassin_dimensionne_ne_deborde_jamais(self):
+        """Propriété générale : sur tous les scénarios, sources et récurrences,
+        un bassin construit au volume annoncé encaisse la pluie de projet."""
+        communes = [c for c in rainfall.communes_wallonnes() if c.a_qdf and c.a_montana][:6]
+        pire = 0.0
+        cas = 0
+        for commune in communes:
+            for source in ("montana", "qdf"):
+                for scenario in (SCENARIO_TEMPORISATION, SCENARIO_DISPERSION,
+                                 SCENARIO_MIXTE, SCENARIO_SEUIL):
+                    p = Projet(commune_ins=commune.ins, commune_nom=commune.nom,
+                               periode_retour=25, surfaces=Projet.surfaces_par_defaut(),
+                               source_pluie=source)
+                    p.surfaces[7].aire_m2 = 5000.0
+                    p.debit_ajutage_ls = 2.0
+                    p.surface_infiltration_m2 = 200.0
+                    p.k_infiltration_ms = 1e-5
+                    v_sous = 20.0 if scenario == SCENARIO_SEUIL else 0.0
+                    p.bassin = Bassin(volume_total_m3=1e9, volume_sous_ajutage_m3=v_sous,
+                                      surface_dispersion_m2=200.0, debit_ajutage_ls=2.0)
+                    res = hydro.dimensionner(p, scenario)
+                    if not res.dimensionnable:
+                        continue
+                    infiltre = scenario in (SCENARIO_DISPERSION, SCENARIO_MIXTE, SCENARIO_SEUIL)
+                    ajute = scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL)
+                    b = Bassin(volume_total_m3=res.volume_m3, volume_sous_ajutage_m3=v_sous,
+                               surface_dispersion_m2=200.0 if infiltre else 0.0,
+                               debit_ajutage_ls=2.0 if ajute else 0.0)
+                    p.bassin = b
+                    sim = simulation.simuler(p, b, res.hauteur_pluie_mm, res.duree_critique_min)
+                    cas += 1
+                    pire = max(pire, sim.volume_debordement_m3)
+        self.assertGreater(cas, 20)
+        self.assertLess(pire, 1e-6, "le bassin dimensionné déborde en simulation")
 
     def test_table_acceptation(self):
         p = projet_type()

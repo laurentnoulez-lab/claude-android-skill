@@ -40,7 +40,9 @@ PAS_DUREE = 5
 def serie_pluie(ins: str, periode_retour: int, source: str) -> Tuple[Tuple[float, ...], Tuple[float, ...]]:
     """Serie (durées [min], hauteurs [mm]) mise en cache pour les balayages."""
     src = rainfall.SourcePluie(ins, periode_retour, source)
-    durees = tuple(float(t) for t in range(DUREE_MIN, DUREE_MAX + 1, PAS_DUREE))
+    # La grille dépend de la source : continue avec Montana, limitée aux durées
+    # normalisées avec les tables QDF.
+    durees = src.durees_de_balayage(DUREE_MIN, DUREE_MAX, PAS_DUREE)
     hauteurs = tuple(src.hauteur(t) for t in durees)
     return durees, hauteurs
 

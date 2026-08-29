@@ -93,13 +93,123 @@ def volume_necessaire(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_m
     return max(v_in - v_out, 0.0)
 
 
+TOLERANCE_M3 = 1e-9
+
+
+def _grille(duree_pluie_min: float, horizon_min: float, n_points: int) -> List[float]:
+    """Instants d'échantillonnage, avec un nœud exactement à la fin de l'averse.
+
+    Sans ce nœud, le dernier pas « humide » déverse de la pluie au-delà de
+    l'averse : le bassin recevait plus que la pluie de projet et pouvait
+    déborder alors que le dimensionnement le disait suffisant.
+    """
+    n_points = max(n_points, 40)
+    fin_pluie = min(duree_pluie_min, horizon_min)
+    part = fin_pluie / horizon_min if horizon_min > 0 else 1.0
+    n_pluie = max(int(round(n_points * part)), 10)
+    n_apres = max(n_points - n_pluie, 10)
+    noeuds = [fin_pluie * i / n_pluie for i in range(n_pluie + 1)]
+    if horizon_min > fin_pluie:
+        reste = horizon_min - fin_pluie
+        noeuds += [fin_pluie + reste * i / n_apres for i in range(1, n_apres + 1)]
+    return noeuds
+
+
+def _debits_sortants(v: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
+                     v_sous: float) -> Tuple[float, float]:
+    """Débits (infiltration, ajutage) [l/s] pour un volume stocké donné.
+
+    Au ras d'un seuil, c'est l'eau qui arrive qui tranche : un bassin vide mais
+    alimenté évacue déjà par le fond et par l'orifice de fond, et un niveau qui
+    atteint l'axe de l'ajutage le met aussitôt en service. Sans cela, un bassin
+    parti de zéro n'évacuait rien pendant tout le premier pas de calcul et la
+    simulation débordait là où le dimensionnement annonçait la capacité juste.
+    """
+    if v <= TOLERANCE_M3:
+        # Bassin vide : on n'évacue que ce qui arrive, sans jamais passer sous zéro.
+        q_inf_eff = min(q_in_ls, q_inf_ls)
+        reste = max(q_in_ls - q_inf_eff, 0.0)
+        q_aj_eff = min(reste, q_aj_ls) if v_sous <= TOLERANCE_M3 else 0.0
+        return q_inf_eff, q_aj_eff
+    if v > v_sous + TOLERANCE_M3:
+        return q_inf_ls, q_aj_ls
+    if abs(v - v_sous) <= TOLERANCE_M3 and q_in_ls > q_inf_ls:
+        # Le niveau est sur l'axe de l'orifice : l'ajutage se met en service, mais
+        # il ne peut pas évacuer plus que l'apport — sinon le niveau y stagne.
+        return q_inf_ls, min(q_aj_ls, q_in_ls - q_inf_ls)
+    return q_inf_ls, 0.0
+
+
+def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
+             v_sous: float, v_cap: float) -> Tuple[float, float, float, Optional[float]]:
+    """Fait évoluer le volume pendant ``duree_min`` à débit entrant constant.
+
+    Entre deux seuils les débits sont constants, donc le volume varie
+    linéairement : l'intervalle est découpé aux instants exacts où l'ajutage
+    démarre ou s'arrête, où le bassin se vide et où il atteint le trop-plein.
+    Le résultat ne dépend donc pas de la finesse de l'échantillonnage.
+
+    Renvoie (volume final, volume débordé, volume maximal, délai du premier
+    débordement).
+    """
+    illimite = v_cap <= 0
+    reste = duree_min
+    debord = 0.0
+    v_max = v
+    t_debord: Optional[float] = None
+    ecoule = 0.0
+    garde = 0
+    while reste > 1e-12 and garde < 64:
+        garde += 1
+        q_infiltre, q_ajute = _debits_sortants(v, q_in_ls, q_inf_ls, q_aj_ls, v_sous)
+        pente = (q_in_ls - q_infiltre - q_ajute) * 60.0 / 1000.0   # m³ par minute
+        plein = (not illimite) and v >= v_cap - TOLERANCE_M3
+        if plein and pente > 0:
+            # Bassin plein : tout l'excédent part au trop-plein.
+            debord += pente * reste
+            if t_debord is None:
+                t_debord = ecoule
+            v_max = max(v_max, v)
+            ecoule += reste
+            reste = 0.0
+            continue
+        if abs(pente) < 1e-15:
+            v_max = max(v_max, v)
+            ecoule += reste
+            break
+        # Prochain seuil franchi par le volume.
+        cibles = []
+        if pente > 0:
+            if v < v_sous - TOLERANCE_M3:
+                cibles.append(v_sous)
+            if not illimite:
+                cibles.append(v_cap)
+        else:
+            if v > v_sous + TOLERANCE_M3:
+                cibles.append(v_sous)
+            cibles.append(0.0)
+        delais = [(c - v) / pente for c in cibles]
+        delais = [d for d in delais if d > 1e-12]
+        pas = min([reste] + delais)
+        v = v + pente * pas
+        if not illimite:
+            v = min(v, v_cap)
+        v = max(v, 0.0)
+        v_max = max(v_max, v)
+        ecoule += pas
+        reste -= pas
+    return v, debord, v_max, t_debord
+
+
 def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: float,
             n_points: int = 400, marge_vidange: float = 1.25) -> ResultatSimulation:
-    """Simulation pas à pas du remplissage puis de la vidange du bassin.
+    """Simulation du remplissage puis de la vidange du bassin.
 
-    Hypothèses : pluie de projet a intensité constante (bloc), infiltration
-    constante sur la surface de dispersion tant qu'il reste de l'eau, ajutage a
-    débit constant des que le niveau dépasse l'axe de l'orifice.
+    Hypothèses : pluie de projet à intensité constante (bloc), infiltration
+    constante sur la surface de dispersion tant qu'il reste de l'eau, ajutage à
+    débit constant dès que le niveau dépasse l'axe de l'orifice. L'intégration
+    est exacte entre les seuils, si bien que le volume maximal coïncide avec le
+    volume annoncé par le dimensionnement.
     """
     q_inf, q_aj = _debits(projet, bassin)
     v_cap = bassin.volume_total_m3
@@ -120,17 +230,16 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     q_in = v_in_total * 1000.0 / (duree_pluie_min * 60.0)   # l/s
     res.q_entrant_ls = q_in
 
-    # Horizon : pluie + vidange estimee
-    v_pointe = min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min), v_cap if v_cap > 0 else 1e12)
+    # Horizon : l'averse, puis la vidange estimée.
+    v_pointe = min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min),
+                   v_cap if v_cap > 0 else 1e12)
     t_vid = temps_vidange_h(v_pointe, q_inf, q_aj, v_sous) * 60.0
     if t_vid == float("inf") or t_vid > 30 * 1440:
         t_vid = 30 * 1440.0
     horizon = duree_pluie_min + max(t_vid * marge_vidange, duree_pluie_min * 0.25) + 1.0
-    dt = horizon / max(n_points, 20)          # minutes
-    dt_s = dt * 60.0
 
+    noeuds = _grille(duree_pluie_min, horizon, n_points)
     v = 0.0
-    t = 0.0
     v_max = 0.0
     t_vmax = 0.0
     v_debord = 0.0
@@ -138,30 +247,23 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     t_vide: Optional[float] = None
     pas: List[PasSimulation] = [PasSimulation(0.0, 0.0, q_in, 0.0, 0.0, 0.0)]
 
-    while t < horizon - 1e-9:
-        qi = q_in if t < duree_pluie_min - 1e-9 else 0.0
-        q_infiltre = q_inf if v > 1e-9 else 0.0
-        q_ajute = q_aj if v > v_sous + 1e-9 else 0.0
-        # volumes du pas (m3)
-        d_in = qi * dt_s / 1000.0
-        d_out = (q_infiltre + q_ajute) * dt_s / 1000.0
-        d_out = min(d_out, v + d_in)
-        v_new = v + d_in - d_out
-        q_deb = 0.0
-        if v_cap > 0 and v_new > v_cap:
-            surplus = v_new - v_cap
-            v_debord += surplus
-            q_deb = surplus * 1000.0 / dt_s
-            v_new = v_cap
-            if t_debord is None:
-                t_debord = t + dt
-        v = v_new
-        t += dt
-        if v > v_max:
-            v_max, t_vmax = v, t
-        if t_vide is None and t > duree_pluie_min and v <= 1e-4:
-            t_vide = t
-        pas.append(PasSimulation(t, v, qi, q_infiltre, q_ajute, q_deb))
+    for t0, t1 in zip(noeuds, noeuds[1:]):
+        pluie = t0 < duree_pluie_min - 1e-9
+        qi = q_in if pluie else 0.0
+        v_avant = v
+        v, debord, sommet, delai_debord = _avancer(
+            v, t1 - t0, qi, q_inf, q_aj, v_sous, v_cap)
+        v_debord += debord
+        if debord > 0 and t_debord is None and delai_debord is not None:
+            t_debord = t0 + delai_debord
+        if sommet > v_max:
+            v_max = sommet
+            t_vmax = t1 if v >= v_avant else t0
+        q_infiltre, q_ajute = _debits_sortants(max(v_avant, v), qi, q_inf, q_aj, v_sous)
+        q_deb = debord * 1000.0 / ((t1 - t0) * 60.0) if t1 > t0 else 0.0
+        if t_vide is None and t1 > duree_pluie_min and v <= 1e-6:
+            t_vide = t1
+        pas.append(PasSimulation(t1, v, qi, q_infiltre, q_ajute, q_deb))
 
     res.pas = pas
     res.volume_max_m3 = v_max

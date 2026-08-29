@@ -267,6 +267,25 @@ class SourcePluie:
         """Intensité en l/s/ha (1 mm/h = 2.7778 l/s/ha)."""
         return self.intensite_mmh(duree_min) * 10000.0 / 3600.0
 
+    def durees_de_balayage(self, duree_min: float = 10.0, duree_max: float = 86400.0,
+                           pas: int = 5) -> Tuple[float, ...]:
+        """Durées de pluie à balayer pour un dimensionnement.
+
+        Les tables QDF ne fournissent que des durées normalisées : le balayage
+        s'y limite, faute de quoi la durée critique tombe sur une valeur
+        interpolée (12 h 05) qui ne figure nulle part dans le GTI. La formule de
+        Montana étant continue, elle autorise un balayage fin.
+        """
+        if self.source == SOURCE_QDF:
+            return tuple(float(t) for t in QDF_DURATIONS_MIN if duree_min <= t <= duree_max)
+        depart = int(duree_min)
+        return tuple(float(t) for t in range(depart, int(duree_max) + 1, pas))
+
+    @property
+    def durees_tabulees(self) -> bool:
+        """Vrai quand la source ne connaît que des durées normalisées."""
+        return self.source == SOURCE_QDF
+
     @property
     def libelle_source(self) -> str:
         return "Montana (formule continue)" if self.source == SOURCE_MONTANA else "QDF (valeurs tabulées)"
