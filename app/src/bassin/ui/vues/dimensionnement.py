@@ -64,6 +64,11 @@ class VueDimensionnement(Vue):
             p.k_infiltration_ms = max(v, 0.0)
             self.etat.invalider()
 
+        def maj_seuil(v: float) -> None:
+            """Volume situé sous l'axe de l'ajutage (scénario à orifice surélevé)."""
+            p.bassin.volume_sous_ajutage_m3 = max(v, 0.0)
+            self.etat.invalider()
+
         def maj_ajutage(v: float) -> None:
             """L/s encodés : le débit est figé en valeur absolue."""
             p.fixer_ajutage_absolu(v)
@@ -132,6 +137,12 @@ class VueDimensionnement(Vue):
                                            col={"xs": 12, "sm": 6, "md": 3}),
                         champs_ajutage[0],
                         champs_ajutage[1],
+                        theme.champ_nombre(
+                            "Volume sous l'ajutage", p.bassin.volume_sous_ajutage_m3,
+                            maj_seuil, "m³",
+                            "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin",
+                            on_valide=self.maj_resultats,
+                            col={"xs": 12, "sm": 6, "md": 3}),
                         theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
                                            maj("temps_vidange_max_h"), "h",
                                            "après la pluie · GTI : 48 h",
@@ -163,6 +174,9 @@ class VueDimensionnement(Vue):
             ("Débit de sortie", f"{res.debit_sortant_ls:.2f} l/s"),
             ("Vidange après la pluie", res.temps_vidange_hm),
         ]
+        if cle == SCENARIO_SEUIL:
+            details.insert(1, ("Volume sous l'ajutage",
+                               theme.nombre(res.volume_sous_ajutage_m3, 1, "m³")))
         return ft.Container(
             content=ft.Column(
                 [
@@ -177,6 +191,12 @@ class VueDimensionnement(Vue):
                         spacing=8,
                     ),
                     ft.Text(DESCRIPTIONS[cle], size=11, color=theme.GRIS, max_lines=3),
+                    # Sans seuil encodé, ce scénario se confond avec le précédent :
+                    # mieux vaut le dire que de laisser croire à deux résultats.
+                    ft.Text("Encodez un volume sous l'ajutage : sans lui, ce scénario "
+                            "revient au précédent.", size=11, color=theme.ORANGE, max_lines=3)
+                    if cle == SCENARIO_SEUIL and res.volume_sous_ajutage_m3 <= 0
+                    else ft.Container(height=0),
                     ft.Row(
                         [
                             ft.Text(theme.fr(res.volume_affiche), size=28, weight=ft.FontWeight.W_800,

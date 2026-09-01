@@ -70,6 +70,25 @@ V_évacué(t) = Q_infiltration × t + Q_ajutage × max(t − t_seuil, 0)
 
 `Q_entrant` étant le débit ruisselé de la pluie de projet (intensité constante).
 
+## Scénario à orifice surélevé
+
+Le quatrième scénario — dispersion seule, avec temporisation au-delà d'un seuil — se
+règle par le **volume situé sous l'axe de l'ajutage**. Sous ce volume, seule
+l'infiltration évacue ; au-dessus, l'ajutage s'y ajoute :
+
+```
+t_seuil   = V_sous_ajutage / (Q_entrant − Q_infiltration)
+V_évacué  = (Q_infiltration × t + Q_ajutage × max(t − t_seuil ; 0)) × 60 / 1000
+```
+
+Ce volume s'encode aussi bien dans l'onglet **Dimensionnement** que dans l'onglet
+**Bassin** : c'est la même grandeur, celle de l'ouvrage. Laissé à zéro, le scénario se
+confond exactement avec « temporisation et dispersion » — l'application le signale
+plutôt que d'afficher deux résultats identiques sans explication.
+
+Le temps de vidange en tient compte : le volume situé sous l'axe ne peut plus partir que
+par infiltration, ce qui l'allonge sensiblement (et le rend infini sans infiltration).
+
 ## Conformité à la fiche de calcul du GTI
 
 Le moteur reproduit la fiche officielle du Service public de Wallonie, cellule par

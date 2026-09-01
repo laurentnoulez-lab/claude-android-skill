@@ -270,6 +270,49 @@ class TestConstructionDesVues(unittest.TestCase):
         for bulle in bulles:
             self.assertIsNone(re.search(r"\d\.\d", bulle), f"« {bulle} » garde un point décimal")
 
+    def test_le_seuil_de_l_ajutage_s_encode_au_dimensionnement(self):
+        """Le scénario à orifice surélevé exige un seuil : il doit être saisissable ici."""
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        libelles = [c.label for c in _rechercher(vue.corps, ft.TextField)]
+        self.assertIn("Volume sous l'ajutage", libelles,
+                      "le scénario 4 n'a pas de champ pour son seuil")
+
+        champ = [c for c in _rechercher(vue.corps, ft.TextField)
+                 if c.label == "Volume sous l'ajutage"][0]
+        champ.update = lambda: None
+
+        class _Evt:
+            control = champ
+
+        champ.value = "60"
+        champ.on_change(_Evt())
+        self.assertAlmostEqual(self.etat.projet.bassin.volume_sous_ajutage_m3, 60.0)
+
+    def test_sans_seuil_le_scenario_surelevé_est_signale(self):
+        """Seuil nul : le 4e scénario se confond avec le 3e, il faut le dire."""
+        from bassin.core.model import SCENARIO_MIXTE, SCENARIO_SEUIL
+
+        self.etat.projet.bassin.volume_sous_ajutage_m3 = 0.0
+        self.etat.invalider()
+        self.assertAlmostEqual(self.etat.resultats[SCENARIO_SEUIL].volume_m3,
+                               self.etat.resultats[SCENARIO_MIXTE].volume_m3, places=9)
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        textes = [t.value for t in _rechercher(vue.corps, ft.Text)]
+        self.assertTrue(any("revient au précédent" in (t or "") for t in textes),
+                        "l'avertissement de seuil nul est absent")
+
+        # Avec un seuil, l'avertissement disparaît et les volumes divergent.
+        self.etat.projet.bassin.volume_sous_ajutage_m3 = 60.0
+        self.etat.invalider()
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        textes = [t.value for t in _rechercher(vue.corps, ft.Text)]
+        self.assertFalse(any("revient au précédent" in (t or "") for t in textes))
+        self.assertGreater(self.etat.resultats[SCENARIO_SEUIL].volume_m3,
+                           self.etat.resultats[SCENARIO_MIXTE].volume_m3)
+
     def test_graphique_flet(self):
         vue = VueDimensionnement(self.page, self.etat)
         self.assertGreater(parcourir(graphiques.construire(vue._graphique_volume(), 260)), 3)
