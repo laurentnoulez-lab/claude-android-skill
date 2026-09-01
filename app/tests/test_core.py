@@ -218,6 +218,55 @@ class TestMethodeRationnelle(unittest.TestCase):
         self.assertLessEqual(v_mixte, v_seuil + 1e-9)
         self.assertLessEqual(v_seuil, v_disp + 1e-9)
 
+    def test_le_niveau_se_stabilise_sur_l_axe_de_l_orifice(self):
+        """Quand l'ajutage évacue plus que l'apport, le niveau reste sur son axe.
+
+        La formule supposait auparavant que l'ajutage continuait à débiter sous
+        son propre axe : elle annonçait 0 m³ là où le bassin garde tout son
+        volume mort, d'où un décrochement puis un ressaut sur la courbe.
+        """
+        v_sous = 50.0
+        # apport (2 l/s) supérieur à l'infiltration (1,25) mais bien inférieur
+        # à infiltration + ajutage (8,15) : le niveau monte jusqu'à l'axe et s'y tient.
+        duree = 2000.0
+        v_in = 2.0 * duree * 60.0 / 1000.0 + 1.25 * duree * 60.0 / 1000.0
+        pointe = hydro.volume_pointe_seuil(v_in, duree, 1.25, 6.9, v_sous)
+        self.assertAlmostEqual(pointe, v_sous, places=9)
+
+    def test_la_pointe_avec_orifice_sureleve_suit_la_simulation(self):
+        """La formule doit coller à l'intégration exacte sur toute la plage de durées."""
+        p = Projet(commune_ins="61003", commune_nom="Amay", periode_retour=25,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="montana")
+        for indice, aire in ((0, 5000.0), (2, 5000.0), (5, 2000.0), (7, 1000.0)):
+            p.surfaces[indice].aire_m2 = aire
+        p.surface_infiltration_m2, p.k_infiltration_ms = 250.0, 1e-5
+        p.debit_ajutage_ls = 6.9
+        b = Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=50.0,
+                   surface_dispersion_m2=250.0, debit_ajutage_ls=6.9)
+        p.bassin = b
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
+        for duree in (90, 480, 1000, 2000, 2880, 3600, 4320, 5000, 5760):
+            with self.subTest(duree=duree):
+                hauteur = src.hauteur(duree)
+                formule = simulation.volume_necessaire(p, b, hauteur, float(duree))
+                exact = simulation.simuler(p, b, hauteur, float(duree)).volume_max_m3
+                self.assertAlmostEqual(formule, exact, places=6)
+
+    def test_la_courbe_du_scenario_sureleve_ne_ressaute_pas(self):
+        """Aucune remontée depuis zéro : c'était le symptôme visible du défaut."""
+        p = Projet(commune_ins="61003", commune_nom="Amay", periode_retour=25,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="montana")
+        for indice, aire in ((0, 5000.0), (2, 5000.0), (5, 2000.0), (7, 1000.0)):
+            p.surfaces[indice].aire_m2 = aire
+        p.surface_infiltration_m2, p.k_infiltration_ms = 250.0, 1e-5
+        p.debit_ajutage_ls = 6.9
+        p.bassin = Bassin(volume_total_m3=500.0, volume_sous_ajutage_m3=50.0,
+                          surface_dispersion_m2=250.0, debit_ajutage_ls=6.9)
+        courbe = hydro.courbe_volume(p, SCENARIO_SEUIL)
+        remontees = [t for (_, avant), (t, apres) in zip(courbe, courbe[1:])
+                     if avant <= 1e-9 < apres]
+        self.assertEqual(remontees, [], "la courbe remonte après être tombée à zéro")
+
     def test_seuil_nul_equivaut_au_scenario_mixte(self):
         p = projet_type(debit_ajutage_ls=1.0, surface_infiltration_m2=100.0)
         p.bassin = Bassin(volume_sous_ajutage_m3=0.0)

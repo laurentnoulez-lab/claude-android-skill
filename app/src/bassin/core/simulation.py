@@ -126,15 +126,10 @@ def volume_necessaire(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_m
         return 0.0
     v_sous = bassin.volume_sous_ajutage_m3
     if v_sous > 0:
-        q_in = v_in * 1000.0 / (duree_min * 60.0)
-        q_net = q_in - q_inf
-        if q_net <= 0:
-            return 0.0
-        t_seuil = v_sous * 1000.0 / q_net / 60.0
-        t_aj = max(duree_min - t_seuil, 0.0)
-        v_out = (q_inf * duree_min + q_aj * t_aj) * 60.0 / 1000.0
-    else:
-        v_out = (q_inf + q_aj) * duree_min * 60.0 / 1000.0
+        from .hydro import volume_pointe_seuil
+
+        return volume_pointe_seuil(v_in, duree_min, q_inf, q_aj, v_sous)
+    v_out = (q_inf + q_aj) * duree_min * 60.0 / 1000.0
     return max(v_in - v_out, 0.0)
 
 

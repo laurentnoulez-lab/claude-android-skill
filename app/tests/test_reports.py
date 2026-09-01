@@ -232,6 +232,22 @@ class TestRapportAvecAmont(unittest.TestCase):
     def chemin(self, nom: str) -> str:
         return os.path.join(self.repertoire, nom)
 
+    def test_le_bassin_amont_figure_meme_sans_ouvrage_encode(self):
+        """C'est une donnée d'entrée : elle ne doit pas dépendre de l'ouvrage aval."""
+        projet = projet_complet()
+        projet.bassin = Bassin()          # aucun ouvrage encodé
+        projet.amont = BassinAmont(actif=True, surface_bv_m2=10000.0,
+                                   coef_ruissellement=0.8, debit_ajutage_ls=2.0,
+                                   volume_temporisation_m3=120.0)
+        sans_ouvrage = mod_dossier.construire(projet)
+        self.assertIsNone(sans_ouvrage.simulation)
+        chemin = docx_report.ecrire(sans_ouvrage, self.chemin("amont_sans_ouvrage.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        self.assertIn("1.3 Bassin d", document)
+        self.assertIn("bassin versant amont", document)
+        self.assertIn("sous-dimensionn", document)
+
     def test_word_decrit_le_bassin_amont(self):
         chemin = docx_report.ecrire(self.dossier, self.chemin("amont.docx"))
         with zipfile.ZipFile(chemin) as z:

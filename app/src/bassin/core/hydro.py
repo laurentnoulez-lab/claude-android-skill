@@ -74,6 +74,43 @@ def volume_a_maitriser(
     return v_max, t_max, h_max
 
 
+def volume_pointe_seuil(v_in_m3: float, duree_min: float, debit_infiltration: float,
+                        debit_ajutage: float, volume_sous_ajutage_m3: float) -> float:
+    """Volume stocké maximal pour un orifice surélevé, à intensité constante.
+
+    Trois régimes se succèdent, et il faut les distinguer :
+
+    * l'apport ne dépasse pas l'infiltration : rien ne s'accumule ;
+    * le niveau n'atteint pas l'axe de l'orifice pendant l'averse : seule
+      l'infiltration a évacué ;
+    * le niveau atteint l'axe : l'ajutage entre en service. Ou bien l'apport
+      reste supérieur à l'infiltration **plus** l'ajutage et le niveau continue de
+      monter, ou bien il est inférieur et le niveau se stabilise sur l'axe.
+
+    Ce dernier cas était traité comme si l'ajutage continuait à débiter à plein
+    régime sous son propre axe : le volume calculé devenait négatif, ramené à
+    zéro, alors que le bassin contient en réalité tout son volume mort.
+    """
+    if duree_min <= 0 or v_in_m3 <= 0:
+        return 0.0
+    q_in = v_in_m3 * 1000.0 / (duree_min * 60.0)          # l/s, averse en bloc
+    q_net = q_in - debit_infiltration                      # remplissage sous l'axe
+    if q_net <= 0:
+        return 0.0
+    if volume_sous_ajutage_m3 <= 0:
+        return max(v_in_m3 - (debit_infiltration + debit_ajutage) * duree_min * 60.0 / 1000.0,
+                   0.0)
+    t_seuil = volume_sous_ajutage_m3 * 1000.0 / q_net / 60.0   # minutes
+    if duree_min <= t_seuil:
+        # L'eau n'atteint jamais l'axe de l'orifice.
+        return q_net * duree_min * 60.0 / 1000.0
+    q_haut = q_in - debit_infiltration - debit_ajutage      # remplissage au-dessus
+    if q_haut <= 0:
+        # Le niveau se stabilise sur l'axe : le bassin garde son volume mort.
+        return volume_sous_ajutage_m3
+    return volume_sous_ajutage_m3 + q_haut * (duree_min - t_seuil) * 60.0 / 1000.0
+
+
 def volume_a_maitriser_seuil(
     serie: Tuple[Tuple[float, ...], Tuple[float, ...]],
     aire_ponderee_m2: float,
@@ -84,21 +121,14 @@ def volume_a_maitriser_seuil(
     """Variante "orifice surelevé" : l'ajutage ne débite qu'au-delà d'un seuil.
 
     Tant que le volume stocké reste sous l'axe de l'orifice, seule l'infiltration
-    évacué. Au-dela, l'ajutage s'ajoute à l'infiltration.
+    évacue. Au-dela, l'ajutage s'ajoute à l'infiltration.
     """
     durees, hauteurs = serie
     k_in = aire_ponderee_m2 / 1000.0
     v_max, t_max, h_max = 0.0, float(durees[0]) if durees else 0.0, 0.0
     for t, h in zip(durees, hauteurs):
-        v_in = h * k_in                       # m3 sur la duree t
-        q_in = v_in * 1000.0 / (t * 60.0)     # l/s (pluie de projet a intensite constante)
-        q_net = q_in - debit_infiltration     # l/s de remplissage sous le seuil
-        if q_net <= 0:
-            continue
-        t_seuil = volume_sous_ajutage_m3 * 1000.0 / q_net / 60.0  # minutes
-        t_ajutage = max(t - t_seuil, 0.0)
-        v_out = (debit_infiltration * t + debit_ajutage * t_ajutage) * 60.0 / 1000.0
-        v = v_in - v_out
+        v = volume_pointe_seuil(h * k_in, t, debit_infiltration, debit_ajutage,
+                                volume_sous_ajutage_m3)
         if v > v_max:
             v_max, t_max, h_max = v, t, h
     return v_max, t_max, h_max
@@ -432,12 +462,8 @@ def courbe_volume(projet: Projet, scenario: str, n_points: int = 160) -> List[Tu
         h = src.hauteur(t)
         v_in = h * s_pond / 1000.0
         if scenario == SCENARIO_SEUIL and v_sous > 0:
-            q_in = v_in * 1000.0 / (t * 60.0)
-            q_net = q_in - q_inf
-            t_seuil = v_sous * 1000.0 / q_net / 60.0 if q_net > 0 else float("inf")
-            t_aj = max(t - t_seuil, 0.0)
-            v_out = (q_inf * t + q_aj * t_aj) * 60.0 / 1000.0
-        else:
-            v_out = (q_inf + q_aj) * t * 60.0 / 1000.0
+            pts.append((t, volume_pointe_seuil(v_in, t, q_inf, q_aj, v_sous)))
+            continue
+        v_out = (q_inf + q_aj) * t * 60.0 / 1000.0
         pts.append((t, max(v_in - v_out, 0.0)))
     return pts

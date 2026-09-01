@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from ..core import rainfall
+from ..core import hydro, rainfall
 from ..core.model import LIBELLES_SCENARIOS
 from . import charts
 from .docx_writer import Cellule, DocxBuilder
@@ -75,6 +75,40 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         ],
         largeurs=[9.0, 4.0, 3.0],
     )
+
+    # Le bassin amont est une donnée d'entrée : il figure au dossier même sans
+    # ouvrage aval encodé.
+    if p.amont.actif:
+        amont = p.amont
+        res_amont = hydro.dimensionner_amont(p)
+        doc.titre2("1.3 Bassin d'orage amont")
+        doc.paragraphe(
+            "Un bassin d'orage situé en amont se déverse dans l'ouvrage étudié. Il reçoit la "
+            "meme pluie de projet sur son propre bassin versant, la tamponne, puis la restitue "
+            "a son débit de fuite - y compris longtemps après l'averse.")
+        doc.tableau(
+            [
+                ["Caractéristique", "Valeur", "Unité"],
+                ["Surface du bassin versant amont", f"{amont.surface_bv_m2:.0f}", "m²"],
+                ["Coefficient de ruissellement moyen", f"{amont.coef_ruissellement:.2f}", "-"],
+                ["Surface active amont", f"{amont.aire_ponderee_m2:.0f}", "m²"],
+                ["Volume de temporisation amont", f"{amont.volume_temporisation_m3:.1f}", "m³"],
+                ["Volume minimal pour éviter son débordement", f"{res_amont.volume_m3:.1f}", "m³"],
+                ["Surface de dispersion amont", f"{amont.surface_dispersion_m2:.1f}", "m²"],
+                ["Vitesse d'infiltration amont", f"{amont.k_infiltration_ms:.2e}", "m/s"],
+                ["Débit d'ajutage amont", f"{amont.debit_ajutage_ls:.3f}", "l/s"],
+                ["Débit restitué vers l'ouvrage aval", f"{res_amont.debit_sortant_ls:.3f}", "l/s"],
+            ],
+            largeurs=[9.0, 4.0, 3.0],
+        )
+        if amont.volume_temporisation_m3 + 1e-6 < res_amont.volume_m3:
+            doc.paragraphe("Le bassin amont est sous-dimensionné : son trop-plein arrive sans "
+                           "laminage dans l'ouvrage aval.", puce=True, couleur="B45309")
+        if amont.inclure_bv_dans_ajutage:
+            doc.paragraphe(
+                f"Surface du bassin versant amont comptée dans la surface raccordée : "
+                f"{p.aire_raccordee_m2:.0f} m², débit de fuite admissible "
+                f"{p.debit_fuite_admissible_ls:.3f} l/s.", puce=True)
 
     # 2. Pluie de projet
     doc.titre1("2. Pluie de projet")
@@ -148,31 +182,21 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         )
         amont = p.amont
         if amont.actif:
-            doc.titre2("4.1 Bassin d'orage amont")
-            doc.paragraphe(
-                "Un bassin d'orage situé en amont se déverse dans l'ouvrage étudié. Il reçoit la "
-                "meme pluie de projet sur son propre bassin versant, la tamponne, puis la restitue "
-                "a son débit de fuite.")
+            doc.titre2("4.1 Apport du bassin d'orage amont")
             doc.tableau(
                 [
-                    ["Caractéristique", "Valeur", "Unité"],
-                    ["Surface du bassin versant amont", f"{amont.surface_bv_m2:.0f}", "m²"],
-                    ["Coefficient de ruissellement moyen", f"{amont.coef_ruissellement:.2f}", "-"],
-                    ["Surface active amont", f"{amont.aire_ponderee_m2:.0f}", "m²"],
-                    ["Volume de temporisation amont", f"{amont.volume_temporisation_m3:.1f}", "m³"],
-                    ["Surface de dispersion amont", f"{amont.surface_dispersion_m2:.1f}", "m²"],
-                    ["Vitesse d'infiltration amont", f"{amont.k_infiltration_ms:.2e}", "m/s"],
-                    ["Débit d'ajutage amont", f"{amont.debit_ajutage_ls:.3f}", "l/s"],
+                    ["Grandeur", "Valeur", "Unité"],
                     ["Volume restitué a l'ouvrage aval", f"{sim.volume_amont_m3:.1f}", "m³"],
                     ["Débit de pointe restitué", f"{sim.q_amont_max_ls:.3f}", "l/s"],
+                    ["Fin du déversement amont", f"{sim.t_fin_apport_amont_min:.0f}", "min"],
+                    ["Débit restitué après la fin de l'averse",
+                     f"{sim.q_amont_apres_pluie_ls:.3f}", "l/s"],
                 ],
                 largeurs=[9.0, 4.0, 3.0],
             )
-            if amont.inclure_bv_dans_ajutage:
-                doc.paragraphe(
-                    f"La surface du bassin versant amont est comptée dans la surface raccordée : "
-                    f"{p.aire_raccordee_m2:.0f} m², soit un débit de fuite admissible de "
-                    f"{p.debit_fuite_admissible_ls:.3f} l/s.", puce=True)
+            doc.paragraphe("Le bassin amont continue de se déverser après l'averse : les courbes "
+                           "de débits distinguent le ruissellement direct de cet apport.",
+                           puce=True)
         doc.titre2("4.2 Événement critique simule" if p.amont.actif else "4.1 Événement critique simule")
         doc.tableau(
             [

@@ -76,10 +76,23 @@ Le quatrième scénario — dispersion seule, avec temporisation au-delà d'un s
 règle par le **volume situé sous l'axe de l'ajutage**. Sous ce volume, seule
 l'infiltration évacue ; au-dessus, l'ajutage s'y ajoute :
 
+Trois régimes se succèdent selon l'intensité de l'averse :
+
 ```
-t_seuil   = V_sous_ajutage / (Q_entrant − Q_infiltration)
-V_évacué  = (Q_infiltration × t + Q_ajutage × max(t − t_seuil ; 0)) × 60 / 1000
+q_net = Q_entrant − Q_infiltration          (remplissage sous l'axe)
+
+q_net <= 0                  →  rien ne s'accumule
+t <= t_seuil                →  V = q_net × t                 (l'axe n'est pas atteint)
+t >  t_seuil, q_haut > 0    →  V = V_sous + q_haut × (t − t_seuil)
+t >  t_seuil, q_haut <= 0   →  V = V_sous                     (le niveau se tient sur l'axe)
+
+avec  t_seuil = V_sous_ajutage / q_net   et   q_haut = Q_entrant − Q_infiltration − Q_ajutage
 ```
+
+Le dernier régime est celui d'une averse longue et faible : le niveau atteint l'axe, mais
+l'ajutage évacue plus que l'apport, si bien que le niveau s'y stabilise. La formule
+précédente y faisait débiter l'ajutage **sous son propre axe** et annonçait 0 m³ là où le
+bassin garde tout son volume mort — d'où un décrochement puis un ressaut sur la courbe.
 
 Ce volume s'encode aussi bien dans l'onglet **Dimensionnement** que dans l'onglet
 **Bassin** : c'est la même grandeur, celle de l'ouvrage. Laissé à zéro, le scénario se
