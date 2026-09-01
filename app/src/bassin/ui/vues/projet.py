@@ -94,6 +94,8 @@ class VueProjet(Vue):
 
         def maj_aire(v: float) -> None:
             surface.aire_m2 = max(v, 0.0)
+            # Un ajutage encodé en l/(s·ha) se recalcule sur la nouvelle surface.
+            self.etat.projet.recalculer_ajutage()
             self.etat.invalider()
             rafraichir_ligne()
 
@@ -104,6 +106,7 @@ class VueProjet(Vue):
 
         def supprimer(_=None) -> None:
             self.etat.projet.surfaces.pop(index)
+            self.etat.projet.recalculer_ajutage()
             self.etat.invalider()
             self.rafraichir()
 

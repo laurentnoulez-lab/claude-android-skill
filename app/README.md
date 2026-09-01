@@ -117,9 +117,12 @@ directement à une section.
 * La saisie accepte indifféremment `1e-5`, `0,00001` ou `0.00001`. Une valeur fautive
   n'est signalée qu'une fois le champ quitté : taper `1e-5` passe par `1e`, qui n'est pas
   un nombre sans que l'utilisateur ait commis d'erreur.
-* Les champs couplés (K en m/s ↔ mm/h, ajutage en l/s ↔ l/s/ha) se complètent dans les
-  deux sens ; la conversion en l/s/ha s'appuie sur les surfaces raccordées et reste
-  désactivée tant qu'elles ne sont pas encodées.
+* Les champs couplés se complètent dans les deux sens. Pour K (m/s ↔ mm/h) les deux
+  cases expriment la même grandeur. Pour l'ajutage, l'unité de saisie décide : encodé
+  en **l/(s·ha)** le débit en l/s se calcule seul sur la surface incidente totale
+  (bassin versant amont compris s'il est coché) ; encodé en **l/s** il est fixé en
+  valeur absolue et la case l/(s·ha) n'affiche qu'un équivalent.
+* La conversion reste désactivée tant qu'aucune surface n'est encodée.
 
 Aucune dépendance native n'est utilisée (ni matplotlib, ni Pillow, ni lxml, ni reportlab) :
 les graphiques, le DOCX et le PDF sont produits en Python pur, ce qui garantit le

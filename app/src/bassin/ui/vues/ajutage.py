@@ -22,8 +22,13 @@ class VueAjutage(Vue):
         debit = p.bassin.debit_ajutage_ls or p.debit_ajutage_ls
 
         def maj_debit(v: float) -> None:
-            p.bassin.debit_ajutage_ls = v
-            p.debit_ajutage_ls = v
+            """L/s encodés : le débit est figé en valeur absolue."""
+            p.fixer_ajutage_absolu(v)
+            self.etat.invalider()
+
+        def maj_debit_specifique(v: float) -> None:
+            """L/(s·ha) encodés : le débit absolu suit la surface raccordée."""
+            p.fixer_ajutage_specifique(v)
             self.etat.invalider()
 
         def maj_charge(v: float) -> None:
@@ -42,7 +47,9 @@ class VueAjutage(Vue):
                     "soit", "l/s/ha",
                     (10000.0 / p.aire_raccordee_m2) if p.aire_raccordee_m2 > 0 else None,
                     maj_debit, on_valide=self.maj_resultats,
-                    aide_a="débit de fuite autorisé",
+                    appliquer_b=maj_debit_specifique,
+                    aide_a=("calculé sur la surface raccordée" if p.ajutage_suit_la_surface
+                            else "débit de fuite autorisé · valeur imposée"),
                     aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                            " · maximum GTI : 5 l/s/ha",
                     indisponible_b="encodez d'abord les surfaces incidentes",

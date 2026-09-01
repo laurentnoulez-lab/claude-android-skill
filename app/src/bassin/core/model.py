@@ -115,6 +115,10 @@ class Projet:
     coef_securite_infiltration: float = COEF_SECURITE_INFILTRATION
     surface_infiltration_m2: float = 0.0
     debit_ajutage_ls: float = 0.0
+    #: Débit d'ajutage encodé en l/(s·ha). Renseigné, c'est lui qui fait foi et le
+    #: débit absolu se recalcule sur la surface raccordée ; vide, c'est le débit
+    #: absolu qui est fixé et le spécifique n'est qu'un affichage.
+    debit_ajutage_specifique_ls_ha: Optional[float] = None
     temps_vidange_max_h: float = TEMPS_VIDANGE_LIMITE_H
 
     # Ouvrage a verifier
@@ -161,31 +165,56 @@ class Projet:
 
     @property
     def debit_specifique_ajutage_ls_ha(self) -> float:
-        """Débit d'ajutage rapporté à la surface raccordée [l/(s·ha)]."""
+        """Débit d'ajutage rapporté à la surface raccordée [l/(s·ha)].
+
+        C'est la valeur encodée quand l'utilisateur a saisi des l/(s·ha), sinon
+        l'équivalent calculé du débit absolu qu'il a fixé.
+        """
+        if self.debit_ajutage_specifique_ls_ha is not None:
+            return self.debit_ajutage_specifique_ls_ha
         aire = self.aire_raccordee_m2
         return self.debit_ajutage_ls * 10000.0 / aire if aire > 0 else 0.0
+
+    @property
+    def ajutage_suit_la_surface(self) -> bool:
+        """Vrai quand le débit absolu se recalcule sur la surface raccordée."""
+        return self.debit_ajutage_specifique_ls_ha is not None
+
+    def fixer_ajutage_absolu(self, debit_ls: float) -> None:
+        """L'utilisateur encode des l/s : le débit est figé en valeur absolue."""
+        self.debit_ajutage_specifique_ls_ha = None
+        self.debit_ajutage_ls = max(debit_ls, 0.0)
+        self.bassin.debit_ajutage_ls = self.debit_ajutage_ls
+
+    def fixer_ajutage_specifique(self, debit_ls_ha: float) -> None:
+        """L'utilisateur encode des l/(s·ha) : le débit absolu en découle."""
+        self.debit_ajutage_specifique_ls_ha = max(debit_ls_ha, 0.0)
+        self.recalculer_ajutage()
+
+    def recalculer_ajutage(self) -> float:
+        """Recalcule le débit absolu quand la surface raccordée a changé.
+
+        Sans effet si l'utilisateur a fixé un débit en valeur absolue : c'est
+        alors une contrainte de rejet, qui ne dépend pas de la surface.
+        """
+        if self.debit_ajutage_specifique_ls_ha is not None:
+            self.debit_ajutage_ls = (
+                self.debit_ajutage_specifique_ls_ha * self.aire_raccordee_m2 / 10000.0)
+            self.bassin.debit_ajutage_ls = self.debit_ajutage_ls
+        return self.debit_ajutage_ls
 
     def compter_surface_amont(self, inclure: bool) -> float:
         """Compte (ou non) le bassin versant amont dans la surface raccordée.
 
-        Le débit d'ajutage encodé vaut un débit spécifique appliqué à cette
-        surface : quand elle change, le débit absolu suit au prorata. Cocher la
-        case pour un bassin versant amont d'un hectare, avec 5 l/(s·ha), ajoute
-        donc 5 l/s à l'ajutage de l'ouvrage aval.
+        Si l'ajutage a été encodé en l/(s·ha), le débit absolu suit la nouvelle
+        surface : un bassin versant amont d'un hectare à 5 l/(s·ha) ajoute 5 l/s.
+        S'il a été fixé en l/s, il ne bouge pas — seul l'équivalent spécifique
+        affiché diminue, ainsi que le débit de fuite admissible.
 
-        Renvoie le nouveau débit d'ajutage [l/s].
+        Renvoie le débit d'ajutage [l/s] après bascule.
         """
-        avant = self.aire_raccordee_m2
         self.amont.inclure_bv_dans_ajutage = bool(inclure)
-        apres = self.aire_raccordee_m2
-        if avant > 0 and apres > 0 and self.debit_ajutage_ls > 0:
-            facteur = apres / avant
-            self.debit_ajutage_ls *= facteur
-            # L'ouvrage encodé porte sa propre copie du débit : elle suit aussi,
-            # sauf si l'utilisateur l'a volontairement dissociée.
-            if self.bassin.debit_ajutage_ls > 0:
-                self.bassin.debit_ajutage_ls *= facteur
-        return self.debit_ajutage_ls
+        return self.recalculer_ajutage()
 
     @property
     def debit_fuite_admissible_ls(self) -> float:

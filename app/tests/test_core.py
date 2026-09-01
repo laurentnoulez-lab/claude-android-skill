@@ -568,61 +568,92 @@ class TestBassinAmont(unittest.TestCase):
         self.assertLessEqual(max(q for _, _, q in apport.segments),
                              p.amont.debit_ajutage_ls + 1e-6)
 
-    def test_compter_la_surface_amont_augmente_l_ajutage_au_prorata(self):
-        """Exemple : 5 l/s/ha et 1 ha de bassin versant amont → +5 l/s en aval."""
+    def base_ajutage(self) -> Projet:
+        """0,5 ha de surfaces propres, 1 ha de bassin versant amont."""
         p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=25,
-                   surfaces=Projet.surfaces_par_defaut())
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="qdf")
         p.surfaces[7].aire_m2 = 5000.0            # 0,5 ha, coefficient 1,0
-        p.debit_ajutage_ls = 2.5                  # soit 5 l/s/ha
-        p.bassin = Bassin(volume_total_m3=300.0, debit_ajutage_ls=2.5)
+        p.bassin = Bassin(volume_total_m3=400.0)
         p.amont = BassinAmont(actif=True, surface_bv_m2=10000.0, coef_ruissellement=0.8,
-                              debit_ajutage_ls=2.0, volume_temporisation_m3=300.0)
-        self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 5.0)
+                              debit_ajutage_ls=2.0, volume_temporisation_m3=400.0)
+        return p
 
+    def test_un_ajutage_encode_en_specifique_suit_la_surface(self):
+        """5 l/(s·ha) encodés : le débit absolu se calcule sur la surface raccordée."""
+        p = self.base_ajutage()
+        p.fixer_ajutage_specifique(5.0)
+        self.assertTrue(p.ajutage_suit_la_surface)
+        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=9)
+        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 2.5, places=9)
+
+        # Cocher la case : le bassin versant amont entre dans la surface.
         p.compter_surface_amont(True)
         self.assertAlmostEqual(p.aire_raccordee_m2, 15000.0)
         self.assertAlmostEqual(p.debit_ajutage_ls, 7.5, places=9)
         self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 7.5, places=9)
-        # Le débit spécifique, lui, ne bouge pas : c'est la grandeur encodée.
         self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 5.0, places=9)
 
         p.compter_surface_amont(False)
         self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=9)
-        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 2.5, places=9)
 
-    def test_compter_la_surface_amont_reste_sans_effet_dans_les_cas_degeneres(self):
-        p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=25,
-                   surfaces=Projet.surfaces_par_defaut())
-        p.amont = BassinAmont(actif=True, surface_bv_m2=10000.0)
-        # Aucune surface encodée en aval : rien à mettre au prorata.
-        p.debit_ajutage_ls = 0.0
-        self.assertEqual(p.compter_surface_amont(True), 0.0)
-        self.assertEqual(p.debit_specifique_ajutage_ls_ha, 0.0)
-        # Bassin amont inactif : la case ne change pas la surface raccordée.
-        p.amont.actif = False
-        p.surfaces[7].aire_m2 = 5000.0
-        p.debit_ajutage_ls = 2.5
+        # Modifier les surfaces incidentes recalcule aussi le débit.
+        p.surfaces[7].aire_m2 = 20000.0
+        p.recalculer_ajutage()
+        self.assertAlmostEqual(p.debit_ajutage_ls, 10.0, places=9)
+
+    def test_un_ajutage_encode_en_absolu_reste_fige(self):
+        """2,5 l/s encodés : c'est une contrainte de rejet, indépendante de la surface."""
+        p = self.base_ajutage()
+        p.fixer_ajutage_absolu(2.5)
+        self.assertFalse(p.ajutage_suit_la_surface)
+        self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 5.0, places=9)
+
+        # Cocher la case ne touche pas au débit imposé…
         p.compter_surface_amont(True)
-        self.assertAlmostEqual(p.aire_raccordee_m2, 5000.0)
-        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5)
+        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=9)
+        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 2.5, places=9)
+        # …seul l'équivalent spécifique affiché diminue, et l'admissible augmente.
+        self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 2.5 / 1.5, places=9)
+        self.assertAlmostEqual(p.debit_fuite_admissible_ls, 7.5, places=9)
 
-    def test_l_ajutage_augmente_se_retrouve_dans_la_simulation(self):
-        """La case cochée doit changer le débit réellement simulé."""
+        # Modifier les surfaces ne le change pas davantage.
+        p.surfaces[7].aire_m2 = 20000.0
+        p.recalculer_ajutage()
+        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=9)
+
+    def test_passer_d_une_unite_a_l_autre(self):
+        """La dernière case remplie fait foi."""
+        p = self.base_ajutage()
+        p.fixer_ajutage_specifique(5.0)
+        self.assertTrue(p.ajutage_suit_la_surface)
+        p.fixer_ajutage_absolu(4.0)
+        self.assertFalse(p.ajutage_suit_la_surface)
+        self.assertAlmostEqual(p.debit_ajutage_ls, 4.0, places=9)
+        p.fixer_ajutage_specifique(3.0)
+        self.assertTrue(p.ajutage_suit_la_surface)
+        self.assertAlmostEqual(p.debit_ajutage_ls, 1.5, places=9)
+
+    def test_l_ajutage_recalcule_se_retrouve_dans_la_simulation(self):
+        """En mode spécifique, la case cochée change le débit réellement simulé."""
         from bassin.ui.state import EtatApplication
 
-        p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=25,
-                   surfaces=Projet.surfaces_par_defaut(), source_pluie="qdf")
-        p.surfaces[7].aire_m2 = 5000.0
-        p.debit_ajutage_ls = 2.5
-        p.bassin = Bassin(volume_total_m3=400.0, debit_ajutage_ls=2.5)
-        p.amont = BassinAmont(actif=True, surface_bv_m2=10000.0, coef_ruissellement=0.8,
-                              debit_ajutage_ls=2.0, volume_temporisation_m3=400.0)
+        p = self.base_ajutage()
+        p.fixer_ajutage_specifique(5.0)
         etat = EtatApplication()
         etat.projet = p
         self.assertAlmostEqual(etat.simulation.q_ajutage_ls, 2.5, places=9)
         p.compter_surface_amont(True)
         etat.invalider()
         self.assertAlmostEqual(etat.simulation.q_ajutage_ls, 7.5, places=9)
+
+    def test_sans_surface_le_specifique_ne_donne_aucun_debit(self):
+        p = Projet(commune_ins="81001", commune_nom="Arlon", periode_retour=25,
+                   surfaces=Projet.surfaces_par_defaut())
+        p.fixer_ajutage_specifique(5.0)
+        self.assertEqual(p.debit_ajutage_ls, 0.0)
+        p.surfaces[7].aire_m2 = 10000.0
+        p.recalculer_ajutage()
+        self.assertAlmostEqual(p.debit_ajutage_ls, 5.0, places=9)
 
     def test_la_surface_amont_ne_compte_que_si_elle_est_cochee(self):
         p = self.projet_avec_amont(inclure_bv_dans_ajutage=False)

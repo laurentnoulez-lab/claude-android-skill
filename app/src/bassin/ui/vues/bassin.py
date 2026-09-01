@@ -237,6 +237,10 @@ class VueBassin(Vue):
         def maj(champ: str):
             def _f(v: float) -> None:
                 setattr(amont, champ, v)
+                # La surface du bassin versant amont entre dans la surface
+                # raccordée dès que la case est cochée : l'ajutage suit.
+                if champ == "surface_bv_m2":
+                    p.recalculer_ajutage()
                 self.etat.invalider()
             return _f
 

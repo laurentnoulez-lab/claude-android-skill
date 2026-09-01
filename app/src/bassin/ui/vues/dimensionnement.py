@@ -65,8 +65,13 @@ class VueDimensionnement(Vue):
             self.etat.invalider()
 
         def maj_ajutage(v: float) -> None:
-            p.debit_ajutage_ls = max(v, 0.0)
-            p.bassin.debit_ajutage_ls = p.debit_ajutage_ls
+            """L/s encodés : le débit est figé en valeur absolue."""
+            p.fixer_ajutage_absolu(v)
+            self.etat.invalider()
+
+        def maj_ajutage_specifique(v: float) -> None:
+            """L/(s·ha) encodés : le débit absolu suit la surface raccordée."""
+            p.fixer_ajutage_specifique(v)
             self.etat.invalider()
 
         def choisir_sol(e: ft.ControlEvent) -> None:
@@ -93,7 +98,9 @@ class VueDimensionnement(Vue):
             "Débit d'ajutage", "l/s", p.debit_ajutage_ls,
             "soit", "l/s/ha", (1.0 / hectares) if hectares > 0 else None,
             maj_ajutage, on_valide=self.maj_resultats,
-            aide_a="orifice calibré",
+            appliquer_b=maj_ajutage_specifique,
+            aide_a=("calculé sur la surface raccordée" if p.ajutage_suit_la_surface
+                    else "orifice calibré · valeur imposée"),
             aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                    f" · maximum GTI : 5 l/s/ha",
             indisponible_b="encodez d'abord les surfaces incidentes",

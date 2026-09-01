@@ -127,18 +127,28 @@ rationnelle sur son bassin versant.
 
 ### Compter le bassin versant amont dans l'ajutage
 
-Le débit d'ajutage encodé vaut un **débit spécifique** appliqué à la surface raccordée.
-En cochant la case, le bassin versant amont entre dans cette surface, et le débit absolu
-suit au prorata :
+C'est **l'unité de saisie qui décide** laquelle des deux valeurs fait foi :
 
-```
-Q_ajutage = q_spécifique × (S_propre + S_bassin_versant_amont) / 10000
-```
+* **encodé en l/(s·ha)** — le débit absolu se calcule seul sur la surface incidente
+  totale (non pondérée), bassin versant amont compris si la case est cochée. La case
+  l/s affiche le résultat.
 
-Exemple : 0,5 ha de surfaces propres avec 5 l/(s·ha), soit 2,5 l/s. En ajoutant un
-bassin versant amont de 10 000 m², l'ajutage passe à **7,5 l/s** — les 5 l/s
-correspondant à l'hectare amont s'ajoutent. Le débit de fuite admissible suit la même
-surface, et décocher restitue exactement la valeur de départ.
+  ```
+  Q_ajutage [l/s] = q_spécifique × (S_incidente_totale + S_bassin_versant_amont) / 10000
+  ```
+
+* **encodé en l/s** — le débit est fixé en valeur absolue : c'est une contrainte de
+  rejet, indépendante de la surface. La case l/(s·ha) n'affiche plus qu'un équivalent.
+
+Exemple, 0,5 ha de surfaces propres et 10 000 m² de bassin versant amont :
+
+| Saisie | Case décochée | Case cochée |
+|---|---|---|
+| 5 l/(s·ha) | 2,500 l/s | **7,500 l/s** — les 5 l/s de l'hectare amont s'ajoutent |
+| 2,5 l/s | 2,500 l/s | 2,500 l/s — inchangé, l'équivalent affiché tombe à 1,667 l/(s·ha) |
+
+En mode spécifique, le débit se recalcule aussi dès qu'une surface incidente change.
+Le débit de fuite admissible (5 l/s/ha) suit la surface raccordée dans les deux cas.
 
 ## Intégration de la simulation
 

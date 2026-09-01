@@ -221,6 +221,7 @@ def champs_convertis(
     libelle_b: str, unite_b: str, facteur: Optional[float],
     appliquer: Callable[[float], None],
     on_valide: Optional[Callable[[], None]] = None,
+    appliquer_b: Optional[Callable[[float], None]] = None,
     aide_a: str = "", aide_b: str = "", indisponible_b: str = "",
     decimales_a: int = 6, decimales_b: int = 3,
     col_a: Optional[dict] = None, col_b: Optional[dict] = None,
@@ -229,9 +230,15 @@ def champs_convertis(
     """Deux champs liés par une conversion : ``valeur_b = valeur_a × facteur``.
 
     L'utilisateur encode celui qu'il préfère, l'autre se complète tout seul.
-    Seule ``valeur_a`` est enregistrée (via ``appliquer``) : c'est la grandeur de
-    référence. Si ``facteur`` est absent ou nul, le second champ est désactivé et
-    explique pourquoi.
+
+    Par défaut seule ``valeur_a`` est enregistrée (via ``appliquer``) : les deux
+    champs expriment alors la même grandeur dans deux unités, et il n'importe pas
+    de savoir laquelle a été remplie. Quand ``appliquer_b`` est fourni, la case
+    remplie fait foi : encoder dans le second champ enregistre sa propre valeur,
+    ce qui permet à l'appelant de retenir l'unité de saisie.
+
+    Si ``facteur`` est absent ou nul, le second champ est désactivé et explique
+    pourquoi.
     """
     champ_a = _champ_texte(libelle_a, valeur_a, unite_a, aide_a, decimales_a, compact)
     valeur_b = valeur_a * facteur if facteur else 0.0
@@ -270,7 +277,10 @@ def champs_convertis(
         if not facteur:
             return
         equivalent = valeur / facteur
-        appliquer(equivalent)
+        if appliquer_b is not None:
+            appliquer_b(valeur)
+        else:
+            appliquer(equivalent)
         _ecrire(champ_a, equivalent, decimales_a)
         if valider:
             _ecrire(champ_b, valeur, decimales_b)
