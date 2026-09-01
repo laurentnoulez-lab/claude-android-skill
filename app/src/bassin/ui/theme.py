@@ -151,6 +151,8 @@ def _champ_texte(libelle: str, valeur: float, unite: str, aide: str, decimales: 
         value=formater_nombre(valeur, decimales),
         suffix_text=unite or None,
         helper_text=aide or None,
+        # Sans cela le texte d'aide est coupé net à droite sur téléphone.
+        helper_max_lines=3,
         keyboard_type=ft.KeyboardType.NUMBER,
         dense=True,
         border_radius=10,

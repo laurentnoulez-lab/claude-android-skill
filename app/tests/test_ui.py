@@ -397,6 +397,15 @@ class TestConstructionDesVues(unittest.TestCase):
         self.assertTrue(champs[1].disabled)
         self.assertIn("surfaces", champs[1].helper_text)
 
+    def test_les_textes_d_aide_se_replient(self):
+        """Sur téléphone, une aide un peu longue était coupée net à droite."""
+        champ = theme.champ_nombre("Volume sous l'ajutage", 0.0, lambda v: None, "m³",
+                                   "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin")
+        self.assertGreater(champ.helper_max_lines or 1, 1)
+        for controle in theme.champs_convertis("Débit", "l/s", 1.0, "soit", "l/s/ha", 2.0,
+                                               lambda v: None, aide_b="un texte d'aide long"):
+            self.assertGreater(controle.helper_max_lines or 1, 1)
+
     def test_champ_nombre_accepte_la_virgule(self):
         valeurs = []
         champ = theme.champ_nombre("Test", 0.0, valeurs.append, "m")
