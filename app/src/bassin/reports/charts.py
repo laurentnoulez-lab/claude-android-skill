@@ -199,6 +199,34 @@ def graduations(vmin: float, vmax: float, n: int = 5) -> List[float]:
     return out
 
 
+def series_debits(sim, unites: bool = False) -> List[Serie]:
+    """Séries de débits, décomposées quand un bassin amont alimente l'ouvrage.
+
+    Séparer l'apport amont du ruissellement direct rend visible ce que la somme
+    masquait : le bassin amont continue de déverser après l'averse, et sa surverse
+    éventuelle fait bondir le débit entrant.
+    """
+    suffixe = " [l/s]" if unites else ""
+    if sim.avec_amont:
+        series = [
+            Serie(f"Ruissellement direct{suffixe}",
+                         [(p.t_min, p.q_direct_ls) for p in sim.pas], BLEU),
+            Serie(f"Apport du bassin amont{suffixe}",
+                         [(p.t_min, p.q_amont_ls) for p in sim.pas], VIOLET),
+            Serie(f"Total entrant{suffixe}",
+                         [(p.t_min, p.q_entrant_ls) for p in sim.pas], BLEU_CLAIR,
+                         pointilles=True),
+        ]
+    else:
+        series = [Serie(f"Débit entrant{suffixe}",
+                               [(p.t_min, p.q_entrant_ls) for p in sim.pas], BLEU)]
+    series.append(Serie(f"Débit sortant{suffixe}",
+                               [(p.t_min, p.q_sortant_ls) for p in sim.pas], VERT))
+    series.append(Serie(f"Débordement{suffixe}",
+                               [(p.t_min, p.q_debordement_ls) for p in sim.pas], ROUGE))
+    return series
+
+
 def format_nombre(v: float) -> str:
     """Graduation d'axe, virgule décimale comprise (la police 5x7 a la virgule)."""
     return fr(_format_nombre(v))

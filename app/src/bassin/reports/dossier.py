@@ -97,11 +97,9 @@ class Dossier:
             titre="Débits entrant et sortant",
             axe_x="Temps [min]",
             axe_y="Débit [l/s]",
-            series=[
-                charts.Serie("Débit entrant [l/s]", [(p.t_min, p.q_entrant_ls) for p in sim.pas], charts.BLEU),
-                charts.Serie("Débit sortant [l/s]", [(p.t_min, p.q_sortant_ls) for p in sim.pas], charts.VERT),
-                charts.Serie("Débordement [l/s]", [(p.t_min, p.q_debordement_ls) for p in sim.pas], charts.ROUGE),
-            ],
+            series=charts.series_debits(sim, unites=True),
+            reperes=[charts.Repere(sim.duree_pluie_min, "Fin de la pluie", charts.GRIS,
+                                   vertical=True)],
         )
 
     def graphique_orifice(self) -> Optional[charts.Graphique]:

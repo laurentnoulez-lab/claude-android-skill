@@ -18,10 +18,17 @@ class PasSimulation:
     q_infiltration_ls: float
     q_ajutage_ls: float
     q_debordement_ls: float
+    #: Part de l'apport venant du bassin d'orage amont [l/s].
+    q_amont_ls: float = 0.0
 
     @property
     def q_sortant_ls(self) -> float:
         return self.q_infiltration_ls + self.q_ajutage_ls
+
+    @property
+    def q_direct_ls(self) -> float:
+        """Ruissellement arrivant directement, sans transiter par le bassin amont."""
+        return max(self.q_entrant_ls - self.q_amont_ls, 0.0)
 
 
 @dataclass
@@ -51,6 +58,25 @@ class ResultatSimulation:
     def volume_entrant_total_m3(self) -> float:
         """Ruissellement propre + restitution du bassin amont."""
         return self.volume_ruissele_m3 + self.volume_amont_m3
+
+    @property
+    def avec_amont(self) -> bool:
+        """Vrai quand un bassin d'orage amont alimente cet ouvrage."""
+        return self.volume_amont_m3 > 0
+
+    @property
+    def t_fin_apport_amont_min(self) -> float:
+        """Instant où le bassin amont cesse de déverser [min]."""
+        derniers = [p.t_min for p in self.pas if p.q_amont_ls > 1e-9]
+        return derniers[-1] if derniers else 0.0
+
+    @property
+    def q_amont_apres_pluie_ls(self) -> float:
+        """Débit encore restitué par l'amont juste après la fin de l'averse [l/s]."""
+        for p in self.pas:
+            if p.t_min > self.duree_pluie_min + 1e-9:
+                return p.q_amont_ls
+        return 0.0
 
     @property
     def debordement(self) -> bool:
@@ -389,11 +415,13 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     v_debord = 0.0
     t_debord: Optional[float] = None
     t_vide: Optional[float] = None
-    pas: List[PasSimulation] = [PasSimulation(0.0, 0.0, q_in, 0.0, 0.0, 0.0)]
+    pas: List[PasSimulation] = [
+        PasSimulation(0.0, 0.0, q_in + apport.debit_ls(0.0), 0.0, 0.0, 0.0, apport.debit_ls(0.0))]
 
     for t0, t1 in zip(noeuds, noeuds[1:]):
         pluie = t0 < duree_pluie_min - 1e-9
-        qi = (q_in if pluie else 0.0) + apport.debit_ls(t0)
+        q_amont = apport.debit_ls(t0)
+        qi = (q_in if pluie else 0.0) + q_amont
         v_avant = v
         # Le journal donne la durée réelle de chaque régime : sans lui, un pas où
         # le bassin se vide afficherait le débit nominal sur toute sa durée, et la
@@ -417,7 +445,7 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
             q_deb = 0.0
         if t_vide is None and t1 > duree_pluie_min and v <= 1e-6:
             t_vide = t1
-        pas.append(PasSimulation(t1, v, qi, q_infiltre, q_ajute, q_deb))
+        pas.append(PasSimulation(t1, v, qi, q_infiltre, q_ajute, q_deb, q_amont))
 
     res.pas = pas
     res.volume_max_m3 = v_max

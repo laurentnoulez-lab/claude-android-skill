@@ -584,6 +584,69 @@ class TestBassinAmont(unittest.TestCase):
                     self.assertAlmostEqual(debut.volume_m3 + entre - sorti, fin.volume_m3,
                                            places=6)
 
+    def test_les_graphiques_distinguent_l_apport_amont(self):
+        """Sans bassin amont une seule courbe entrante ; avec, la décomposition."""
+        from bassin.reports import charts
+
+        p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=5000.0)
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(180.0)
+
+        sans = simulation.simuler(p, p.bassin, hauteur, 180.0)
+        noms = [serie.nom for serie in charts.series_debits(sans)]
+        self.assertEqual(noms, ["Débit entrant", "Débit sortant", "Débordement"])
+
+        apport = simulation.hydrogramme_amont(p, hauteur, 180.0)
+        avec = simulation.simuler(p, p.bassin, hauteur, 180.0, apport=apport)
+        noms = [serie.nom for serie in charts.series_debits(avec)]
+        self.assertIn("Ruissellement direct", noms)
+        self.assertIn("Apport du bassin amont", noms)
+        self.assertIn("Total entrant", noms)
+
+    def test_le_debit_entrant_se_decompose_exactement(self):
+        """direct + amont = total, à chaque pas."""
+        p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=5000.0)
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(180.0)
+        apport = simulation.hydrogramme_amont(p, hauteur, 180.0)
+        sim = simulation.simuler(p, p.bassin, hauteur, 180.0, apport=apport)
+        for pas in sim.pas:
+            self.assertAlmostEqual(pas.q_direct_ls + pas.q_amont_ls, pas.q_entrant_ls,
+                                   places=9)
+
+    def test_l_apport_amont_se_voit_apres_la_fin_de_la_pluie(self):
+        """Après l'averse, le ruissellement direct est nul mais l'amont continue."""
+        p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=5000.0,
+                                   surface_bv_m2=30000.0, coef_ruissellement=0.9)
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(180.0)
+        apport = simulation.hydrogramme_amont(p, hauteur, 180.0)
+        sim = simulation.simuler(p, p.bassin, hauteur, 180.0, apport=apport)
+        self.assertTrue(sim.avec_amont)
+        self.assertGreater(sim.q_amont_apres_pluie_ls, 0.0)
+        self.assertGreater(sim.t_fin_apport_amont_min, 180.0 * 10)
+        apres = [pas for pas in sim.pas if pas.t_min > 200.0 and pas.t_min < sim.t_fin_apport_amont_min]
+        self.assertTrue(apres)
+        for pas in apres:
+            self.assertAlmostEqual(pas.q_direct_ls, 0.0, places=9)
+            self.assertGreater(pas.q_amont_ls, 0.0)
+
+    def test_la_surverse_amont_fait_bondir_le_debit_entrant(self):
+        """Un bassin amont qui déborde restitue brutalement bien plus que son ajutage."""
+        p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=650.0,
+                                   surface_bv_m2=30000.0, coef_ruissellement=0.9)
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(180.0)
+        apport = simulation.hydrogramme_amont(p, hauteur, 180.0)
+        sim = simulation.simuler(p, p.bassin, hauteur, 180.0, apport=apport)
+        debits = [pas.q_amont_ls for pas in sim.pas]
+        self.assertAlmostEqual(min(d for d in debits if d > 0), 1.0, places=6)
+        self.assertGreater(max(debits), 10 * p.amont.debit_ajutage_ls)
+        # Le saut doit survenir pendant l'averse, quand le bassin amont se remplit.
+        saut = next(pas.t_min for pas, suivant in zip(sim.pas, sim.pas[1:])
+                    if suivant.q_amont_ls - pas.q_amont_ls > 1.0)
+        self.assertLess(saut, 180.0)
+
     def test_la_table_qdf_tient_compte_de_l_amont(self):
         """La table d'acceptation ne doit pas contredire la simulation."""
         p = self.projet_avec_amont()

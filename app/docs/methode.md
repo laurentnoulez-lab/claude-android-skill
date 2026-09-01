@@ -147,6 +147,20 @@ est étendu pour couvrir tout l'apport, et la pointe en aval peut donc survenir 
 la fin de l'averse — c'est le cas dès que l'apport amont dépasse la capacité d'évacuation
 de l'ouvrage aval.
 
+Les graphiques de débits décomposent alors l'apport en deux courbes, le **ruissellement
+direct** (qui rejoint l'ouvrage sans transiter par l'amont) et l'**apport du bassin
+amont**, la somme restant tracée en pointillé. On y lit d'un coup d'œil ce que le total
+masquait :
+
+| | pendant l'averse | après l'averse |
+|---|---|---|
+| ruissellement direct | 9,0 l/s | 0 |
+| apport amont (bassin suffisant) | 1,0 l/s | 1,0 l/s pendant 21 700 min |
+| apport amont (bassin qui surverse) | 121,5 l/s | 1,0 l/s |
+
+La surverse du bassin amont se voit ainsi comme un saut brutal du débit entrant, à
+l'instant où il se remplit.
+
 L'application propose le volume minimal du bassin amont, calculé par la même méthode
 rationnelle sur son bassin versant.
 
