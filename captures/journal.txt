@@ -1,0 +1,28 @@
+[telephone] debug : Installing/Activating first service worker.
+[telephone] debug : Activated new service worker.
+[telephone] debug : Injecting <script> tag. Using callback.
+[telephone] warning : [.WebGL-0x1fe400ac1e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[telephone] warning : [.WebGL-0x1fe400ac1e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[telephone] warning : [.WebGL-0x1fe400ac1e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[telephone] warning : [.WebGL-0x1fe400ac1e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+[telephone] log : Python engine initialized!
+[telephone] log : [HydroBassin] démarrage
+[telephone] log : [HydroBassin] contrôles construits · route '/' · adresse '/python-worker.js' (js.self.location)
+[telephone] log : [HydroBassin] coquille affichée
+[telephone] log : [HydroBassin] première vue affichée
+[tablette] debug : Installing/Activating first service worker.
+[tablette] debug : Activated new service worker.
+[tablette] debug : Injecting <script> tag. Using callback.
+[tablette] log : Python engine initialized!
+[tablette] log : [HydroBassin] démarrage
+[tablette] log : [HydroBassin] contrôles construits · route '/' · adresse '/python-worker.js' (js.self.location)
+[tablette] log : [HydroBassin] coquille affichée
+[tablette] log : [HydroBassin] première vue affichée
+[bureau] debug : Installing/Activating first service worker.
+[bureau] debug : Activated new service worker.
+[bureau] debug : Injecting <script> tag. Using callback.
+[bureau] log : Python engine initialized!
+[bureau] log : [HydroBassin] démarrage
+[bureau] log : [HydroBassin] contrôles construits · route '/' · adresse '/python-worker.js' (js.self.location)
+[bureau] log : [HydroBassin] coquille affichée
+[bureau] log : [HydroBassin] première vue affichée
