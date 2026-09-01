@@ -141,6 +141,12 @@ dans son volume de temporisation, puis restitue :
 * son **trop-plein**, s'il est sous-dimensionné : le surplus traverse alors sans être
   laminé, ce qui aggrave nettement la pointe en aval.
 
+Le déversement **ne s'arrête pas avec la pluie** : un bassin amont rempli continue de se
+vider dans l'ouvrage aval pendant des heures, voire des jours. L'horizon de simulation
+est étendu pour couvrir tout l'apport, et la pointe en aval peut donc survenir bien après
+la fin de l'averse — c'est le cas dès que l'apport amont dépasse la capacité d'évacuation
+de l'ouvrage aval.
+
 L'application propose le volume minimal du bassin amont, calculé par la même méthode
 rationnelle sur son bassin versant.
 

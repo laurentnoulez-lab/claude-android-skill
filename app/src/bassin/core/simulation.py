@@ -395,16 +395,26 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
         pluie = t0 < duree_pluie_min - 1e-9
         qi = (q_in if pluie else 0.0) + apport.debit_ls(t0)
         v_avant = v
+        # Le journal donne la durée réelle de chaque régime : sans lui, un pas où
+        # le bassin se vide afficherait le débit nominal sur toute sa durée, et la
+        # courbe des débits ne s'intégrerait pas aux volumes.
+        journal: List[Tuple[float, float, float, float]] = []
         v, debord, sommet, delai_debord = _avancer(
-            v, t1 - t0, qi, q_inf, q_aj, v_sous, v_cap)
+            v, t1 - t0, qi, q_inf, q_aj, v_sous, v_cap, journal)
         v_debord += debord
         if debord > 0 and t_debord is None and delai_debord is not None:
             t_debord = t0 + delai_debord
         if sommet > v_max:
             v_max = sommet
             t_vmax = t1 if v >= v_avant else t0
-        q_infiltre, q_ajute = _debits_sortants(max(v_avant, v), qi, q_inf, q_aj, v_sous)
-        q_deb = debord * 1000.0 / ((t1 - t0) * 60.0) if t1 > t0 else 0.0
+        duree_pas = t1 - t0
+        if duree_pas > 0 and journal:
+            q_infiltre = sum(d * qi_eff for d, qi_eff, _, _ in journal) / duree_pas
+            q_ajute = sum(d * qa for d, _, qa, _ in journal) / duree_pas
+            q_deb = sum(d * qd for d, _, _, qd in journal) / duree_pas
+        else:
+            q_infiltre, q_ajute = _debits_sortants(max(v_avant, v), qi, q_inf, q_aj, v_sous)
+            q_deb = 0.0
         if t_vide is None and t1 > duree_pluie_min and v <= 1e-6:
             t_vide = t1
         pas.append(PasSimulation(t1, v, qi, q_infiltre, q_ajute, q_deb))

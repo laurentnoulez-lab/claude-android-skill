@@ -532,6 +532,58 @@ class TestBassinAmont(unittest.TestCase):
                 self.assertFalse(sim.debordement,
                                  "l'ouvrage proposé déborde dès la pluie de projet")
 
+    def test_le_bassin_amont_continue_de_se_deverser_apres_la_pluie(self):
+        """Un bassin amont rempli restitue longtemps après la fin de l'averse."""
+        p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=5000.0,
+                                   surface_bv_m2=30000.0, coef_ruissellement=0.9)
+        duree = 180.0
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(duree)
+        apport = simulation.hydrogramme_amont(p, hauteur, duree)
+        self.assertGreater(apport.fin_min, duree * 10,
+                           "le déversement amont s'arrête avec la pluie")
+        # Le débit restitué est encore actif bien après l'averse.
+        self.assertGreater(apport.debit_ls(duree * 5), 0.0)
+        # L'horizon simulé couvre tout l'apport.
+        sim = simulation.simuler(p, p.bassin, hauteur, duree, apport=apport)
+        self.assertGreaterEqual(sim.pas[-1].t_min, apport.fin_min)
+        self.assertAlmostEqual(sim.volume_amont_m3, apport.volume_m3, places=6)
+
+    def test_la_pointe_aval_peut_survenir_apres_la_pluie(self):
+        """Avec un apport amont soutenu, le maximum se déplace après l'averse."""
+        p = self.projet_avec_amont(debit_ajutage_ls=8.0, volume_temporisation_m3=5000.0,
+                                   surface_bv_m2=40000.0, coef_ruissellement=0.9)
+        p.bassin = Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=0.0,
+                          surface_dispersion_m2=0.0, debit_ajutage_ls=0.5)
+        duree = 60.0
+        hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                       p.source_pluie).hauteur(duree)
+        apport = simulation.hydrogramme_amont(p, hauteur, duree)
+        sim = simulation.simuler(p, p.bassin, hauteur, duree, apport=apport)
+        self.assertGreater(sim.t_volume_max_min, duree,
+                           "la pointe devrait survenir après la fin de la pluie")
+
+    def test_les_debits_traces_s_integrent_aux_volumes(self):
+        """La courbe des débits doit refermer le bilan, y compris quand le bassin se vide."""
+        for v_sous in (0.0, 20.0):
+            with self.subTest(volume_sous_ajutage=v_sous):
+                p = self.projet_avec_amont(debit_ajutage_ls=1.0, volume_temporisation_m3=5000.0,
+                                           surface_bv_m2=30000.0, coef_ruissellement=0.9)
+                p.bassin = Bassin(volume_total_m3=1e6, volume_sous_ajutage_m3=v_sous,
+                                  surface_dispersion_m2=150.0, debit_ajutage_ls=5.0)
+                duree = 180.0
+                hauteur = rainfall.SourcePluie(p.commune_ins, p.periode_retour,
+                                               p.source_pluie).hauteur(duree)
+                apport = simulation.hydrogramme_amont(p, hauteur, duree)
+                sim = simulation.simuler(p, p.bassin, hauteur, duree, apport=apport)
+                for debut, fin in zip(sim.pas, sim.pas[1:]):
+                    dt = (fin.t_min - debut.t_min) * 60.0 / 1000.0
+                    entre = fin.q_entrant_ls * dt
+                    sorti = (fin.q_infiltration_ls + fin.q_ajutage_ls
+                             + fin.q_debordement_ls) * dt
+                    self.assertAlmostEqual(debut.volume_m3 + entre - sorti, fin.volume_m3,
+                                           places=6)
+
     def test_la_table_qdf_tient_compte_de_l_amont(self):
         """La table d'acceptation ne doit pas contredire la simulation."""
         p = self.projet_avec_amont()
