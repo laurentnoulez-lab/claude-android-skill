@@ -160,6 +160,34 @@ class Projet:
         return aire
 
     @property
+    def debit_specifique_ajutage_ls_ha(self) -> float:
+        """Débit d'ajutage rapporté à la surface raccordée [l/(s·ha)]."""
+        aire = self.aire_raccordee_m2
+        return self.debit_ajutage_ls * 10000.0 / aire if aire > 0 else 0.0
+
+    def compter_surface_amont(self, inclure: bool) -> float:
+        """Compte (ou non) le bassin versant amont dans la surface raccordée.
+
+        Le débit d'ajutage encodé vaut un débit spécifique appliqué à cette
+        surface : quand elle change, le débit absolu suit au prorata. Cocher la
+        case pour un bassin versant amont d'un hectare, avec 5 l/(s·ha), ajoute
+        donc 5 l/s à l'ajutage de l'ouvrage aval.
+
+        Renvoie le nouveau débit d'ajutage [l/s].
+        """
+        avant = self.aire_raccordee_m2
+        self.amont.inclure_bv_dans_ajutage = bool(inclure)
+        apres = self.aire_raccordee_m2
+        if avant > 0 and apres > 0 and self.debit_ajutage_ls > 0:
+            facteur = apres / avant
+            self.debit_ajutage_ls *= facteur
+            # L'ouvrage encodé porte sa propre copie du débit : elle suit aussi,
+            # sauf si l'utilisateur l'a volontairement dissociée.
+            if self.bassin.debit_ajutage_ls > 0:
+                self.bassin.debit_ajutage_ls *= facteur
+        return self.debit_ajutage_ls
+
+    @property
     def debit_fuite_admissible_ls(self) -> float:
         """Débit de rejet maximal admissible (5 l/s/ha de surface raccordée)."""
         return DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA * self.aire_raccordee_m2 / 10000.0

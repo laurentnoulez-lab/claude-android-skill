@@ -123,9 +123,22 @@ dans son volume de temporisation, puis restitue :
   laminé, ce qui aggrave nettement la pointe en aval.
 
 L'application propose le volume minimal du bassin amont, calculé par la même méthode
-rationnelle sur son bassin versant. La surface de ce bassin versant peut, au choix de
-l'utilisateur, être comptée dans la surface raccordée qui fixe le débit de fuite
-admissible (5 l/s/ha) et la conversion de l'ajutage en l/(s·ha).
+rationnelle sur son bassin versant.
+
+### Compter le bassin versant amont dans l'ajutage
+
+Le débit d'ajutage encodé vaut un **débit spécifique** appliqué à la surface raccordée.
+En cochant la case, le bassin versant amont entre dans cette surface, et le débit absolu
+suit au prorata :
+
+```
+Q_ajutage = q_spécifique × (S_propre + S_bassin_versant_amont) / 10000
+```
+
+Exemple : 0,5 ha de surfaces propres avec 5 l/(s·ha), soit 2,5 l/s. En ajoutant un
+bassin versant amont de 10 000 m², l'ajutage passe à **7,5 l/s** — les 5 l/s
+correspondant à l'hectare amont s'ajoutent. Le débit de fuite admissible suit la même
+surface, et décocher restitue exactement la valeur de départ.
 
 ## Intégration de la simulation
 

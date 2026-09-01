@@ -246,7 +246,9 @@ class VueBassin(Vue):
             self.rafraichir()
 
         def basculer_surface(e: ft.ControlEvent) -> None:
-            amont.inclure_bv_dans_ajutage = bool(e.control.value)
+            # Le débit spécifique encodé s'applique à la surface raccordée : en
+            # y ajoutant le bassin versant amont, l'ajutage augmente d'autant.
+            p.compter_surface_amont(bool(e.control.value))
             self.etat.invalider()
             self.rafraichir()
 
@@ -327,17 +329,31 @@ class VueBassin(Vue):
                     ],
                     wrap=True, spacing=10,
                 ),
-                ft.Checkbox(
-                    label="Compter la surface du bassin versant amont dans le débit d'ajutage "
-                          "de cet ouvrage",
-                    value=amont.inclure_bv_dans_ajutage,
-                    on_change=basculer_surface,
+                ft.Row(
+                    [
+                        ft.Checkbox(value=amont.inclure_bv_dans_ajutage,
+                                    on_change=basculer_surface),
+                        ft.Text("Compter la surface du bassin versant amont dans le débit "
+                                "d'ajutage de cet ouvrage", size=13, expand=True, no_wrap=False),
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Text(
-                    f"Surface retenue pour le débit de fuite : "
-                    f"{theme.nombre(p.aire_raccordee_m2, 0)} m² · maximum admissible "
-                    f"{theme.nombre(p.debit_fuite_admissible_ls, 3)} l/s",
+                    f"Surface raccordée : {theme.nombre(p.aire_raccordee_m2, 0)} m² · "
+                    f"ajutage {theme.nombre(p.debit_ajutage_ls, 3)} l/s "
+                    f"({theme.nombre(p.debit_specifique_ajutage_ls_ha, 3)} l/s/ha) · "
+                    f"maximum admissible {theme.nombre(p.debit_fuite_admissible_ls, 3)} l/s",
                     size=11.5, color=theme.GRIS),
+                ft.Text(
+                    "En cochant, le débit spécifique encodé s'applique aussi au bassin versant "
+                    f"amont : l'ajutage de cet ouvrage passerait à "
+                    f"{theme.nombre(p.debit_specifique_ajutage_ls_ha * (p.aire_totale_m2 + amont.surface_bv_m2) / 10000.0, 3)} l/s."
+                    if not amont.inclure_bv_dans_ajutage else
+                    "Le débit spécifique encodé s'applique au bassin versant amont comme aux "
+                    "surfaces propres ; décocher ramènerait l'ajutage à "
+                    f"{theme.nombre(p.debit_specifique_ajutage_ls_ha * p.aire_totale_m2 / 10000.0, 3)} l/s.",
+                    size=11.5, color=theme.GRIS, italic=True),
                 avis,
             ],
             spacing=12,

@@ -782,18 +782,36 @@ class TestSimulationMultiple(unittest.TestCase):
         self.assertGreater(attendu, 0)
         self.assertAlmostEqual(p.amont.volume_temporisation_m3, attendu)
 
-    def test_la_surface_amont_bascule_le_debit_admissible(self):
+    def test_cocher_la_surface_amont_augmente_l_ajutage_au_prorata(self):
+        """5 l/s/ha et 10 000 m² de bassin versant amont : +5 l/s sur l'ajutage aval."""
         p = self.etat.projet
+        p.surfaces[7].aire_m2 = 5000.0          # 0,5 ha en aval, coefficient 1,0
+        for autre in p.surfaces:
+            if autre is not p.surfaces[7]:
+                autre.aire_m2 = 0.0
+        p.debit_ajutage_ls = 2.5                 # soit 5 l/s/ha
+        p.bassin.debit_ajutage_ls = 2.5
         p.amont.actif = True
         p.amont.surface_bv_m2 = 10000.0
-        avant = p.debit_fuite_admissible_ls
+        self.etat.invalider()
+
         vue = self.vue()
-        cases = [c for c in _rechercher(vue.corps, ft.Checkbox)
-                 if "bassin versant amont" in (c.label or "")]
-        self.assertTrue(cases)
+        cases = _rechercher(vue.corps, ft.Checkbox)
+        self.assertTrue(cases, "la case du bassin versant amont est absente")
         cases[0].on_change(_Evenement(_Controle(True)))
+
         self.assertTrue(p.amont.inclure_bv_dans_ajutage)
-        self.assertGreater(p.debit_fuite_admissible_ls, avant)
+        self.assertAlmostEqual(p.aire_raccordee_m2, 15000.0)
+        self.assertAlmostEqual(p.debit_ajutage_ls, 7.5, places=6)
+        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 7.5, places=6)
+        self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 5.0, places=6)
+        self.assertAlmostEqual(p.debit_fuite_admissible_ls, 7.5, places=6)
+
+        # Décocher doit rendre exactement la valeur de départ.
+        cases = _rechercher(vue.corps, ft.Checkbox)
+        cases[0].on_change(_Evenement(_Controle(False)))
+        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=6)
+        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 2.5, places=6)
 
 
 class TestGenerationDesRapports(unittest.TestCase):

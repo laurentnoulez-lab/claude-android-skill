@@ -100,7 +100,7 @@ app/
 │       │   └── pdf_report.py    rapport PDF (graphiques vectoriels)
 │       ├── formats.py           virgule décimale, partagée écran et rapports
 │       └── ui/                  thème, état, graphiques Flet et 7 vues
-├── tests/                       152 tests unitaires, dont la conformité au GTI
+├── tests/                       153 tests unitaires, dont la conformité au GTI
 └── tools/                       génération de l'icône et du dossier de démonstration
 ```
 
