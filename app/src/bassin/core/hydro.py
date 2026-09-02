@@ -134,6 +134,65 @@ def volume_a_maitriser_seuil(
     return v_max, t_max, h_max
 
 
+def volume_pointe_amont(projet: Projet, duree_min: float, hauteur_mm: float,
+                        debit_infiltration: float, debit_ajutage: float,
+                        volume_sous_ajutage_m3: float) -> float:
+    """Volume a maitriser pour une averse donnée, apport du bassin amont compris.
+
+    Cet apport varie dans le temps — il se poursuit après l'averse, et bondit si
+    le bassin amont surverse — ce qu'aucune formule fermée ne décrit. On réutilise
+    donc l'intégrateur exact de la simulation.
+    """
+    from . import simulation
+
+    if duree_min <= 0:
+        return 0.0
+    apport = simulation.hydrogramme_amont(projet, hauteur_mm, duree_min)
+    q_direct = hauteur_mm * projet.aire_ponderee_m2 / (duree_min * 60.0)
+    return simulation.pic_volume_m3(q_direct, duree_min, apport, debit_infiltration,
+                                    debit_ajutage, volume_sous_ajutage_m3)
+
+
+def volume_a_maitriser_amont(
+    projet: Projet,
+    serie: Tuple[Tuple[float, ...], Tuple[float, ...]],
+    debit_infiltration: float,
+    debit_ajutage: float,
+    volume_sous_ajutage_m3: float,
+) -> Tuple[float, float, float]:
+    """Balayage des durées de pluie tenant compte du bassin d'orage amont.
+
+    L'intégration exacte coûte trop cher pour être répétée sur les 17 280 durées
+    de la grille GTI à chaque frappe : on dégrossit sur environ 200 durées, puis
+    on affine autour du maximum. Sur les cas testés la valeur retenue est celle
+    du balayage exhaustif.
+    """
+    durees, hauteurs = serie
+
+    def pointe(t: float, h: float) -> float:
+        return volume_pointe_amont(projet, t, h, debit_infiltration, debit_ajutage,
+                                   volume_sous_ajutage_m3)
+
+    COARSE = 200
+    pas = max(1, len(durees) // COARSE)
+    if pas > 1:
+        indices = list(range(0, len(durees), pas))
+        if indices[-1] != len(durees) - 1:
+            indices.append(len(durees) - 1)
+        meilleur = max(indices, key=lambda i: pointe(durees[i], hauteurs[i]))
+        debut, fin = max(0, meilleur - pas), min(len(durees) - 1, meilleur + pas)
+        plage = range(debut, fin + 1)
+    else:
+        plage = range(len(durees))
+
+    v_max, t_max, h_max = 0.0, float(durees[0]) if durees else 0.0, 0.0
+    for i in plage:
+        v = pointe(durees[i], hauteurs[i])
+        if v > v_max:
+            v_max, t_max, h_max = v, durees[i], hauteurs[i]
+    return v_max, t_max, h_max
+
+
 # ---------------------------------------------------------------------------
 # Resultat
 # ---------------------------------------------------------------------------
@@ -157,6 +216,8 @@ class Resultat:
     surface_infiltration_min_m2: Optional[float] = None
     debit_ajutage_min_ls: Optional[float] = None
     volume_sous_ajutage_m3: float = 0.0
+    #: Vrai quand l'apport d'un bassin d'orage amont est inclus dans le volume.
+    amont_pris_en_compte: bool = False
     conforme: bool = True
     messages: List[str] = field(default_factory=list)
     alertes: List[str] = field(default_factory=list)
@@ -213,6 +274,32 @@ def debits_scenario(projet: Projet, scenario: str, surface_infiltration: Optiona
     return q_inf, q_aj
 
 
+def volume_de_dimensionnement(
+    projet: Projet,
+    serie: Tuple[Tuple[float, ...], Tuple[float, ...]],
+    scenario: str,
+    debit_infiltration: float,
+    debit_ajutage: float,
+) -> Tuple[float, float, float]:
+    """Volume a maitriser, durée critique et hauteur de pluie pour un scénario.
+
+    Règle unique du dimensionnement : un bassin amont impose l'intégration
+    exacte de son apport, un ajutage surélevé la formule des trois régimes, et
+    le cas courant la formule fermée. La recherche des minima passe par ici
+    elle aussi, pour ne pas pouvoir répondre autrement que le tableau.
+    """
+    v_sous = projet.bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
+    if projet.amont.actif:
+        # Un bassin amont déverse ici : son apport doit entrer dans le volume à
+        # prévoir, sans quoi l'ouvrage dimensionné déborderait en simulation.
+        return volume_a_maitriser_amont(projet, serie, debit_infiltration, debit_ajutage, v_sous)
+    if scenario == SCENARIO_SEUIL:
+        return volume_a_maitriser_seuil(serie, projet.aire_ponderee_m2,
+                                        debit_infiltration, debit_ajutage, v_sous)
+    return volume_a_maitriser(serie, projet.aire_ponderee_m2,
+                              debit_infiltration + debit_ajutage)
+
+
 def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[float] = None,
                  debit_ajutage: Optional[float] = None, avec_minima: bool = True) -> Resultat:
     """Dimensionne le volume de temporisation pour un scénario donne."""
@@ -228,13 +315,9 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     res.surface_infiltration_m2 = s_inf
     res.volume_sous_ajutage_m3 = v_sous
 
-    if scenario == SCENARIO_SEUIL:
-        v, t, h = volume_a_maitriser_seuil(serie, s_pond, q_inf, q_aj, v_sous)
-        res.debit_sortant_ls = q_inf + q_aj
-    else:
-        q_out = q_inf + q_aj
-        v, t, h = volume_a_maitriser(serie, s_pond, q_out)
-        res.debit_sortant_ls = q_out
+    res.debit_sortant_ls = q_inf + q_aj
+    res.amont_pris_en_compte = projet.amont.actif
+    v, t, h = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
 
     res.volume_m3 = v
     res.duree_critique_min = t
@@ -376,14 +459,13 @@ def _minima(projet: Projet, res: Resultat, scenario: str) -> None:
 # ---------------------------------------------------------------------------
 # Recherche des minima (dichotomie)
 # ---------------------------------------------------------------------------
-def _temps_vidange_pour(projet: Projet, scenario: str, s_inf: float, q_aj: float) -> float:
-    res_serie = serie_projet(projet)
+def _temps_vidange_pour(projet: Projet, scenario: str, s_inf: float, q_aj: float,
+                        serie: Optional[Tuple[Tuple[float, ...], Tuple[float, ...]]] = None) -> float:
+    if serie is None:
+        serie = serie_projet(projet)
     q_inf = debit_infiltration_ls(s_inf, projet.k_infiltration_ms, projet.coef_securite_infiltration)
     v_sous = projet.bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
-    if scenario == SCENARIO_SEUIL:
-        v, _, _ = volume_a_maitriser_seuil(res_serie, projet.aire_ponderee_m2, q_inf, q_aj, v_sous)
-    else:
-        v, _, _ = volume_a_maitriser(res_serie, projet.aire_ponderee_m2, q_inf + q_aj)
+    v, _, _ = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
     return temps_vidange_h(v, q_inf, q_aj, v_sous)
 
 
@@ -393,18 +475,19 @@ def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: floa
         return None
     q_aj = projet.debit_ajutage_ls if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h
-    if _temps_vidange_pour(projet, scenario, 0.0, q_aj) <= cible:
+    serie = serie_projet(projet)
+    if _temps_vidange_pour(projet, scenario, 0.0, q_aj, serie) <= cible:
         return 0.0
     lo, hi = 0.0, max(projet.aire_totale_m2, 100.0)
     for _ in range(60):
-        if _temps_vidange_pour(projet, scenario, hi, q_aj) <= cible:
+        if _temps_vidange_pour(projet, scenario, hi, q_aj, serie) <= cible:
             break
         hi *= 2.0
         if hi > 1e7:
             return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if _temps_vidange_pour(projet, scenario, mid, q_aj) <= cible:
+        if _temps_vidange_pour(projet, scenario, mid, q_aj, serie) <= cible:
             hi = mid
         else:
             lo = mid
@@ -419,18 +502,19 @@ def debit_ajutage_minimal(projet: Projet, scenario: str, tolerance: float = 1e-4
         return None
     s_inf = projet.surface_infiltration_m2 if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h
-    if _temps_vidange_pour(projet, scenario, s_inf, 0.0) <= cible:
+    serie = serie_projet(projet)
+    if _temps_vidange_pour(projet, scenario, s_inf, 0.0, serie) <= cible:
         return 0.0
     lo, hi = 0.0, 1.0
     for _ in range(60):
-        if _temps_vidange_pour(projet, scenario, s_inf, hi) <= cible:
+        if _temps_vidange_pour(projet, scenario, s_inf, hi, serie) <= cible:
             break
         hi *= 2.0
         if hi > 1e6:
             return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if _temps_vidange_pour(projet, scenario, s_inf, mid) <= cible:
+        if _temps_vidange_pour(projet, scenario, s_inf, mid, serie) <= cible:
             hi = mid
         else:
             lo = mid
@@ -461,6 +545,12 @@ def courbe_volume(projet: Projet, scenario: str, n_points: int = 160) -> List[Tu
         t = math.exp(lo + (hi - lo) * i / (n_points - 1))
         h = src.hauteur(t)
         v_in = h * s_pond / 1000.0
+        if projet.amont.actif:
+            # Même règle que le tableau des scénarios, sans quoi la courbe
+            # passerait sous le volume de dimensionnement qu'elle annote.
+            seuil = v_sous if scenario == SCENARIO_SEUIL else 0.0
+            pts.append((t, volume_pointe_amont(projet, t, h, q_inf, q_aj, seuil)))
+            continue
         if scenario == SCENARIO_SEUIL and v_sous > 0:
             pts.append((t, volume_pointe_seuil(v_in, t, q_inf, q_aj, v_sous)))
             continue

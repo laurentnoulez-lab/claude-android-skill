@@ -43,6 +43,11 @@ V_à_maîtriser = max( V_ruisselé(t) − V_évacué(t) , 0 )        [m³]
 Le volume de dimensionnement est le maximum sur l'ensemble des durées (10 min → 60 jours,
 pas de 5 min), ce qui donne la **durée de pluie critique**.
 
+Deux cas sortent de cette formule fermée et sont traités par intégration exacte, pour que
+le tableau des scénarios ne puisse pas contredire la vérification de l'ouvrage : l'ajutage
+surélevé (tant que le niveau n'atteint pas son axe, seule la dispersion évacue) et le
+**bassin d'orage amont**, dont l'apport varie dans le temps et se poursuit après l'averse.
+
 ## Utilisation en développement
 
 ```bash

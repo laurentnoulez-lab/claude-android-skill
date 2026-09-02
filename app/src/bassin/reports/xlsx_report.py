@@ -300,9 +300,18 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
     ws_p = wb["Pluie de projet"]
     r0, r1 = ws_p._plage_pluie  # type: ignore[attr-defined]
     ws = wb.create_sheet("Scénarios")
+    projet = dossier.projet
     _largeurs(ws, {"A": 52, "B": 16, "C": 16, "D": 16, "E": 16})
     _titre(ws, "A1", "Comparaison des quatre scénarios", 14)
-    ws["A2"] = "Les volumes et durées critiques sont recalculés par formules à partir de la feuille 'Pluie de projet'."
+    note = ("Les volumes et durées critiques sont recalculés par formules à partir de la "
+            "feuille 'Pluie de projet'.")
+    if projet.amont.actif:
+        note += (" Ces formules n'appliquent la méthode rationnelle qu'au bassin versant du "
+                 "projet : l'apport du bassin d'orage amont varie dans le temps et se poursuit "
+                 "après l'averse, il demande une intégration pas à pas qu'une formule de "
+                 "cellule ne peut pas reproduire. Le volume à mettre en œuvre est donc celui "
+                 "de la ligne « apport du bassin amont compris », reprise de l'application.")
+    ws["A2"] = note
     ws["A2"].font = Font(italic=True, color="475569")
 
     colonnes = {SCENARIO_TEMPORISATION: ("H", "[1]"), SCENARIO_DISPERSION: ("J", "[2]"),
@@ -368,6 +377,18 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
                     value=f'=IF({col_lettre}{l_vid}="","-",IF({col_lettre}{l_vid}<=T_vidange_max,"OUI","NON"))')
         c.border = _BORDURE
     ligne += 2
+
+    if projet.amont.actif:
+        ws.cell(row=ligne, column=1,
+                value="Volume à maîtriser, apport du bassin amont compris [m³]").font = Font(
+                    bold=True, color=BLEU)
+        for j, s_scen in enumerate(ORDRE_SCENARIOS):
+            c = ws.cell(row=ligne, column=2 + j,
+                        value=round(dossier.resultats[s_scen].volume_m3, 1))
+            c.number_format = "0.0"
+            c.border = _BORDURE
+            c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+        ligne += 2
 
     ws.cell(row=ligne, column=1, value="Valeurs minimales calculées par l'application").font = Font(bold=True, color=BLEU)
     ligne += 1

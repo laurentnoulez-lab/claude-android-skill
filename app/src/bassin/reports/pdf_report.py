@@ -262,8 +262,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5,
                 alignements=["left", "right", "center"],
             )
-            pdf.puce("Le bassin amont continue de se déverser après l'averse : les courbes de "
-                     "débits distinguent le ruissellement direct de cet apport.")
+            pdf.puce(sim.commentaire_amont)
         pdf.titre2(("4.2 " if amont.actif else "4.1 ") + "Événement critique simule")
         pdf.tableau(
             [["Grandeur", "Valeur", "Grandeur", "Valeur"],

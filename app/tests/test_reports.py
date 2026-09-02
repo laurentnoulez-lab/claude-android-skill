@@ -273,7 +273,26 @@ class TestRapportAvecAmont(unittest.TestCase):
         self.assertTrue(any("BV amont compris" in (l or "") for l in libelles))
 
 
+    def test_excel_annonce_le_volume_avec_l_apport_amont(self):
+        """Les formules vives ignorent l'amont : le classeur doit le dire et donner
+        la valeur qui fait foi, sinon il contredit le rapport PDF."""
+        import openpyxl
+
+        chemin = xlsx_report.ecrire(self.dossier, self.chemin("amont_volume.xlsx"))
+        feuille = openpyxl.load_workbook(chemin)["Scénarios"]
+        textes = [c.value for ligne in feuille.iter_rows()
+                  for c in ligne if isinstance(c.value, str)]
+        self.assertTrue(any("intégration pas à pas" in (t or "") for t in textes))
+        ligne = next(l for l in feuille.iter_rows()
+                     if isinstance(l[0].value, str)
+                     and l[0].value.startswith("Volume à maîtriser, apport du bassin amont"))
+        valeurs = [c.value for c in ligne[1:5]]
+        attendus = [round(self.dossier.resultats[s].volume_m3, 1) for s in mod_dossier.ORDRE_SCENARIOS]
+        self.assertEqual(valeurs, attendus)
+
+
 class TestVirguleDecimale(BaseRapport):
+
     """Les rapports francophones affichent une virgule décimale, pas un point."""
 
     #: Les numéros de section (« 1.1 Surfaces incidentes ») gardent leur point.

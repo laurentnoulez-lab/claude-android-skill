@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
 from . import rainfall
@@ -77,6 +78,33 @@ class ResultatSimulation:
             if p.t_min > self.duree_pluie_min + 1e-9:
                 return p.q_amont_ls
         return 0.0
+
+    @property
+    def duree_apport_amont_apres_pluie_min(self) -> float:
+        """Durée pendant laquelle l'amont déverse encore après l'averse [min]."""
+        return max(self.t_fin_apport_amont_min - self.duree_pluie_min, 0.0)
+
+    @property
+    def commentaire_amont(self) -> str:
+        """Ce que l'apport amont a réellement fait, en une phrase.
+
+        Un bassin amont ne se vide pas forcément après l'averse : si son ajutage
+        évacue au fur et à mesure ce que son bassin versant lui apporte, il ne
+        stocke rien et son déversement s'arrête avec la pluie. Annoncer
+        l'inverse dans tous les cas induirait le lecteur en erreur.
+        """
+        if not self.avec_amont:
+            return ""
+        commun = ("Les courbes de débits distinguent le ruissellement direct de cet "
+                  "apport.")
+        reste = self.duree_apport_amont_apres_pluie_min
+        if reste <= 1.0:
+            return ("Le bassin amont cesse de déverser en même temps que l'averse : son "
+                    "ajutage évacue au fur et à mesure ce que son bassin versant lui "
+                    "apporte, il ne stocke donc rien à restituer ensuite. " + commun)
+        return (f"Le bassin amont continue de se déverser {formater_duree(reste)} après la "
+                f"fin de l'averse, à {self.q_amont_apres_pluie_ls:.3f} l/s : l'ouvrage aval "
+                f"peut donc continuer à se remplir alors que la pluie est finie. " + commun)
 
     @property
     def debordement(self) -> bool:
@@ -283,14 +311,25 @@ def hydrogramme_amont(projet: Projet, hauteur_mm: float, duree_pluie_min: float)
     amont = projet.amont
     if not amont.actif or duree_pluie_min <= 0:
         return Apport()
-    s_pond = amont.aire_ponderee_m2
+    return _hydrogramme_amont(
+        hauteur_mm, duree_pluie_min, amont.aire_ponderee_m2,
+        amont.debit_infiltration_ls(projet.coef_securite_infiltration),
+        amont.debit_ajutage_ls, max(amont.volume_temporisation_m3, 0.0))
+
+
+@lru_cache(maxsize=4096)
+def _hydrogramme_amont(hauteur_mm: float, duree_pluie_min: float, s_pond: float,
+                       q_inf: float, q_aj: float, v_cap: float) -> Apport:
+    """Cœur de calcul, mis en cache : le balayage des durées le redemande souvent
+    avec les mêmes paramètres, pour chacun des quatre scénarios.
+
+    L'``Apport`` renvoyé est partagé entre appelants : il se lit, il ne se
+    modifie pas.
+    """
     v_in = hauteur_mm * s_pond / 1000.0
     if v_in <= 0:
         return Apport()
     q_in = v_in * 1000.0 / (duree_pluie_min * 60.0)
-    q_inf = amont.debit_infiltration_ls(projet.coef_securite_infiltration)
-    q_aj = amont.debit_ajutage_ls
-    v_cap = max(amont.volume_temporisation_m3, 0.0)
 
     # Horizon : l'averse puis la vidange du bassin amont.
     v_pointe = min(max(v_in - (q_inf + q_aj) * duree_pluie_min * 60.0 / 1000.0, 0.0),
@@ -324,6 +363,37 @@ def hydrogramme_amont(projet: Projet, hauteur_mm: float, duree_pluie_min: float)
     return Apport(fusionnes)
 
 
+def pic_volume_m3(q_direct_ls: float, duree_pluie_min: float, apport: Apport,
+                  q_inf_ls: float, q_aj_ls: float, v_sous_m3: float) -> float:
+    """Volume stocké maximal dans un ouvrage de capacité illimitée.
+
+    Version allégée de :func:`simuler` pour le balayage des durées : elle ne
+    produit ni grille d'échantillonnage ni chronique, seulement le maximum. Le
+    débit entrant est constant par morceaux (ruissellement direct pendant
+    l'averse, paliers de l'apport amont) et l'intégration reste exacte, donc le
+    résultat est identique à celui de la simulation complète.
+
+    Après le dernier palier d'apport le bassin ne fait plus que se vider : le
+    maximum est donc atteint au plus tard à cet instant, inutile d'aller
+    au-delà.
+    """
+    bornes = {0.0, max(duree_pluie_min, 0.0)}
+    bornes.update(b for b in apport.bornes() if b >= 0.0)
+    instants = sorted(bornes)
+    v = 0.0
+    v_max = 0.0
+    for t0, t1 in zip(instants, instants[1:]):
+        if t1 - t0 <= 1e-12:
+            continue
+        q_in = apport.debit_ls(t0)
+        if t0 < duree_pluie_min - 1e-9:
+            q_in += q_direct_ls
+        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, 0.0)
+        if v_pic > v_max:
+            v_max = v_pic
+    return v_max
+
+
 def simuler_evenement_critique(projet: Projet, bassin: Bassin,
                                n_points: int = 400) -> ResultatSimulation:
     """Simule la pluie la plus défavorable pour cet ouvrage, apport amont compris.
@@ -348,17 +418,16 @@ def volume_requis_m3(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_mi
     apport = hydrogramme_amont(projet, hauteur_mm, duree_min)
     if not apport.segments:
         return volume_necessaire(projet, bassin, hauteur_mm, duree_min)
-    illimite = Bassin(volume_total_m3=0.0,
-                      volume_sous_ajutage_m3=bassin.volume_sous_ajutage_m3,
-                      surface_dispersion_m2=bassin.surface_dispersion_m2,
-                      debit_ajutage_ls=bassin.debit_ajutage_ls)
-    return simuler(projet, illimite, hauteur_mm, duree_min, n_points=80,
-                   apport=apport).volume_max_m3
+    q_inf, q_aj = _debits(projet, bassin)
+    q_direct = hauteur_mm * projet.aire_ponderee_m2 / (duree_min * 60.0)
+    return pic_volume_m3(q_direct, duree_min, apport, q_inf, q_aj,
+                         bassin.volume_sous_ajutage_m3)
 
 
 def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: float,
             n_points: int = 400, marge_vidange: float = 1.25,
-            apport: Optional[Apport] = None) -> ResultatSimulation:
+            apport: Optional[Apport] = None,
+            debits: Optional[Tuple[float, float]] = None) -> ResultatSimulation:
     """Simulation du remplissage puis de la vidange du bassin.
 
     Hypothèses : pluie de projet à intensité constante (bloc), infiltration
@@ -367,7 +436,9 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     est exacte entre les seuils, si bien que le volume maximal coïncide avec le
     volume annoncé par le dimensionnement.
     """
-    q_inf, q_aj = _debits(projet, bassin)
+    # ``debits`` permet de balayer un scénario de dimensionnement dont les débits
+    # ne sont pas ceux de l'ouvrage encodé.
+    q_inf, q_aj = debits if debits is not None else _debits(projet, bassin)
     v_cap = bassin.volume_total_m3
     v_sous = min(bassin.volume_sous_ajutage_m3, v_cap) if v_cap > 0 else bassin.volume_sous_ajutage_m3
 

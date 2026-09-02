@@ -174,8 +174,43 @@ masquait :
 La surverse du bassin amont se voit ainsi comme un saut brutal du débit entrant, à
 l'instant où il se remplit.
 
+Le déversement ne se prolonge pas toujours : si l'ajutage du bassin amont évacue au fur
+et à mesure ce que son bassin versant lui apporte, il ne stocke rien et son déversement
+s'arrête avec la pluie. Les rapports le disent explicitement plutôt que d'annoncer un
+déversement prolongé dans tous les cas.
+
 L'application propose le volume minimal du bassin amont, calculé par la même méthode
 rationnelle sur son bassin versant.
+
+### Le dimensionnement intègre l'apport amont
+
+L'apport amont **entre dans le volume à mettre en œuvre**. Sans cela le tableau des
+scénarios et la vérification de l'ouvrage se contredisaient : un rapport annonçait
+988,4 m³ de temporisation puis déclarait 441,4 m³ de débordement dans l'ouvrage de
+1 174,5 m³ encodé au-dessus de cette valeur.
+
+Cet apport varie dans le temps — il se poursuit après l'averse et bondit si le bassin
+amont surverse — donc aucune formule fermée ne le décrit. Le balayage des durées passe
+alors par l'**intégrateur exact** de la simulation (`simulation.pic_volume_m3`), qui
+découpe l'événement aux instants où l'apport change de palier et où le niveau franchit
+un seuil. Le résultat est indépendant du pas d'échantillonnage.
+
+Pour rester utilisable sur téléphone, le balayage se fait en deux passes : une grille
+dégrossie d'environ 200 durées, puis un affinage autour du maximum. Sur les 17 280 durées
+de la grille GTI, la valeur retenue est identique à celle d'un balayage exhaustif (test
+`test_le_balayage_en_deux_passes_retrouve_le_maximum_absolu`), pour environ 40 ms par
+projet.
+
+La même règle sert partout — tableau des scénarios, courbe « volume à maîtriser =
+f(durée) », temps de vidange et minima de la limite des 48 h, table QDF d'acceptation,
+simulation — via `hydro.volume_de_dimensionnement`. Un bassin amont allonge donc aussi la
+surface d'infiltration et l'ajutage minimaux : sur le cas ci-dessus, 53,6 m² → 110,3 m²
+et 7,31 l/s → 10,99 l/s.
+
+Le classeur Excel fait exception : ses formules vives n'appliquent la méthode rationnelle
+qu'au bassin versant du projet, une cellule ne pouvant pas reproduire une intégration pas
+à pas. La feuille « Scénarios » le signale et donne, sur une ligne séparée, le volume à
+maîtriser apport amont compris.
 
 ### Compter le bassin versant amont dans l'ajutage
 

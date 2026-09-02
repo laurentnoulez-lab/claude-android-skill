@@ -194,9 +194,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 ],
                 largeurs=[9.0, 4.0, 3.0],
             )
-            doc.paragraphe("Le bassin amont continue de se déverser après l'averse : les courbes "
-                           "de débits distinguent le ruissellement direct de cet apport.",
-                           puce=True)
+            doc.paragraphe(sim.commentaire_amont, puce=True)
         doc.titre2("4.2 Événement critique simule" if p.amont.actif else "4.1 Événement critique simule")
         doc.tableau(
             [

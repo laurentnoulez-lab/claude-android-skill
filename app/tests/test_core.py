@@ -723,6 +723,155 @@ class TestBassinAmont(unittest.TestCase):
             autre = simulation.volume_requis_m3(p, p.bassin, src.hauteur(t), float(t))
             self.assertLessEqual(autre, retenu * (1 + 1e-6))
 
+    def projet_butgenbach(self) -> Projet:
+        """Cas rapporte par l'utilisateur : 2 ha impermeables, 1 ha de BV amont."""
+        p = Projet(commune_ins="63013", commune_nom="Butgenbach", periode_retour=25,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="montana")
+        p.surfaces[7].aire_m2 = 20000.0
+        p.surface_reference_m2 = 25000.0
+        p.surface_infiltration_m2 = 150.0
+        p.fixer_ajutage_absolu(12.0)
+        p.amont = BassinAmont(actif=True, surface_bv_m2=10000.0, coef_ruissellement=0.9,
+                              debit_ajutage_ls=15.0, surface_dispersion_m2=0.0,
+                              k_infiltration_ms=1e-5, volume_temporisation_m3=200.0,
+                              inclure_bv_dans_ajutage=True)
+        p.bassin = Bassin(volume_total_m3=1174.5, volume_sous_ajutage_m3=25.0,
+                          surface_dispersion_m2=150.0, debit_ajutage_ls=12.0)
+        return p
+
+    def test_le_dimensionnement_tient_compte_de_l_amont(self):
+        """Le volume annonce doit suffire : sinon le rapport se contredit lui-meme.
+
+        Regression : le tableau des scenarios ignorait le bassin amont alors que
+        la verification l'integrait, si bien qu'un rapport annoncait 988 m3 puis
+        declarait un debordement de 441 m3 dans l'ouvrage de 1174 m3.
+        """
+        for scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL):
+            with self.subTest(scenario=scenario):
+                p = self.projet_butgenbach()
+                res = hydro.dimensionner(p, scenario)
+                self.assertTrue(res.amont_pris_en_compte)
+                # L'ouvrage juste dimensionne ne doit pas deborder.
+                # L'ouvrage traduit exactement les debits du scenario : un
+                # scenario sans dispersion se verifie sans fond infiltrant.
+                bassin = Bassin(
+                    volume_total_m3=res.volume_m3,
+                    volume_sous_ajutage_m3=(res.volume_sous_ajutage_m3
+                                            if scenario == SCENARIO_SEUIL else 0.0),
+                    surface_dispersion_m2=(res.surface_infiltration_m2
+                                           if res.debit_infiltration_ls > 0 else 0.0),
+                    debit_ajutage_ls=res.debit_ajutage_ls)
+                p.bassin = bassin
+                requis = simulation.volume_requis_m3(
+                    p, bassin, res.hauteur_pluie_mm, res.duree_critique_min)
+                self.assertAlmostEqual(requis, res.volume_m3, places=6)
+                sim = simulation.simuler_evenement_critique(p, bassin)
+                self.assertLessEqual(sim.volume_debordement_m3, 1e-6)
+
+    def test_sans_amont_le_dimensionnement_est_inchange(self):
+        """Le detour par l'integration exacte ne doit rien changer au cas courant."""
+        p = self.projet_butgenbach()
+        p.amont.actif = False
+        attendus = {SCENARIO_TEMPORISATION: 1002.3, SCENARIO_MIXTE: 982.4, SCENARIO_SEUIL: 988.4}
+        for scenario, attendu in attendus.items():
+            with self.subTest(scenario=scenario):
+                res = hydro.dimensionner(p, scenario)
+                self.assertFalse(res.amont_pris_en_compte)
+                self.assertAlmostEqual(res.volume_m3, attendu, places=1)
+
+    def test_les_minima_tiennent_compte_de_l_amont(self):
+        """Le temps de vidange porte sur le volume reellement a mettre en oeuvre.
+
+        Avec un bassin amont ce volume grandit, donc la surface d'infiltration
+        et l'ajutage minimaux exiges par la limite des 48 h grandissent aussi.
+        """
+        p = self.projet_butgenbach()
+        p.amont.actif = False
+        sans = hydro.dimensionner(p, SCENARIO_SEUIL)
+        p.amont.actif = True
+        avec = hydro.dimensionner(p, SCENARIO_SEUIL)
+        self.assertGreater(avec.volume_m3, sans.volume_m3)
+        self.assertGreater(avec.surface_infiltration_min_m2, sans.surface_infiltration_min_m2)
+        self.assertGreater(avec.debit_ajutage_min_ls, sans.debit_ajutage_min_ls)
+
+    def test_le_pic_allege_donne_le_meme_volume_que_la_simulation(self):
+        """Le balayage utilise une version allegee de l'integrateur : meme resultat."""
+        p = self.projet_butgenbach()
+        q_inf, q_aj = hydro.debits_scenario(p, SCENARIO_MIXTE)
+        illimite = Bassin(volume_total_m3=0.0,
+                          volume_sous_ajutage_m3=p.bassin.volume_sous_ajutage_m3,
+                          surface_dispersion_m2=p.bassin.surface_dispersion_m2,
+                          debit_ajutage_ls=p.bassin.debit_ajutage_ls)
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
+        for t in (30.0, 180.0, 755.0, 4320.0, 20000.0):
+            with self.subTest(duree=t):
+                h = src.hauteur(t)
+                apport = simulation.hydrogramme_amont(p, h, t)
+                complet = simulation.simuler(p, illimite, h, t, n_points=400,
+                                             apport=apport, debits=(q_inf, q_aj))
+                allege = simulation.pic_volume_m3(
+                    h * p.aire_ponderee_m2 / (t * 60.0), t, apport, q_inf, q_aj,
+                    p.bassin.volume_sous_ajutage_m3)
+                self.assertAlmostEqual(allege, complet.volume_max_m3, places=6)
+
+    def test_le_balayage_en_deux_passes_retrouve_le_maximum_absolu(self):
+        """Grille degrossie puis affinee contre balayage exhaustif des 17 280 durees."""
+        p = self.projet_butgenbach()
+        serie = hydro.serie_projet(p)
+        q_inf, q_aj = hydro.debits_scenario(p, SCENARIO_SEUIL)
+        v_sous = p.bassin.volume_sous_ajutage_m3
+        v2, t2, _ = hydro.volume_a_maitriser_amont(p, serie, q_inf, q_aj, v_sous)
+        durees, hauteurs = serie
+        v_ref, t_ref = 0.0, 0.0
+        for t, h in zip(durees, hauteurs):
+            apport = simulation.hydrogramme_amont(p, h, t)
+            v = simulation.pic_volume_m3(h * p.aire_ponderee_m2 / (t * 60.0), t,
+                                         apport, q_inf, q_aj, v_sous)
+            if v > v_ref:
+                v_ref, t_ref = v, t
+        self.assertAlmostEqual(v2, v_ref, places=6)
+        self.assertEqual(t2, t_ref)
+
+    def test_le_commentaire_amont_dit_ce_qui_s_est_vraiment_passe(self):
+        """Un amont qui ne stocke rien ne peut pas « continuer a se deverser ».
+
+        Regression : la phrase etait ecrite en dur, si bien qu'un rapport annoncait
+        un deversement prolonge alors que le tableau juste au-dessus affichait
+        0,000 l/s apres l'averse.
+        """
+        p = self.projet_butgenbach()
+        # Ajutage amont largement superieur a ce que son bassin versant apporte :
+        # rien ne s'accumule, le deversement s'arrete avec la pluie.
+        p.amont.debit_ajutage_ls = 500.0
+        sim = simulation.simuler_evenement_critique(p, p.bassin)
+        self.assertLessEqual(sim.duree_apport_amont_apres_pluie_min, 1.0)
+        self.assertIn("cesse de déverser", sim.commentaire_amont)
+        self.assertNotIn("continue de se déverser", sim.commentaire_amont)
+
+        # Ajutage amont etrangle : le bassin amont se vide longtemps apres l'averse.
+        p.amont.debit_ajutage_ls = 1.0
+        p.amont.volume_temporisation_m3 = 1e6
+        sim = simulation.simuler_evenement_critique(p, p.bassin)
+        self.assertGreater(sim.duree_apport_amont_apres_pluie_min, 60.0)
+        self.assertIn("continue de se déverser", sim.commentaire_amont)
+        self.assertGreater(sim.q_amont_apres_pluie_ls, 0.0)
+
+    def test_la_courbe_du_graphique_atteint_le_volume_de_dimensionnement(self):
+        """La courbe annotee doit passer par le volume qu'elle annonce.
+
+        Regression : le graphique gardait la formule fermee alors que le tableau
+        integrait l'apport amont, si bien que le repere « volume de
+        dimensionnement » flottait bien au-dessus de la courbe tracee.
+        """
+        for scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL):
+            with self.subTest(scenario=scenario):
+                p = self.projet_butgenbach()
+                res = hydro.dimensionner(p, scenario)
+                sommet = max(v for _, v in hydro.courbe_volume(p, scenario))
+                # La grille logarithmique ne tombe pas pile sur la duree critique.
+                self.assertLessEqual(sommet, res.volume_m3 + 1e-6)
+                self.assertGreater(sommet, res.volume_m3 * 0.999)
+
     def test_le_volume_minimal_amont_evite_le_debordement(self):
         p = self.projet_avec_amont()
         p.amont.volume_temporisation_m3 = hydro.volume_amont_minimal_m3(p)
