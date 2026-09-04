@@ -298,6 +298,29 @@ vidange est dépassé, l'application signale que la surface d'infiltration doit 
 augmentée — sauf si celle-ci atteint déjà 10 % de la surface de référence, cas que le GTI
 admet comme maximum raisonnable.
 
+### Vérification par un modèle indépendant
+
+Le moteur intègre chaque événement par bonds exacts d'un seuil au suivant : c'est rapide
+et sans erreur de discrétisation, mais toute la justesse tient au raisonnement. Trois
+défauts de la même famille s'y sont succédé — une formule fermée restée valable pour le
+cas simple et devenue fausse dès qu'un ajutage surélevé ou un bassin amont changeait ses
+hypothèses.
+
+`app/tests/test_reference.py` lui oppose donc un **modèle naïf écrit à partir de la
+physique seule** : de tout petits pas de temps, aucune formule fermée, aucun code partagé
+avec l'application. Il est bien trop lent pour l'usage courant, mais il ne peut pas se
+tromper de la même façon. Sont confrontés le volume à mettre en œuvre, le temps de
+vidange, le volume stocké maximal, le volume débordé, et **la courbe entière** volume =
+f(durée) — pas seulement sa pointe, car c'est hors de la pointe que se logeait le
+« ressaut ».
+
+Les trois défauts historiques, réintroduits un par un, sont bien rattrapés par cette
+confrontation. La campagne aléatoire (`HYDROBASSIN_CAMPAGNE_REFERENCE=120`) couvre les
+deux sources de pluie, sept communes, quatre périodes de retour, avec et sans ajutage
+surélevé, avec et sans bassin amont : l'écart maximal relevé est de 0,04 % sur les volumes
+et 0,4 % sur les temps de vidange, et il décroît quand on affine le pas du modèle naïf —
+c'est donc sa discrétisation, pas une divergence.
+
 ## 6. Valeurs minimales
 
 * **Surface d'infiltration minimale** : plus petite surface telle que `t_vidange ≤ t_max`

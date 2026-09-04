@@ -48,6 +48,14 @@ le tableau des scénarios ne puisse pas contredire la vérification de l'ouvrage
 surélevé (tant que le niveau n'atteint pas son axe, seule la dispersion évacue) et le
 **bassin d'orage amont**, dont l'apport varie dans le temps et se poursuit après l'averse.
 
+### Vérification
+
+Le moteur est confronté à un **modèle de référence indépendant** (`app/tests/test_reference.py`) :
+une simulation naïve à très petits pas, écrite à partir de la physique seule, sans aucun
+code partagé avec l'application. Volume à mettre en œuvre, temps de vidange, volume
+stocké, débordement et courbe entière y sont comparés. La campagne aléatoire s'active par
+`HYDROBASSIN_CAMPAGNE_REFERENCE=120`.
+
 ## Utilisation en développement
 
 ```bash
