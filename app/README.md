@@ -1,0 +1,153 @@
+# HydroBassin — dimensionnement de bassins d'orage
+
+Application de dimensionnement et de vérification de bassins d'orage par la **méthode
+rationnelle**, à partir des **pluies statistiques du GTI** (Guide Technique d'Infiltration,
+Région wallonne) embarquées dans l'application.
+
+Livrables : **APK Android** et **installateur Windows**, à partir d'un code unique
+(Python + [Flet](https://flet.dev)).
+
+![Icône](src/assets/icon.png)
+
+## Ce que fait l'application
+
+| Onglet | Contenu |
+|---|---|
+| **Projet** | Commune (574 communes, dont les 262 communes wallonnes), période de retour (2 → 200 ans), surfaces incidentes et coefficients de ruissellement du GTI |
+| **Dimensionnement** | Vitesse d'infiltration K (en **m/s**, équivalent mm/h complété tout seul), débit d'ajutage (en **l/s** ou **l/(s·ha)**, au choix), volume sous l'ajutage pour le scénario à orifice surélevé, temps de vidange maximum ; comparaison des **4 scénarios** ; volume, durée critique, surface d'infiltration minimale, débit d'ajutage minimal |
+| **Bassin** | Encodage de l'ouvrage (volume tampon, volume sous l'ajutage, surface de dispersion, débit d'ajutage), **bassin d'orage amont** éventuel, et **simulation** d'une ou plusieurs durées de pluie à la fois |
+| **Table QDF** | Tableau récurrences × durées : quelles pluies l'ouvrage encaisse sans déborder |
+| **Ajutage** | Dimensionnement de l'orifice (Torricelli), abaque des diamètres commerciaux |
+| **Pluies GTI** | Tables QDF en mm et en l/s/ha, coefficients de Montana, courbes IDF |
+| **Rapport** | Génération du dossier en **Excel (avec formules vivantes)**, **Word** et **PDF** |
+
+### Les quatre scénarios étudiés
+
+1. **Temporisation seule** (sans dispersion) — seul l'orifice calibré évacue.
+2. **Dispersion seule** (sans exutoire ajuté) — toute l'eau s'infiltre.
+3. **Temporisation et dispersion** — infiltration par le fond **+** orifice calibré.
+4. **Dispersion seule avec temporisation au-delà d'un seuil** — orifice surélevé : sous
+   l'axe de l'orifice, seule l'infiltration évacue ; au-dessus, l'ajutage s'y ajoute.
+
+## Méthode de calcul
+
+Voir [docs/methode.md](docs/methode.md) pour le détail (formules, hypothèses, règles du GTI).
+En résumé, pour chaque durée de pluie *t* :
+
+```
+V_ruisselé(t) = h(t) [mm] × S_pondérée [m²] / 1000            [m³]
+V_évacué(t)   = Q_sortie [l/s] × t [min] × 60 / 1000          [m³]
+V_à_maîtriser = max( V_ruisselé(t) − V_évacué(t) , 0 )        [m³]
+```
+
+Le volume de dimensionnement est le maximum sur l'ensemble des durées (10 min → 60 jours,
+pas de 5 min), ce qui donne la **durée de pluie critique**.
+
+Deux cas sortent de cette formule fermée et sont traités par intégration exacte, pour que
+le tableau des scénarios ne puisse pas contredire la vérification de l'ouvrage : l'ajutage
+surélevé (tant que le niveau n'atteint pas son axe, seule la dispersion évacue) et le
+**bassin d'orage amont**, dont l'apport varie dans le temps et se poursuit après l'averse.
+
+### Vérification
+
+Le moteur est confronté à un **modèle de référence indépendant** (`app/tests/test_reference.py`) :
+une simulation naïve à très petits pas, écrite à partir de la physique seule, sans aucun
+code partagé avec l'application. Volume à mettre en œuvre, temps de vidange, volume
+stocké, débordement et courbe entière y sont comparés. La campagne aléatoire s'active par
+`HYDROBASSIN_CAMPAGNE_REFERENCE=120`.
+
+## Utilisation en développement
+
+```bash
+pip install -r requirements.txt
+python src/main.py            # application de bureau
+flet run --web src/main.py    # dans le navigateur
+python -m unittest discover -s tests -v
+python tools/exemple.py --sortie ../rapports_demo   # dossier de démonstration
+```
+
+## Construction des livrables
+
+Les binaires sont produits par GitHub Actions (`Actions` → workflow → *Run workflow*) :
+
+| Workflow | Livrable |
+|---|---|
+| `Build APK Android` | `HydroBassin-1.0.0.apk` |
+| `Build Windows` | `HydroBassin-Setup-1.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
+| `Captures d'interface` | copies d'écran de chaque onglet en formats téléphone, tablette et bureau (branche `ui-captures`) |
+
+En local (Flutter 3.29.x requis, installé automatiquement par flet si absent) :
+
+```bash
+pip install "flet[all]==0.28.3"
+flet build apk        # Android
+flet build windows    # Windows (à lancer sur Windows, Visual Studio 2022 requis)
+
+# puis l'installeur (Inno Setup 6) :
+iscc /DSourceDir=..\..\build\windows /DExeName=HydroBassin.exe /DMaVersion=1.0.0 \
+     /DOutputDir=..\..\..\livrables packaging\windows\hydrobassin.iss
+```
+
+## Organisation du code
+
+```
+app/
+├── src/
+│   ├── main.py                  point d'entrée Flet (navigation, thème, persistance)
+│   ├── assets/                  icône et écran de démarrage
+│   └── bassin/
+│       ├── core/
+│       │   ├── rainfall.py      pluies GTI : Montana + tables QDF, 574 communes
+│       │   ├── model.py         projet, surfaces, bassin, constantes du GTI
+│       │   ├── hydro.py         méthode rationnelle, scénarios, minima (dichotomie)
+│       │   ├── simulation.py    remplissage / vidange, table QDF d'acceptation
+│       │   └── orifice.py       Torricelli, abaque des diamètres
+│       ├── data/gti_rainfall.json.gz   données extraites du classeur GTI (193 Ko)
+│       ├── reports/
+│       │   ├── dossier.py       assemblage du dossier de calcul
+│       │   ├── charts.py        graphiques + rasteriseur PNG en Python pur
+│       │   ├── xlsx_report.py   classeur Excel avec formules vivantes
+│       │   ├── docx_writer.py   générateur DOCX (OOXML) sans dépendance native
+│       │   ├── docx_report.py   rapport Word
+│       │   ├── pdf_writer.py    générateur PDF sans dépendance native
+│       │   └── pdf_report.py    rapport PDF (graphiques vectoriels)
+│       ├── formats.py           virgule décimale, partagée écran et rapports
+│       └── ui/                  thème, état, graphiques Flet et 7 vues
+├── tests/                       153 tests unitaires, dont la conformité au GTI
+└── tools/                       génération de l'icône et du dossier de démonstration
+```
+
+## Navigation
+
+Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+7** pour passer
+directement à une section.
+
+## Saisie
+
+* Les nombres s'affichent à la française (**virgule décimale**), à l'écran comme dans les
+  rapports Word et PDF. Le classeur Excel garde des cellules numériques, mises en forme
+  par Excel selon la langue du poste.
+* La saisie accepte indifféremment `1e-5`, `0,00001` ou `0.00001`. Une valeur fautive
+  n'est signalée qu'une fois le champ quitté : taper `1e-5` passe par `1e`, qui n'est pas
+  un nombre sans que l'utilisateur ait commis d'erreur.
+* Les champs couplés se complètent dans les deux sens. Pour K (m/s ↔ mm/h) les deux
+  cases expriment la même grandeur. Pour l'ajutage, l'unité de saisie décide : encodé
+  en **l/(s·ha)** le débit en l/s se calcule seul sur la surface incidente totale
+  (bassin versant amont compris s'il est coché) ; encodé en **l/s** il est fixé en
+  valeur absolue et la case l/(s·ha) n'affiche qu'un équivalent.
+* La conversion reste désactivée tant qu'aucune surface n'est encodée.
+
+Aucune dépendance native n'est utilisée (ni matplotlib, ni Pillow, ni lxml, ni reportlab) :
+les graphiques, le DOCX et le PDF sont produits en Python pur, ce qui garantit le
+fonctionnement identique sur Windows et sur Android.
+
+## Données
+
+Les pluies proviennent du classeur GTI fourni (feuilles `Montana`, `QDF` et `Listes`) :
+
+* **Montana** — 563 communes belges × 12 périodes de retour × 3 jeux de coefficients
+  (`i [mm/h] = a × t[min]^(−b)`, plages `t < 25 min`, `25 → 6000 min`, `t > 6000 min`) ;
+* **QDF** — 262 communes wallonnes × 19 durées normalisées (10 min → 30 jours) × 12 périodes
+  de retour ;
+* 11 communes wallonnes sans coefficients de Montana basculent automatiquement sur les
+  tables QDF (interpolation logarithmique).

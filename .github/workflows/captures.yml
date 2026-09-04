@@ -1,0 +1,68 @@
+name: Captures d'interface
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths:
+      - "app/src/bassin/ui/**"
+      - "app/src/main.py"
+      - "app/tools/captures_ui.py"
+      - ".github/workflows/captures.yml"
+
+concurrency:
+  group: captures-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  captures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.2"
+          channel: stable
+          cache: true
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]==0.28.3" playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Construire la version web
+        working-directory: app
+        env:
+          FLET_CLI_NO_RICH_OUTPUT: "1"
+        run: flet build web --project HydroBassin --product HydroBassin --base-url / --verbose
+
+      - name: Capturer les écrans
+        working-directory: app
+        run: python tools/captures_ui.py --racine build/web --sortie ../captures
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: captures-interface
+          path: captures/
+          if-no-files-found: error
+
+      - name: Publier les captures sur la branche ui-captures
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ui-captures
+          git rm -rf --cached . > /dev/null
+          find . -maxdepth 1 ! -name captures ! -name .git ! -name . -exec rm -rf {} +
+          echo "Captures d'interface générées le $(date -u +%FT%TZ) depuis ${GITHUB_SHA}." > README.md
+          git add captures README.md
+          git commit -m "Captures d'interface (${GITHUB_SHA::7})"
+          git push --force origin ui-captures

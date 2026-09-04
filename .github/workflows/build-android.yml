@@ -1,0 +1,78 @@
+name: Build APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    branches: ["claude/**"]
+    paths:
+      - "app/**"
+      - ".github/workflows/build-*.yml"
+
+env:
+  FLET_CLI_NO_RICH_OUTPUT: "1"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.2"
+          channel: stable
+          cache: true
+
+      - name: Installer flet
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]==0.28.3"
+
+      - name: flutter doctor
+        run: flutter doctor -v
+
+      - name: Construire l'APK
+        working-directory: app
+        run: |
+          flet build apk \
+            --project HydroBassin \
+            --product HydroBassin \
+            --org be.hydrobassin \
+            --company HydroBassin \
+            --copyright "HydroBassin" \
+            --build-version 1.0.0 \
+            --build-number ${{ github.run_number }} \
+            --verbose
+
+      - name: Renommer l'APK
+        working-directory: app
+        run: |
+          mkdir -p ../livrables
+          find build -name "*.apk" -exec cp {} ../livrables/HydroBassin-1.0.0.apk \;
+          ls -la ../livrables
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HydroBassin-apk
+          path: livrables/*.apk
+          if-no-files-found: error
+
+      - name: Publier dans la release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: livrables/*.apk
