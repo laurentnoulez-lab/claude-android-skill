@@ -325,7 +325,8 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     res.intensite_mmh = h * 60.0 / t if t else 0.0
     res.intensite_ls_ha = res.intensite_mmh * 10000.0 / 3600.0
     res.debit_entrant_ls = h * s_pond / (t * 60.0) if t else 0.0
-    res.temps_vidange_h = temps_vidange_h(v, q_inf, q_aj, v_sous if scenario == SCENARIO_SEUIL else 0.0)
+    res.temps_vidange_h = temps_vidange_apres_pluie_h(
+        projet, v, t, h, q_inf, q_aj, v_sous if scenario == SCENARIO_SEUIL else 0.0)
 
     _controles(projet, res, scenario)
     if avec_minima:
@@ -373,6 +374,28 @@ def dimensionner_amont(projet: Projet) -> Resultat:
 def volume_amont_minimal_m3(projet: Projet) -> float:
     """Volume de temporisation minimal du bassin amont pour éviter tout débordement."""
     return dimensionner_amont(projet).volume_m3
+
+
+def temps_vidange_apres_pluie_h(projet: Projet, volume_m3: float, duree_min: float,
+                                hauteur_mm: float, debit_infiltration: float,
+                                debit_ajutage: float, volume_sous_ajutage_m3: float) -> float:
+    """Temps de vidange après la fin de l'averse [h].
+
+    Sans bassin amont, l'ouvrage est livré à lui-même dès la fin de la pluie et
+    la formule fermée suffit. Avec un bassin amont, l'apport se poursuit — il
+    peut même dépasser ce que le fond infiltre, et le niveau se maintient alors
+    sur l'axe de l'ajutage au lieu de descendre : il faut intégrer.
+    """
+    if not projet.amont.actif or duree_min <= 0:
+        return temps_vidange_h(volume_m3, debit_infiltration, debit_ajutage,
+                               volume_sous_ajutage_m3)
+    from . import simulation
+
+    apport = simulation.hydrogramme_amont(projet, hauteur_mm, duree_min)
+    q_direct = hauteur_mm * projet.aire_ponderee_m2 / (duree_min * 60.0)
+    _, vidange = simulation.pic_et_vidange(q_direct, duree_min, apport, debit_infiltration,
+                                           debit_ajutage, volume_sous_ajutage_m3)
+    return vidange / 60.0 if vidange != float("inf") else float("inf")
 
 
 def temps_vidange_h(volume_m3: float, q_infiltration_ls: float, q_ajutage_ls: float,
@@ -465,8 +488,8 @@ def _temps_vidange_pour(projet: Projet, scenario: str, s_inf: float, q_aj: float
         serie = serie_projet(projet)
     q_inf = debit_infiltration_ls(s_inf, projet.k_infiltration_ms, projet.coef_securite_infiltration)
     v_sous = projet.bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
-    v, _, _ = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
-    return temps_vidange_h(v, q_inf, q_aj, v_sous)
+    v, t, h = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
+    return temps_vidange_apres_pluie_h(projet, v, t, h, q_inf, q_aj, v_sous)
 
 
 def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: float = 0.01) -> Optional[float]:

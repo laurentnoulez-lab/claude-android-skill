@@ -261,6 +261,38 @@ Ce calcul est vérifié par des tests qui comparent la valeur annoncée au temps
 réellement mesuré en simulation, entre la fin de la pluie et le bassin vide,
 pour les quatre scénarios (écart inférieur à 0,1 %).
 
+### Avec un bassin d'orage amont, la formule fermée ne suffit plus
+
+Cette formule suppose l'ouvrage **livré à lui-même** dès la fin de l'averse. Un bassin
+d'orage amont continue de le remplir bien après, et la vidange s'en trouve allongée de
+deux façons :
+
+* tant que l'amont déverse, le débit net de vidange n'est plus `Q_inf + Q_aj` mais
+  `Q_inf + Q_aj − Q_amont` ;
+* si l'amont restitue **plus que ce que le fond infiltre** (`Q_amont > Q_inf`), le niveau
+  ne peut pas descendre sous l'axe de l'ajutage : il s'y maintient jusqu'à la fin du
+  déversement amont, l'orifice ne laissant partir que le surplus.
+
+Le temps de vidange est donc obtenu par intégration exacte sur les paliers de l'apport.
+Sur chaque palier les débits sont constants, si bien que la formule fermée reste valable
+en y remplaçant l'infiltration par l'infiltration **nette de l'apport** — l'instant de
+retour à vide reste exact, sans dépendre d'un pas de calcul.
+
+Exemple mesuré (Evere, T = 50 ans, 2,5 ha à 0,9 ; ouvrage de 1 000 m³ dont 100 m³ sous
+l'axe, `Q_inf` = 3,333 l/s, `Q_aj` = 17,5 l/s ; amont de 1 ha à 0,9 restituant 5,000 l/s) :
+
+| étape | durée |
+|---|---|
+| 982,4 → 100 m³ à `20,833 − 5 = 15,833` l/s | 928,8 min |
+| niveau bloqué sur l'axe jusqu'à la fin du déversement amont | 428,9 min |
+| 100 m³ → 0 par la seule infiltration (3,333 l/s) | 500,0 min |
+| **total après la pluie** | **1 857,7 min = 30,96 h = 1,29 j** |
+
+La formule fermée répondait 20,1 h sur ce même cas. La règle vaut pour le tableau des
+scénarios, la vérification de l'ouvrage, les minima de la limite des 48 h et **chaque
+cellule de la table QDF** — 132 des 228 cellules de l'exemple étaient sous-estimées, de
+18 h au pire.
+
 Le GTI impose **48 h** au maximum (valeur modifiable dans l'application). Si le temps de
 vidange est dépassé, l'application signale que la surface d'infiltration doit être
 augmentée — sauf si celle-ci atteint déjà 10 % de la surface de référence, cas que le GTI

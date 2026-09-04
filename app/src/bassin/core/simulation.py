@@ -394,6 +394,47 @@ def pic_volume_m3(q_direct_ls: float, duree_pluie_min: float, apport: Apport,
     return v_max
 
 
+def pic_et_vidange(q_direct_ls: float, duree_pluie_min: float, apport: Apport,
+                   q_inf_ls: float, q_aj_ls: float, v_sous_m3: float,
+                   v_cap_m3: float = 0.0) -> Tuple[float, float]:
+    """Volume maximal [m³] et temps de vidange après l'averse [min].
+
+    Le temps de vidange se mesure de la fin de l'averse au retour à vide. Un
+    bassin d'orage amont continue d'alimenter l'ouvrage bien après la pluie :
+    tant que ce qu'il restitue dépasse ce que le fond infiltre, le niveau ne
+    peut pas descendre sous l'axe de l'ajutage et s'y maintient. La formule
+    fermée, qui suppose le bassin livré à lui-même, sous-estime alors
+    lourdement la vidange.
+
+    Sur chaque palier d'apport les débits sont constants, donc la formule
+    fermée s'applique en remplaçant l'infiltration par l'infiltration nette de
+    l'apport : l'instant de retour à vide reste exact.
+    """
+    bornes = {0.0, max(duree_pluie_min, 0.0)}
+    bornes.update(b for b in apport.bornes() if b >= 0.0)
+    instants = sorted(bornes)
+    v = 0.0
+    v_max = 0.0
+    t_vide: Optional[float] = None
+    for t0, t1 in zip(instants, instants[1:]):
+        if t1 - t0 <= 1e-12:
+            continue
+        q_in = apport.debit_ls(t0)
+        if t0 < duree_pluie_min - 1e-9:
+            q_in += q_direct_ls
+        if t_vide is None and t0 >= duree_pluie_min - 1e-9:
+            delai = temps_vidange_h(v, q_inf_ls - q_in, q_aj_ls, v_sous_m3) * 60.0
+            if delai <= t1 - t0 + 1e-9:
+                t_vide = t0 + delai
+        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, v_cap_m3)
+        if v_pic > v_max:
+            v_max = v_pic
+    if t_vide is None:
+        # Plus rien n'arrive : le bassin se vide à ses seuls débits de fuite.
+        t_vide = instants[-1] + temps_vidange_h(v, q_inf_ls, q_aj_ls, v_sous_m3) * 60.0
+    return v_max, max(t_vide - duree_pluie_min, 0.0)
+
+
 def simuler_evenement_critique(projet: Projet, bassin: Bassin,
                                n_points: int = 400) -> ResultatSimulation:
     """Simule la pluie la plus défavorable pour cet ouvrage, apport amont compris.
@@ -518,8 +559,12 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     res.t_volume_max_min = t_vmax
     res.volume_debordement_m3 = v_debord
     res.t_debordement_min = t_debord
-    res.temps_vidange_h = temps_vidange_h(v_max, q_inf, q_aj, v_sous)
-    res.temps_retour_a_vide_min = (t_vide - duree_pluie_min) if t_vide else res.temps_vidange_h * 60.0
+    # Le temps de vidange s'obtient par intégration exacte, pas par la formule
+    # fermée : un apport amont qui se poursuit après l'averse retarde le retour
+    # à vide, et la grille d'échantillonnage ne donnerait qu'un instant arrondi.
+    _, vidange_min = pic_et_vidange(q_in, duree_pluie_min, apport, q_inf, q_aj, v_sous, v_cap)
+    res.temps_vidange_h = vidange_min / 60.0 if vidange_min != float("inf") else float("inf")
+    res.temps_retour_a_vide_min = vidange_min
     return res
 
 
@@ -573,6 +618,18 @@ class TableAcceptation:
         return [self.durees_min[i] for i in range(len(self.durees_min)) if not self.cellules[i][j].accepte]
 
 
+def _vidange_cellule(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_min: float,
+                     q_inf: float, q_aj: float, volume_stocke_m3: float) -> float:
+    """Temps de vidange d'une cellule de la table, apport amont compris."""
+    if not projet.amont.actif:
+        return temps_vidange_h(volume_stocke_m3, q_inf, q_aj, bassin.volume_sous_ajutage_m3)
+    apport = hydrogramme_amont(projet, hauteur_mm, duree_min)
+    q_direct = hauteur_mm * projet.aire_ponderee_m2 / (duree_min * 60.0) if duree_min > 0 else 0.0
+    _, vidange = pic_et_vidange(q_direct, duree_min, apport, q_inf, q_aj,
+                                bassin.volume_sous_ajutage_m3, bassin.volume_total_m3)
+    return vidange / 60.0 if vidange != float("inf") else float("inf")
+
+
 def table_acceptation(projet: Projet, bassin: Bassin,
                       durees: Optional[Tuple[float, ...]] = None) -> TableAcceptation:
     """Construit la table QDF : quelles pluies le bassin encaisse sans déborder."""
@@ -594,7 +651,7 @@ def table_acceptation(projet: Projet, bassin: Bassin,
                     hauteur_mm=h,
                     volume_requis_m3=v,
                     capacite_m3=bassin.volume_total_m3,
-                    temps_vidange_h=temps_vidange_h(v_stocke, q_inf, q_aj, bassin.volume_sous_ajutage_m3),
+                    temps_vidange_h=_vidange_cellule(projet, bassin, h, d, q_inf, q_aj, v_stocke),
                 )
             )
         lignes.append(ligne)

@@ -3,6 +3,7 @@
 import math
 import os
 import sys
+import copy
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
@@ -871,6 +872,119 @@ class TestBassinAmont(unittest.TestCase):
                 # La grille logarithmique ne tombe pas pile sur la duree critique.
                 self.assertLessEqual(sommet, res.volume_m3 + 1e-6)
                 self.assertGreater(sommet, res.volume_m3 * 0.999)
+
+    def projet_evere(self) -> Projet:
+        """Cas rapporte : 2,5 ha a 0,9, ajutage amont de 5 l/s qui coule longtemps."""
+        p = Projet(commune_ins="21006", commune_nom="Evere", periode_retour=50,
+                   surfaces=Projet.surfaces_par_defaut(), source_pluie="montana")
+        p.surfaces[6].aire_m2 = 25000.0        # allees pavees, coefficient 0,90
+        p.surface_reference_m2 = 50000.0
+        p.k_infiltration_ms = 5e-6
+        p.coef_securite_infiltration = 1.5
+        p.surface_infiltration_m2 = 1000.0
+        p.amont = BassinAmont(actif=True, surface_bv_m2=10000.0, coef_ruissellement=0.9,
+                              debit_ajutage_ls=5.0, surface_dispersion_m2=0.0,
+                              k_infiltration_ms=1e-5, volume_temporisation_m3=409.1,
+                              inclure_bv_dans_ajutage=True)
+        p.fixer_ajutage_absolu(17.5)
+        p.bassin = Bassin(volume_total_m3=1000.0, volume_sous_ajutage_m3=100.0,
+                          surface_dispersion_m2=1000.0, debit_ajutage_ls=17.5)
+        return p
+
+    def test_la_vidange_tient_compte_de_l_apport_amont(self):
+        """Ce qui arrive encore freine la vidange — la formule fermee l'ignorait.
+
+        Regression : l'application annoncait 20,1 h la ou l'ouvrage met 31,0 h a
+        revenir a vide, parce que le temps de vidange etait calcule comme si le
+        bassin etait livre a lui-meme des la fin de l'averse.
+
+        Verification a la main sur ce cas : 882,4 m3 a evacuer au-dessus de l'axe
+        a 20,833 - 5 = 15,833 l/s, puis le niveau reste bloque sur l'axe jusqu'a
+        la fin du deversement amont, puis 100 m3 a la seule infiltration.
+        """
+        p = self.projet_evere()
+        sim = simulation.simuler_evenement_critique(p, p.bassin)
+        q_inf, q_aj, q_amont = sim.q_infiltration_ls, sim.q_ajutage_ls, 5.0
+        v_sous = p.bassin.volume_sous_ajutage_m3
+        haut = (sim.volume_max_m3 - v_sous) / ((q_inf + q_aj - q_amont) * 60.0 / 1000.0)
+        bloque = (sim.t_fin_apport_amont_min - sim.duree_pluie_min) - haut
+        bas = v_sous / (q_inf * 60.0 / 1000.0)
+        attendu = (haut + bloque + bas) / 60.0
+        self.assertAlmostEqual(sim.temps_vidange_h, attendu, places=2)
+        self.assertGreater(sim.temps_vidange_h, 30.0)
+        # La formule fermee, elle, repondrait bien plus court.
+        fermee = hydro.temps_vidange_h(sim.volume_max_m3, q_inf, q_aj, v_sous)
+        self.assertLess(fermee, sim.temps_vidange_h - 10.0)
+
+    def test_le_dimensionnement_et_la_simulation_annoncent_la_meme_vidange(self):
+        """Le tableau des scenarios et la verification ne peuvent pas diverger."""
+        p = self.projet_evere()
+        res = hydro.dimensionner(p, SCENARIO_SEUIL)
+        sim = simulation.simuler_evenement_critique(p, p.bassin)
+        self.assertAlmostEqual(res.temps_vidange_h, sim.temps_vidange_h, places=6)
+        self.assertAlmostEqual(sim.temps_retour_a_vide_min / 60.0, sim.temps_vidange_h, places=9)
+
+    def test_le_niveau_ne_descend_pas_sous_l_axe_tant_que_l_amont_deverse(self):
+        """Invariant physique : l'apport amont depasse ici ce que le fond infiltre."""
+        p = self.projet_evere()
+        sim = simulation.simuler_evenement_critique(p, p.bassin)
+        self.assertGreater(sim.q_amont_apres_pluie_ls, sim.q_infiltration_ls)
+        v_sous = p.bassin.volume_sous_ajutage_m3
+        for pas in sim.pas:
+            if sim.duree_pluie_min < pas.t_min < sim.t_fin_apport_amont_min:
+                self.assertGreaterEqual(pas.volume_m3, v_sous - 1e-6)
+        # Donc la vidange dure au moins le deversement restant plus le volume mort.
+        mini = ((sim.t_fin_apport_amont_min - sim.duree_pluie_min)
+                + v_sous / (sim.q_infiltration_ls * 60.0 / 1000.0)) / 60.0
+        self.assertGreaterEqual(sim.temps_vidange_h, mini - 1e-6)
+
+    def test_sans_amont_la_vidange_reste_celle_de_la_formule_fermee(self):
+        """L'integration exacte ne doit rien changer au cas courant."""
+        p = self.projet_evere()
+        p.amont.actif = False
+        for scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL):
+            with self.subTest(scenario=scenario):
+                res = hydro.dimensionner(p, scenario, avec_minima=False)
+                v_sous = res.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
+                fermee = hydro.temps_vidange_h(res.volume_m3, res.debit_infiltration_ls,
+                                               res.debit_ajutage_ls, v_sous)
+                self.assertEqual(res.temps_vidange_h, fermee)
+
+    def test_la_table_qdf_annonce_la_vidange_de_la_simulation(self):
+        """Chaque cellule doit dire ce que dirait une simulation de la meme averse.
+
+        Regression : les cellules gardaient la formule fermee, donc annoncaient
+        une vidange bien plus courte que la realite des que l'amont deversait
+        encore. Le lecteur juge son ouvrage sur cette table.
+        """
+        p = self.projet_evere()
+        table = simulation.table_acceptation(p, p.bassin)
+        controles = 0
+        for i, duree in enumerate(table.durees_min):
+            for j, rp in enumerate(table.periodes_retour):
+                cellule = table.cellules[i][j]
+                if not cellule.accepte or cellule.temps_vidange_h == float("inf"):
+                    continue
+                projet_rp = copy.deepcopy(p)
+                projet_rp.periode_retour = rp
+                apport = simulation.hydrogramme_amont(projet_rp, cellule.hauteur_mm, duree)
+                sim = simulation.simuler(projet_rp, p.bassin, cellule.hauteur_mm, duree,
+                                         apport=apport)
+                self.assertAlmostEqual(cellule.temps_vidange_h, sim.temps_vidange_h, places=6,
+                                       msg=f"{duree} min, T={rp} ans")
+                controles += 1
+        self.assertGreater(controles, 100)
+
+    def test_les_minima_suivent_la_vidange_allongee(self):
+        """La limite des 48 h porte sur la vidange reelle, apport amont compris."""
+        p = self.projet_evere()
+        p.amont.actif = False
+        sans = hydro.dimensionner(p, SCENARIO_SEUIL)
+        p.amont.actif = True
+        avec = hydro.dimensionner(p, SCENARIO_SEUIL)
+        self.assertGreater(avec.temps_vidange_h, sans.temps_vidange_h)
+        self.assertGreater(avec.surface_infiltration_min_m2, sans.surface_infiltration_min_m2)
+        self.assertGreater(avec.debit_ajutage_min_ls, sans.debit_ajutage_min_ls)
 
     def test_le_volume_minimal_amont_evite_le_debordement(self):
         p = self.projet_avec_amont()
