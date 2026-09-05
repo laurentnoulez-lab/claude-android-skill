@@ -149,6 +149,8 @@ footer li{margin-bottom:4px}
     <div class="champ"><label for="B_dig" title="Grande base du remblai : largeur de l'emprise au niveau du terrain naturel, du pied amont au pied aval.">Largeur en base de la digue (grande base)</label><input id="B_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="b_crete" title="Petite base du remblai : largeur de la crête. Doit être inférieure à la grande base.">Largeur en crête (petite base)</label><input id="b_crete" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="Z_crete" title="Cote de la crête de la digue. La hauteur du remblai et les fruits de talus en sont déduits et affichés sur la coupe. Doit être supérieure au niveau d'eau dans la ZIT.">Cote de crête</label><input id="Z_crete" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="drain" title="Exutoire de la percolation à travers le remblai. « Drain de pied » : tapis ou éperon drainant au pied aval, la ligne de saturation rejoint la base — configuration recommandée, qui écarte le suintement du talus. « Aucun » : la ligne de saturation ressort sur le talus aval en une surface de suintement, dont la longueur est calculée et reportée sur la coupe.">Drainage du pied aval</label><select id="drain"><option value="aucun">Aucun — suintement sur le talus</option><option value="pied">Drain de pied</option></select><span class="u"></span></div>
+    <div class="champ" data-drain="pied"><label for="L_drain" title="Longueur du tapis drainant, mesurée depuis le pied aval vers l'amont. C'est son extrémité amont qui constitue le foyer de la parabole de Kozeny : allonger le drain raccourcit le cheminement et augmente le débit percolé, tout en abaissant la ligne de saturation dans le remblai.">Longueur du tapis drainant</label><input id="L_drain" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="K_digue" title="Conductivité hydraulique du corps de remblai. La valeur 0 correspond à un corps parfaitement imperméabilisé : aucun écoulement à travers la digue. Une valeur non nulle ajoute un débit de percolation à travers le remblai, calculé par la formule de Dupuit pour un barrage en terre, et trace la ligne de saturation sur la coupe.">K du corps de digue</label><input id="K_digue" type="text" inputmode="decimal"><span class="u">m/s</span></div>
     <div class="champ"><label for="L_dig" title="Longueur développée de la digue, utilisée pour passer du débit unitaire au débit total.">Longueur de la digue</label><input id="L_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="x_ecr" title="Distance horizontale entre le pied amont de la digue et l'axe de l'écran. Détermine L_amont et L_aval.">Position de l'écran depuis le pied amont</label><input id="x_ecr" type="text" inputmode="decimal"><span class="u">m</span></div>
@@ -276,7 +278,9 @@ footer li{margin-bottom:4px}
     <li><strong>Pas de réfraction des lignes de courant</strong> aux interfaces entre couches de conductivités différentes. La loi des tangentes (tan&nbsp;θ<sub>1</sub>&nbsp;/&nbsp;tan&nbsp;θ<sub>2</sub>&nbsp;=&nbsp;K<sub>1</sub>&nbsp;/&nbsp;K<sub>2</sub>) suppose une composante verticale d'écoulement, que l'approximation de Dupuit exclut par construction&nbsp;: la charge y est uniforme sur la verticale et les couches fonctionnent en parallèle, chacune transportant un débit proportionnel à sa transmissivité. Cet effet, réel au voisinage du pied de l'écran où l'écoulement traverse effectivement les interfaces en oblique, n'est ni calculé ni représenté&nbsp;; seule une modélisation 2D le restitue.</li>
     <li><strong>Milieu supposé isotrope au sein de chaque couche</strong> (K<sub>h</sub> = K<sub>v</sub>). L'anisotropie réelle des alluvions, souvent d'un facteur 3 à 10 en faveur de l'horizontale, n'est pas prise en compte&nbsp;: elle tendrait à augmenter le débit contourné et à réduire l'efficacité de l'écran.</li>
     <li><strong>Milieu entièrement saturé</strong>&nbsp;: ni la zone non saturée, ni la succion capillaire, ni le stockage dans la porosité efficace ne sont modélisés.</li>
-    <li><strong>Percolation à travers le corps de remblai</strong> traitée par la formule de Dupuit pour un barrage en terre sur base imperméable, <code>q = K (h₁² − h₂²) / (2L)</code>. Cette formule ignore la surface de suintement au talus aval et suppose le remblai homogène et isotrope, sans noyau ni drain&nbsp;: elle donne un ordre de grandeur, non un dimensionnement de remblai. La ligne de saturation tracée est la parabole de Dupuit correspondante. Ce chemin <strong>court-circuite l'écran</strong>, qui n'intéresse que la fondation&nbsp;: approfondir l'écran ne réduit en rien ce débit.</li>
+    <li><strong>Percolation à travers le corps de remblai</strong> traitée par la parabole de Kozeny avec correction d'entrée de Casagrande, et la solution de L. Casagrande pour l'exutoire&nbsp;: <code>a = √(d² + h²) − √(d² − h² cot²β)</code>, <code>q = K a sin²β</code>. Pour un drain de pied (β = 90°) l'expression se réduit à <code>q = K (√(d² + h²) − d)</code>. Confrontée au réseau d'écoulement de Poeter &amp; Hsieh (<em>Graphical Construction of Groundwater Flow Nets</em>, exercice 3&nbsp;: remblai sur substratum imperméable avec tapis drainant), la méthode donne un écart de 0,7 %, là où la formule de Dupuit dérive de 16 à 20 % selon le point où l'on mesure la longueur d'écoulement.</li>
+    <li><strong>Limites de ce calcul de remblai.</strong> Le massif est supposé homogène et isotrope, sans noyau, sans recharge par la pluie, en régime permanent. La correction d'entrée de 0,3 Δ et la solution de L. Casagrande sont des approximations d'usage, la seconde perdant sa validité pour les talus très raides. Le résultat donne un ordre de grandeur du débit percolé et la position de la ligne de saturation&nbsp;; il ne constitue pas un dimensionnement de remblai. Ce chemin <strong>court-circuite l'écran</strong>, qui n'intéresse que la fondation&nbsp;: approfondir l'écran ne réduit en rien ce débit.</li>
+    <li><strong>Surface de suintement.</strong> En l'absence de drain de pied, la longueur <code>a</code> de talus aval en eau est calculée et reportée sur la coupe. Elle signale une sollicitation du parement aval&nbsp;: la stabilité de la pente sous cette ligne de saturation, et la nécessité éventuelle d'un tapis drainant ou d'un enrochement, relèvent d'un calcul de stabilité non couvert par l'outil.</li>
     <li><strong>Vérifications de fondation</strong> (Lane, renard, gradient de sortie, mise en charge) conduites sur le seul débit de fondation. La stabilité du talus aval sous l'effet de la ligne de saturation dans le remblai n'est pas examinée&nbsp;: elle relève d'un calcul de stabilité de pente.</li>
     <li><strong>Écran homogène et continu</strong>&nbsp;: ni le colmatage progressif, ni la fissuration de dessiccation de l'argile en période sèche, ni les défauts de mise en œuvre (joints de panneaux, ancrage du pied, déchirure de serrures) ne sont modélisés. Ces défauts sont en pratique la première cause d'écart entre calcul et mesure.</li>
     <li><strong>Effets de bord tridimensionnels</strong> aux extrémités de la digue et aux contournements latéraux non modélisés&nbsp;: le calcul 2D par mètre linéaire les ignore par construction.</li>
@@ -463,23 +467,59 @@ var Calc = (function(){
              dh_amont:dh_am, dh_ecran:dh_ec, dh_aval:dh_av };
   }
 
-  /** Percolation à travers le corps de remblai, formule de Dupuit pour un barrage en terre
-   *  sur base imperméable : q = K (h1² − h2²) / (2 L), h mesurées au-dessus de la base du
-   *  remblai et L pris comme la longueur horizontale du massif saturé, depuis l'intersection
-   *  du plan d'eau avec le talus amont jusqu'au pied aval. Ce chemin court-circuite l'écran,
-   *  qui n'intéresse que la fondation : les deux débits s'additionnent.
-   *  Retourne aussi les éléments nécessaires au tracé de la ligne de saturation (parabole). */
+  /** Percolation à travers le corps de remblai — parabole de Kozeny avec correction d'entrée
+   *  de Casagrande. Le débit est donné par la solution de L. Casagrande :
+   *
+   *      a = √(d² + h²) − √(d² − h² cot²β)          longueur de la surface de suintement
+   *      q = K · a · sin²β
+   *
+   *  où β est l'inclinaison de l'exutoire aval — le talus, ou 90° pour un drain de pied, cas
+   *  où l'expression se réduit à la parabole de Kozeny q = K (√(d² + h²) − d). La distance d
+   *  est mesurée depuis le point d'entrée corrigé, reculé de 0,3 Δ en amont de l'intersection
+   *  du plan d'eau avec le talus amont (Δ : projection horizontale de la partie mouillée).
+   *
+   *  Confronté au réseau d'écoulement de Poeter & Hsieh (exercice 3, remblai sur substratum
+   *  imperméable avec drain de pied), l'écart est de 1,8 %, contre 16 à 20 % pour la formule
+   *  de Dupuit selon le point où l'on mesure la longueur d'écoulement.
+   *
+   *  Ce chemin court-circuite l'écran, qui n'intéresse que la fondation : les débits s'ajoutent. */
   function percolationDigue(p, H_av){
     var hCrete = p.Z_crete - p.Z_plaf;
     var h1 = Math.max(0, p.H_am - p.Z_plaf);
     var h2 = Math.max(0, H_av - p.Z_plaf);
     if (!(p.K_digue > 0) || !(hCrete > 0) || !(h1 > h2)) return { q:0, applicable:false };
-    var xTalus = (p.B_dig - p.b_crete) / 2;                 // emprise horizontale du talus amont
-    var xAm = xTalus * Math.min(1, h1 / hCrete);            // plan d'eau sur le talus amont
-    var L = p.B_dig - xAm;
-    if (!(L > 0)) return { q:0, applicable:false };
-    return { q:p.K_digue * (h1*h1 - h2*h2) / (2*L), applicable:true,
-             h1:h1, h2:h2, xAm:xAm, L:L, hCrete:hCrete };
+
+    var xTalus = (p.B_dig - p.b_crete) / 2;              // emprise horizontale d'un talus
+    var xAm = xTalus * Math.min(1, h1 / hCrete);         // plan d'eau sur le talus amont
+    var delta = xAm;                                     // projection horizontale mouillée
+    var x0 = xAm - 0.3 * delta;                          // point d'entrée corrigé (Casagrande)
+    var drain0 = (p.drain === "pied");
+    var Ld = (drain0 && Number.isFinite(p.L_drain)) ? Math.max(0, p.L_drain) : 0;
+    // Le foyer de la parabole est l'extrémité AMONT du tapis drainant : c'est là que la
+    // ligne de saturation rejoint la base. Sans drain, c'est le pied aval du talus.
+    var xF = p.B_dig - Ld;
+    var d = xF - x0;
+    var h = Math.sqrt(Math.max(0, h1*h1 - h2*h2));       // charge efficace au-dessus de l'aval
+    if (!(d > 0) || !(h > 0)) return { q:0, applicable:false };
+
+    var drain = drain0;
+    var beta = drain ? Math.PI/2 : Math.atan2(hCrete, xTalus);
+    var cotb = drain ? 0 : Math.cos(beta) / Math.sin(beta);
+    var sous = d*d - h*h*cotb*cotb;
+    var a = null, q, methode;
+    if (sous >= 0){
+      a = Math.sqrt(d*d + h*h) - Math.sqrt(sous);
+      q = p.K_digue * a * Math.sin(beta) * Math.sin(beta);
+      methode = drain ? "Kozeny (drain de pied)" : "L. Casagrande (suintement sur le talus)";
+    } else {
+      // Talus très doux ou charge élevée : la solution de Casagrande n'a pas de racine réelle.
+      q = p.K_digue * h*h / (2*d);
+      methode = "Dupuit (repli — géométrie hors du domaine de Casagrande)";
+    }
+    var y0 = Math.sqrt(d*d + h*h) - d;                   // paramètre de la parabole de Kozeny
+    return { q:q, applicable:true, h1:h1, h2:h2, xAm:xAm, x0:x0, xF:xF, d:d, h:h, delta:delta,
+             beta:beta, a:a, y0:y0, drain:drain, Ld:Ld, hCrete:hCrete, methode:methode,
+             zBase:p.Z_plaf + h2 };
   }
 
   /** Cheminement pondéré de Lane. Les tronçons verticaux sont comptés depuis la tête
@@ -604,6 +644,9 @@ var Calc = (function(){
     if (p.B_dig > 0 && p.b_crete >= p.B_dig) err.push("La largeur en crête (" + nb(p.b_crete) + " m) doit être inférieure à la largeur en base (" + nb(p.B_dig) + " m).");
     if (p.Z_crete <= p.H_am) err.push("La cote de crête (" + nb(p.Z_crete) + " m) doit être supérieure au niveau d'eau dans la ZIT (" + nb(p.H_am) + " m) : la digue serait submergée.");
     if (!(p.K_digue >= 0)) err.push("Le K du corps de digue doit être positif ou nul (0 = corps imperméabilisé).");
+    if (p.drain === "pied" && !(p.L_drain >= 0)) err.push("La longueur du tapis drainant doit être positive ou nulle.");
+    if (p.drain === "pied" && p.B_dig > 0 && p.L_drain >= p.B_dig / 2)
+      err.push("La longueur du tapis drainant (" + nb(p.L_drain) + " m) doit rester inférieure à la demi-largeur en base de la digue (" + nb(p.B_dig / 2) + " m).");
     if (!(p.L_dig > 0)) err.push("La longueur de la digue doit être strictement positive.");
     if (!(p.t_crue > 0)) err.push("La durée de l'événement doit être strictement positive.");
     var demiB = (p.type === "palplanches") ? 0 : (Number.isFinite(p.b) ? Math.max(0, p.b) / 2 : 0);
@@ -780,7 +823,7 @@ var CAT_C_DEFAUT = [
 
 var DEFAUTS = {
   H_am:"82,50", Z_TNam:"80,00", Z_TNav:"79,50", H_av_opt:"", Z_plaf:"79,50",
-  B_dig:"18,00", b_crete:"4,00", Z_crete:"83,50", K_digue:"0", L_dig:"120", x_ecr:"9,00", t_crue:"24", V_zit:"12000",
+  B_dig:"18,00", b_crete:"4,00", Z_crete:"83,50", K_digue:"0", drain:"aucun", L_drain:"0", L_dig:"120", x_ecr:"9,00", t_crue:"24", V_zit:"12000",
   type_ecran:"argile", b_ecr:"0,80", z_pied:"74,00", K_ecr:"1e-9", rho_serr:"0",
   alpha:"0,3", gamma_p:"11,0", gamma_w:"9,81", FS_cible:"3,0", C_adm:"5,0",
   q_cible:"0,20", q_cible_unite:"l",
@@ -889,7 +932,8 @@ function lireParams(){
     H_av_opt:(hav === "" ? null : parseNum(hav)),
     Z_plaf:parseNum(v("Z_plaf")), B_dig:parseNum(v("B_dig")),
     b_crete:parseNum(v("b_crete")), Z_crete:parseNum(v("Z_crete")),
-    K_digue:(v("K_digue").trim() === "" ? 0 : parseNum(v("K_digue"))), L_dig:parseNum(v("L_dig")),
+    K_digue:(v("K_digue").trim() === "" ? 0 : parseNum(v("K_digue"))), drain:v("drain"),
+    L_drain:(v("L_drain").trim() === "" ? 0 : parseNum(v("L_drain"))), L_dig:parseNum(v("L_dig")),
     x_ecr:parseNum(v("x_ecr")), t_crue:parseNum(v("t_crue")),
     V_zit:(vzit === "" ? null : parseNum(vzit)),
     couches:lireCouches(), type:type,
@@ -953,6 +997,10 @@ function rendreSynthese(R, qCible){
     h += '<div class="tuile"><div class="lib">dont fondation / remblai</div><div class="val" style="font-size:15px">' +
          nbz(R.qFond * 1000, 3) + ' / ' + nbz(R.qDigue * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; le remblai porte ' +
          nb(100 * R.qDigue / R.q, 1) + ' % du débit</div></div>';
+    if (R.perc.a !== null && !R.perc.drain && R.perc.a > 0){
+      h += '<div class="tuile orange"><div class="lib">Suintement au talus aval</div><div class="val">' + nb(R.perc.a, 2) +
+           '</div><div class="u2">m de hauteur de talus en eau &mdash; à examiner en stabilité de pente</div></div>';
+    }
   }
   h += '<div class="tuile ' + cls + '"><div class="lib">Débit total Q</div><div class="val">' + nbz(R.Q * 3600, 1) + '</div><div class="u2">m&sup3;/h &nbsp;(' + auto(R.Q, 4) + ' m&sup3;/s)</div></div>';
   h += '<div class="tuile"><div class="lib">Volume infiltré V</div><div class="val">' + nbz(R.V, 0) + '</div><div class="u2">m&sup3; en ' + nb(R.p.t_crue, 0) + ' h</div></div>';
@@ -1030,9 +1078,24 @@ function rendreDetail(R){
   ligne("q<sub>fond</sub>", "ΔH / R_total &mdash; débit de fondation", nb(R.DH, 3) + " / " + resis(r.R_tot),
         sci(R.qFond, 4) + " m&sup2;/s");
   if (R.perc && R.perc.applicable){
-    ligne("q<sub>digue</sub>", "K_digue × (h1² − h2²) / (2 L) &mdash; percolation dans le remblai (Dupuit)",
-          sci(p.K_digue, 2) + " × (" + nb(R.perc.h1, 2) + "² − " + nb(R.perc.h2, 2) + "²) / (2×" + nb(R.perc.L, 2) + ")",
-          sci(R.qDigue, 4) + " m&sup2;/s");
+    var pc = R.perc;
+    ligne("d", "du point d'entrée corrigé au foyer &mdash; entrée reculée de 0,3 Δ (Casagrande), foyer " +
+          (pc.drain ? "à l'amont du tapis drainant" : "au pied aval du talus"),
+          nb(pc.xF, 2) + " − (" + nb(pc.xAm, 2) + " − 0,3×" + nb(pc.delta, 2) + ")", nb(pc.d, 3) + " m");
+    if (pc.a !== null){
+      ligne(pc.drain ? "y<sub>0</sub>" : "a",
+            pc.drain ? "√(d² + h²) − d &mdash; paramètre de la parabole de Kozeny (β = 90°, drain)"
+                     : "√(d² + h²) − √(d² − h² cot²β) &mdash; surface de suintement, β = " + nb(pc.beta * 180 / Math.PI, 1) + "°",
+            "√(" + nb(pc.d, 2) + "² + " + nb(pc.h, 2) + "²) − √(" + nb(pc.d, 2) + "² − " + nb(pc.h, 2) + "²cot²β)",
+            nb(pc.a, 3) + " m");
+      ligne("q<sub>digue</sub>", (pc.drain ? "K_digue × y₀" : "K_digue × a × sin²β") + " &mdash; " + esc(pc.methode),
+            sci(p.K_digue, 2) + " × " + nb(pc.a, 3) + (pc.drain ? "" : " × " + nb(Math.sin(pc.beta) * Math.sin(pc.beta), 3)),
+            sci(R.qDigue, 4) + " m&sup2;/s");
+    } else {
+      ligne("q<sub>digue</sub>", "K_digue × h² / (2 d) &mdash; " + esc(pc.methode),
+            sci(p.K_digue, 2) + " × " + nb(pc.h, 2) + "² / (2×" + nb(pc.d, 2) + ")",
+            sci(R.qDigue, 4) + " m&sup2;/s");
+    }
     ligne("q", "q_fond + q_digue", sci(R.qFond, 4) + " + " + sci(R.qDigue, 4), sci(R.q, 4) + " m&sup2;/s");
   } else {
     ligne("q<sub>digue</sub>", "corps de digue imperméabilisé (K = 0)", "aucune percolation à travers le remblai", "0 m&sup2;/s");
@@ -1524,20 +1587,55 @@ function dessinerCoupe(R, iso){
          '" text-anchor="middle" font-size="11" fill="#7e5109">' +
          (p.K_digue > 0 ? "corps perméable, K = " + sci(p.K_digue, 1) + " m/s" : "corps imperméabilisé") + "</text>");
 
-  /* --- Ligne de saturation dans le remblai (parabole de Dupuit) --- */
-  if (R.perc && R.perc.applicable){
-    var pc = R.perc, ptsSat = [], nsat = 40;
+  /* --- Ligne de saturation dans le remblai (parabole de Kozeny) --- */
+  if (R.perc && R.perc.applicable && R.perc.y0 > 0){
+    var pc = R.perc, zb = pc.zBase;
+    // Point de sortie : la base au droit du drain, ou le point de suintement sur le talus aval
+    var xSort = pc.drain ? p.B_dig : p.B_dig - (pc.a || 0) * Math.cos(pc.beta);
+    var zSort = pc.drain ? zb : zb + (pc.a || 0) * Math.sin(pc.beta);
+    // Parabole y(X) = √(2 y0 s + y0²), s distance au foyer placé au pied aval
+    // La ligne de saturation ne peut sortir du remblai : on la borne au profil de la digue.
+    var zDigue = function(X){
+      if (X <= xc1) return p.Z_plaf + (p.Z_crete - p.Z_plaf) * Math.max(0, X) / Math.max(xc1, 1e-9);
+      if (X >= xc2) return p.Z_plaf + (p.Z_crete - p.Z_plaf) * Math.max(0, p.B_dig - X) / Math.max(p.B_dig - xc2, 1e-9);
+      return p.Z_crete;
+    };
+    var parab = function(X){
+      return Math.min(zDigue(X), zb + Math.sqrt(Math.max(0, 2 * pc.y0 * (pc.xF - X) + pc.y0 * pc.y0)));
+    };
+    // Raccord amont : la parabole théorique démarre en amont du point d'entrée réel ; on la
+    // raccorde au plan d'eau sur le talus par une courbe, comme le veut la construction usuelle.
+    var xJonc = pc.xAm + 0.25 * pc.delta;
+    var ptsSat = [[pc.xAm, p.Z_plaf + pc.h1]];
+    var nsat = 44;
     for (var is = 0; is <= nsat; is++){
-      var xs2 = pc.xAm + (p.B_dig - pc.xAm) * is / nsat;
-      var h2c = pc.h1*pc.h1 - (pc.h1*pc.h1 - pc.h2*pc.h2) * (xs2 - pc.xAm) / pc.L;
-      ptsSat.push([xs2, p.Z_plaf + Math.sqrt(Math.max(0, h2c))]);
+      var Xs = xJonc + (xSort - xJonc) * is / nsat;
+      ptsSat.push([Xs, parab(Xs)]);
     }
-    g.push('<polygon points="' + pts(ptsSat.concat([[p.B_dig, p.Z_plaf], [pc.xAm, p.Z_plaf]])) +
+    ptsSat.push([xSort, zSort]);
+    var ferme = pc.drain ? [[p.B_dig, p.Z_plaf], [pc.xAm, p.Z_plaf]]
+                         : [[p.B_dig, p.Z_plaf], [pc.xAm, p.Z_plaf]];   // suintement : jusqu'au pied
+    g.push('<polygon points="' + pts(ptsSat.concat(ferme)) +
            '" fill="#5dade2" opacity="0.30"/>');
     g.push('<polyline points="' + pts(ptsSat) + '" fill="none" stroke="#1a5276" stroke-width="1.8"/>');
-    g.push('<text x="' + X(pc.xAm + (p.B_dig - pc.xAm) * 0.45).toFixed(1) + '" y="' +
-           (Y(p.Z_plaf + Math.sqrt(Math.max(0, pc.h1*pc.h1 * 0.55))) - 5).toFixed(1) +
-           '" font-size="10" fill="#1a5276">ligne de saturation</text>');
+    g.push('<text x="' + X(pc.xAm + (xSort - pc.xAm) * 0.5).toFixed(1) + '" y="' +
+           (Y(parab(pc.xAm + (xSort - pc.xAm) * 0.5)) - 5).toFixed(1) +
+           '" font-size="10" fill="#1a5276">ligne de saturation (Kozeny)</text>');
+    if (pc.drain){
+      var xd0 = p.B_dig - Math.max(pc.Ld, 0.06 * p.B_dig);
+      var zdh = p.Z_plaf + Math.max(0.10 * pc.hCrete, 0.25);
+      g.push('<rect x="' + X(xd0).toFixed(1) + '" y="' + Y(zdh).toFixed(1) +
+             '" width="' + (X(p.B_dig) - X(xd0)).toFixed(1) +
+             '" height="' + Math.max(2, Y(p.Z_plaf) - Y(zdh)).toFixed(1) +
+             '" fill="#7f8c8d" opacity="0.6"/>');
+      g.push('<text x="' + X(p.B_dig).toFixed(1) + '" y="' + (Y(zdh) - 4).toFixed(1) +
+             '" text-anchor="end" font-size="10" fill="#2c3e50">tapis drainant ' + nb(pc.Ld, 2) + " m</text>");
+    } else if (pc.a > 0){
+      g.push('<line x1="' + X(xSort).toFixed(1) + '" y1="' + Y(zSort).toFixed(1) + '" x2="' + X(p.B_dig).toFixed(1) +
+             '" y2="' + Y(p.Z_plaf).toFixed(1) + '" stroke="#b9770e" stroke-width="4" opacity="0.85"/>');
+      g.push('<text x="' + (X(p.B_dig) + 5).toFixed(1) + '" y="' + (Y(zSort) - 3).toFixed(1) +
+             '" font-size="10" fill="#b9770e">suintement a = ' + nb(pc.a, 2) + " m</text>");
+    }
   }
 
   /* --- Profil du terrain --- */
@@ -2029,7 +2127,7 @@ function lancerDimensionnement(){
    PARTIE 9 — EXPORT / IMPORT / REINITIALISATION
    ========================================================================== */
 
-var CHAMPS_SIMPLES = ["H_am","Z_TNam","Z_TNav","H_av_opt","Z_plaf","B_dig","b_crete","Z_crete","K_digue","L_dig","x_ecr","t_crue","V_zit",
+var CHAMPS_SIMPLES = ["H_am","Z_TNam","Z_TNav","H_av_opt","Z_plaf","B_dig","b_crete","Z_crete","K_digue","drain","L_drain","L_dig","x_ecr","t_crue","V_zit",
                       "type_ecran","b_ecr","z_pied","K_ecr","rho_serr","alpha","gamma_p","gamma_w",
                       "FS_cible","C_adm","q_cible","q_cible_unite"];
 
@@ -2079,6 +2177,10 @@ function majTypeEcran(){
   document.querySelectorAll("[data-si]").forEach(function(el){
     el.style.display = (el.getAttribute("data-si") === t) ? "" : "none";
   });
+  var td = v("drain");
+  document.querySelectorAll("[data-drain]").forEach(function(el){
+    el.style.display = (el.getAttribute("data-drain") === td) ? "" : "none";
+  });
 }
 
 /* ==========================================================================
@@ -2090,7 +2192,7 @@ function majTypeEcran(){
   CHAMPS_SIMPLES.forEach(function(id){
     var el = $(id);
     el.addEventListener("input", function(){ dernierDim = null; majAffichage(); });
-    el.addEventListener("change", function(){ if (id === "type_ecran") majTypeEcran(); dernierDim = null; majAffichage(); });
+    el.addEventListener("change", function(){ if (id === "type_ecran" || id === "drain") majTypeEcran(); dernierDim = null; majAffichage(); });
   });
   $("chkIso").addEventListener("change", majAffichage);
 
