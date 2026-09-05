@@ -252,6 +252,16 @@ footer li{margin-bottom:4px}
     <div id="resSensi"></div>
   </div>
 
+  <div class="carte">
+    <h2>8. Réseau d'écoulement 2D &mdash; contrôle</h2>
+    <p class="note" style="font-style:normal">Résolution de <code>div(K grad h) = 0</code> par différences finies, avec la charge amont imposée
+    <strong>sur le fond de la ZIT</strong> et non au pied de la digue&nbsp;: l'eau percole à travers la couverture avant de converger sous l'ouvrage.
+    Le débit obtenu sert de contrôle indépendant&nbsp;; la valeur de dimensionnement reste celle du modèle à fragments (§1).</p>
+    <div class="actions no-print"><button id="btnNet">Calculer le réseau d'écoulement</button>
+      <span id="etatNet" style="font-size:12px;color:#5d6d7e;align-self:center"></span></div>
+    <div id="resNet"></div>
+  </div>
+
 </div>
 </div>
 
@@ -1101,6 +1111,270 @@ function rendreSensibilite(R){
 }
 
 /* ==========================================================================
+   PARTIE 6bis — RÉSEAU D'ÉCOULEMENT 2D (contrôle)
+
+   Résolution de div(K grad h) = 0 par différences finies sur maillage cartésien
+   non uniforme, conductances d'interface par moyenne harmonique, relaxation par
+   lignes alternée (Thomas) avec sur-relaxation.
+
+   Contrairement au modèle à fragments, la charge amont est imposée sur le FOND
+   DE LA ZIT et non au pied amont de la digue : l'eau percole verticalement à
+   travers la couverture peu perméable avant de converger sous la digue. La
+   comparaison des deux débits chiffre donc la perte de charge d'entrée que le
+   modèle à fragments néglige.
+
+   Validation : le solveur reproduit la solution analytique par transformation
+   conforme d'un rideau de fiche s dans une couche d'épaisseur T, charge imposée
+   en surface des deux côtés — Phi = K(k')/(2K(k)) avec k = sin(pi.s/2T) — à
+   moins de 1,5 % pour s/T de 0,2 à 0,8.
+   ========================================================================== */
+var Flownet = (function(){
+
+  /* ---------- Maillage horizontal : fin au droit de l'ouvrage, étiré au loin ---------- */
+  function maillageX(bornes, x0, x1, dxFine){
+    var b = bornes.slice().sort(function(a,c){ return a-c; })
+                  .filter(function(v,i,a){ return i===0 || v-a[i-1] > 1e-9; });
+    var zoneA = b[0] - 2, zoneB = b[b.length-1] + 2;
+    var cles = [zoneA].concat(b, [zoneB]).sort(function(a,c){ return a-c; })
+                      .filter(function(v,i,a){ return i===0 || v-a[i-1] > 1e-9; });
+    var pts = [];
+    for (var s = 0; s < cles.length - 1; s++){
+      var n = Math.max(1, Math.round((cles[s+1] - cles[s]) / dxFine));
+      for (var k = 0; k < n; k++) pts.push(cles[s] + (cles[s+1] - cles[s]) * k / n);
+    }
+    pts.push(zoneB);
+    var g = 1.14, d = dxFine, xx = zoneA, gauche = [];
+    while (xx > x0 && gauche.length < 90){ d *= g; xx -= d; gauche.push(xx); }
+    gauche.reverse();
+    d = dxFine; xx = zoneB; var droite = [];
+    while (xx < x1 && droite.length < 90){ d *= g; xx += d; droite.push(xx); }
+    return gauche.concat(pts, droite);
+  }
+
+  /* ---------- Relaxation par lignes alternée (algorithme de Thomas) ---------- */
+  function relaxer(G, nSweeps, omega, tol){
+    var nx=G.nx, nz=G.nz, h=G.h, Cx=G.Cx, Cz=G.Cz, actif=G.actif, fixe=G.fixe, diag=G.diag;
+    var n = Math.max(nx,nz);
+    var a=new Float64Array(n), b=new Float64Array(n), c=new Float64Array(n),
+        d=new Float64Array(n), x=new Float64Array(n);
+    function thomas(m){
+      for (var i=1;i<m;i++){ var w=a[i]/b[i-1]; b[i]-=w*c[i-1]; d[i]-=w*d[i-1]; }
+      x[m-1]=d[m-1]/b[m-1];
+      for (i=m-2;i>=0;i--) x[i]=(d[i]-c[i]*x[i+1])/b[i];
+    }
+    var res=0, it=0;
+    for (it=0; it<nSweeps; it++){
+      res=0;
+      for (var j=0;j<nz;j++){                       // lignes horizontales
+        for (var i=0;i<nx;i++){
+          var id=j*nx+i;
+          if(!actif[id]||fixe[id]||diag[id]<=0){ a[i]=0;b[i]=1;c[i]=0;d[i]=h[id]; continue; }
+          a[i]= i>0 ? -Cx[i*nz+j] : 0;
+          c[i]= i<nx-1 ? -Cx[(i+1)*nz+j] : 0;
+          b[i]= diag[id];
+          var r1=0;
+          if(j>0)    r1 += Cz[i*(nz+1)+j]   * h[(j-1)*nx+i];
+          if(j<nz-1) r1 += Cz[i*(nz+1)+j+1] * h[(j+1)*nx+i];
+          d[i]=r1;
+        }
+        thomas(nx);
+        for (i=0;i<nx;i++){ var i2=j*nx+i; if(!actif[i2]||fixe[i2])continue;
+          var dd=(x[i]-h[i2])*omega; h[i2]+=dd; if(Math.abs(dd)>res)res=Math.abs(dd); }
+      }
+      for (i=0;i<nx;i++){                            // lignes verticales
+        for (j=0;j<nz;j++){
+          var i3=j*nx+i;
+          if(!actif[i3]||fixe[i3]||diag[i3]<=0){ a[j]=0;b[j]=1;c[j]=0;d[j]=h[i3]; continue; }
+          a[j]= j>0 ? -Cz[i*(nz+1)+j] : 0;
+          c[j]= j<nz-1 ? -Cz[i*(nz+1)+j+1] : 0;
+          b[j]= diag[i3];
+          var r2=0;
+          if(i>0)    r2 += Cx[i*nz+j]     * h[j*nx+i-1];
+          if(i<nx-1) r2 += Cx[(i+1)*nz+j] * h[j*nx+i+1];
+          d[j]=r2;
+        }
+        thomas(nz);
+        for (j=0;j<nz;j++){ var i4=j*nx+i; if(!actif[i4]||fixe[i4])continue;
+          var d3=(x[j]-h[i4])*omega; h[i4]+=d3; if(Math.abs(d3)>res)res=Math.abs(d3); }
+      }
+      if (res < tol) break;
+    }
+    return { iterations:it, residu:res };
+  }
+
+  /* ---------- Assemblage et résolution ---------- */
+  function resoudre(P){
+    var Zt = Math.max(P.Z_TNam, P.Z_plaf, P.Z_TNav);
+    var E  = Zt - P.Z_sub;
+    // Longueur de fuite de la couverture : fixe l'extension utile du domaine amont
+    var Tt = 0, cov = P.couches[0];
+    for (var c0 = 0; c0 < P.couches.length; c0++)
+      Tt += P.couches[c0].K * Math.max(0, Math.min(P.couches[c0].zToit, Zt) - Math.max(P.couches[c0].zBase, P.Z_sub));
+    var eCov = Math.max(0.1, Math.min(cov.zToit, Zt) - Math.max(cov.zBase, P.Z_sub));
+    var lam  = Math.sqrt(Tt * eCov / Math.max(cov.K, 1e-12));
+    var Lext = Math.min(4000, Math.max(8 * E, 3.5 * lam));
+
+    var bg = P.barriere ? 0 : P.b;
+    var xs = maillageX([P.xToe0, P.xToe1, P.xEcr - bg/2, P.xEcr + bg/2, P.xEcr],
+                       Math.min(P.xToe0, P.xEcr) - Lext, Math.max(P.xToe1, P.xEcr) + Lext,
+                       P.dxFine);
+    var nz = P.nz, nx = xs.length - 1;
+    var zs = []; for (var j0 = 0; j0 <= nz; j0++) zs.push(P.Z_sub + E * j0 / nz);
+
+    var dx=[], dz=[], xc=[], zc=[], i, j;
+    for (i=0;i<nx;i++){ dx.push(xs[i+1]-xs[i]); xc.push(0.5*(xs[i]+xs[i+1])); }
+    for (j=0;j<nz;j++){ dz.push(zs[j+1]-zs[j]); zc.push(0.5*(zs[j]+zs[j+1])); }
+
+    var N = nx*nz;
+    var K=new Float64Array(N), h=new Float64Array(N);
+    var fixe=new Uint8Array(N), actif=new Uint8Array(N);
+    var id = function(i,j){ return j*nx+i; };
+
+    function Ksol(z){
+      for (var c=0;c<P.couches.length;c++)
+        if (z <= P.couches[c].zToit + 1e-12 && z >= P.couches[c].zBase - 1e-12) return P.couches[c].K;
+      return P.couches[P.couches.length-1].K;
+    }
+    function surface(x){
+      if (x < P.xToe0 - 1e-9) return { z:P.Z_TNam, h:P.H_am };
+      if (x > P.xToe1 + 1e-9) return { z:P.Z_TNav, h:P.H_av };
+      return { z:P.Z_plaf, h:null };
+    }
+    var xa = P.xEcr - bg/2, xb = P.xEcr + bg/2;
+    for (i=0;i<nx;i++){
+      var sf = surface(xc[i]);
+      for (j=0;j<nz;j++){
+        var k = id(i,j);
+        if (zc[j] > sf.z){ actif[k]=0; continue; }
+        actif[k]=1;
+        var dedans = (!P.barriere && xc[i] > xa - 1e-9 && xc[i] < xb + 1e-9 &&
+                      zc[j] < P.Z_plaf + 1e-9 && zc[j] > P.zPied - 1e-9);
+        K[k] = dedans ? Math.max(P.Kecr, 1e-12) : Ksol(zc[j]);
+        h[k] = P.H_av + (P.H_am - P.H_av) * (xc[i] < P.xEcr ? 0.75 : 0.25);
+      }
+      if (sf.h !== null){
+        var jT=-1; for (j=nz-1;j>=0;j--) if (actif[id(i,j)]){ jT=j; break; }
+        if (jT>=0){ h[id(i,jT)]=sf.h; fixe[id(i,jT)]=1; }
+      }
+    }
+
+    var Cx=new Float64Array((nx+1)*nz), Cz=new Float64Array(nx*(nz+1));
+    for (i=0;i<nx-1;i++) for (j=0;j<nz;j++){
+      var A=id(i,j), B=id(i+1,j); if(!actif[A]||!actif[B]) continue;
+      Cx[(i+1)*nz+j] = 2*dz[j] / (dx[i]/K[A] + dx[i+1]/K[B]);
+    }
+    for (i=0;i<nx;i++) for (j=0;j<nz-1;j++){
+      var A2=id(i,j), B2=id(i,j+1); if(!actif[A2]||!actif[B2]) continue;
+      Cz[i*(nz+1)+j+1] = 2*dx[i] / (dz[j]/K[A2] + dz[j+1]/K[B2]);
+    }
+    // Rideau de palplanches : barrière d'épaisseur nulle sur une face de colonne,
+    // conductance résiduelle = perméabilité de serrure rho fois la hauteur de la maille.
+    var iBar = -1;
+    if (P.barriere){
+      iBar = 0;
+      for (i=0;i<=nx;i++) if (Math.abs(xs[i]-P.xEcr) < Math.abs(xs[iBar]-P.xEcr)) iBar = i;
+      for (j=0;j<nz;j++)
+        if (zc[j] < P.Z_plaf + 1e-9 && zc[j] > P.zPied - 1e-9)
+          Cx[iBar*nz+j] = (P.rho > 0) ? P.rho * dz[j] : 0;
+    }
+
+    var diag=new Float64Array(N);
+    for (i=0;i<nx;i++) for (j=0;j<nz;j++){
+      var k2=id(i,j); if(!actif[k2]) continue;
+      diag[k2] = Cx[i*nz+j] + Cx[(i+1)*nz+j] + Cz[i*(nz+1)+j] + Cz[i*(nz+1)+j+1];
+    }
+    var info = relaxer({nx:nx,nz:nz,h:h,Cx:Cx,Cz:Cz,actif:actif,fixe:fixe,diag:diag},
+                       P.iter||1200, P.omega||1.85, (P.tol||1e-9)*Math.abs(P.H_am-P.H_av));
+
+    /* fonction de courant aux coins : psi = 0 le long du substratum imperméable */
+    var psi=[]; for (i=0;i<=nx;i++) psi.push(new Float64Array(nz+1));
+    for (i=0;i<=nx;i++) for (j=0;j<nz;j++){
+      var Qx=0;
+      if (i>0 && i<nx){ var A3=id(i-1,j), B3=id(i,j);
+        if (actif[A3]&&actif[B3]) Qx = Cx[i*nz+j]*(h[A3]-h[B3]); }
+      psi[i][j+1] = psi[i][j] + Qx;
+    }
+    function colonne(x){ var b0=0; for (var i5=0;i5<=nx;i5++) if (Math.abs(xs[i5]-x)<Math.abs(xs[b0]-x)) b0=i5; return b0; }
+    var iE = colonne(P.xEcr);
+    var q = Math.abs(psi[iE][nz]);
+
+    /* charge moyenne, pondérée par la transmissivité, sur une verticale */
+    function chargeMoy(x){
+      var ic = Math.min(nx-1, Math.max(0, colonne(x) - 1)), num=0, den=0;
+      for (var j5=0;j5<nz;j5++){ var k5=id(ic,j5); if(!actif[k5]) continue;
+        var w5 = K[k5]*dz[j5]; num += w5*h[k5]; den += w5; }
+      return den>0 ? num/den : NaN;
+    }
+    return { xs:xs, zs:zs, nx:nx, nz:nz, h:h, psi:psi, actif:actif, K:K,
+             q:q, Lext:Lext, lambda:lam, iterations:info.iterations, residu:info.residu,
+             hAmontToe:chargeMoy(P.xToe0 - 1e-6), hAvalToe:chargeMoy(P.xToe1 + 1e-6),
+             iBar:iBar, bg:bg };
+  }
+
+  /* ---------- Contours (marching squares) sur une grille de points ---------- */
+  function contours(val, xg, zg, ni, nj, cellOK, niveaux){
+    var sorties = [];
+    for (var n = 0; n < niveaux.length; n++){
+      var v = niveaux[n], segs = [];
+      for (var i = 0; i < ni-1; i++) for (var j = 0; j < nj-1; j++){
+        if (cellOK && !cellOK(i,j)) continue;
+        var v00=val(i,j), v10=val(i+1,j), v01=val(i,j+1), v11=val(i+1,j+1);
+        if (isNaN(v00)||isNaN(v10)||isNaN(v01)||isNaN(v11)) continue;
+        var code = (v00>v?1:0) | (v10>v?2:0) | (v11>v?4:0) | (v01>v?8:0);
+        if (code===0 || code===15) continue;
+        var x0=xg(i), x1=xg(i+1), z0=zg(j), z1=zg(j+1);
+        function ip(va,vb,ca,cb){ var t=(v-va)/(vb-va); return ca + t*(cb-ca); }
+        var B={ b:[ip(v00,v10,x0,x1), z0], d:[ip(v01,v11,x0,x1), z1],
+                g:[x0, ip(v00,v01,z0,z1)], r:[x1, ip(v10,v11,z0,z1)] };
+        var table = {1:[['g','b']],2:[['b','r']],3:[['g','r']],4:[['r','d']],
+                     5:[['g','d'],['b','r']],6:[['b','d']],7:[['g','d']],8:[['g','d']],
+                     9:[['b','d']],10:[['g','b'],['r','d']],11:[['b','r']],12:[['g','r']],
+                     13:[['r','d']],14:[['g','b']]};
+        var t2 = table[code]; if (!t2) continue;
+        for (var s2 = 0; s2 < t2.length; s2++) segs.push([B[t2[s2][0]], B[t2[s2][1]]]);
+      }
+      sorties.push({ niveau:v, segments:segs, lignes:chainer(segs) });
+    }
+    return sorties;
+  }
+
+  /** Chaîne les segments en polylignes pour que les pointillés restent réguliers. */
+  function chainer(segs){
+    if (!segs.length) return [];
+    var P2 = 1e6, cle = function(p){ return Math.round(p[0]*P2) + "|" + Math.round(p[1]*P2); };
+    var carte = new Map(), utilise = new Array(segs.length).fill(false);
+    segs.forEach(function(s,i){
+      [cle(s[0]), cle(s[1])].forEach(function(k){
+        if (!carte.has(k)) carte.set(k, []); carte.get(k).push(i);
+      });
+    });
+    var lignes = [];
+    for (var i = 0; i < segs.length; i++){
+      if (utilise[i]) continue;
+      utilise[i] = true;
+      var ligne = [segs[i][0], segs[i][1]];
+      for (var sens = 0; sens < 2; sens++){
+        var bout = ligne[sens === 0 ? ligne.length-1 : 0];
+        for (var pas = 0; pas < 20000; pas++){
+          var cands = carte.get(cle(bout)) || [], suiv = -1;
+          for (var c = 0; c < cands.length; c++) if (!utilise[cands[c]]){ suiv = cands[c]; break; }
+          if (suiv < 0) break;
+          utilise[suiv] = true;
+          var s3 = segs[suiv];
+          var autre = (cle(s3[0]) === cle(bout)) ? s3[1] : s3[0];
+          if (sens === 0) ligne.push(autre); else ligne.unshift(autre);
+          bout = autre;
+        }
+      }
+      lignes.push(ligne);
+    }
+    return lignes;
+  }
+
+  return { resoudre:resoudre, contours:contours };
+})();
+
+/* ==========================================================================
    PARTIE 6 — SCHEMA : COUPE EN TRAVERS (SVG généré)
    ========================================================================== */
 
@@ -1198,7 +1472,51 @@ function dessinerCoupe(R, iso){
   var xAm = p.x_ecr - R.bEff / 2, xAv = p.x_ecr + R.bEff / 2;   // faces amont et aval de l'écran
   var cx = X(p.x_ecr), cyPied = Y(p.z_pied), ySub = Y(R.Z_sub), yPlaf = Y(p.Z_plaf);
   var arcs = [], eqDansEcran = "";   // équipotentielles internes à l'écran (cas de l'écran ancré)
-  if (R.q > 0){
+  var net = (dernierNet && dernierNet.signature === signatureNet(p)) ? dernierNet : null;
+
+  if (net){
+    /* ---- Réseau calculé : contours du champ de charge et de la fonction de courant ---- */
+    var F = net.res;
+    // Une polyligne peut sortir de la fenêtre dessinée : on la DÉCOUPE en sous-chemins
+    // au lieu de l'interrompre, sans quoi seul le tronçon suivant la dernière sortie survivrait.
+    var poly = function(lignes, style){
+      for (var l = 0; l < lignes.length; l++){
+        var pl = lignes[l], sub = [];
+        var vider = function(){
+          if (sub.length < 2){ sub = []; return; }
+          var d2 = "";
+          for (var u = 0; u < sub.length; u++)
+            d2 += (u === 0 ? "M" : "L") + X(sub[u][0]).toFixed(1) + "," + Y(sub[u][1]).toFixed(1) + " ";
+          g.push('<path d="' + d2 + '" fill="none" ' + style + '/>');
+          sub = [];
+        };
+        for (var t = 0; t < pl.length; t++){
+          if (pl[t][0] < xMin - 1 || pl[t][0] > xMax + 1){ vider(); continue; }
+          sub.push(pl[t]);
+        }
+        vider();
+      }
+    };
+    var nivEq = [];
+    for (var ke = 1; ke < 10; ke++) nivEq.push(p.H_am - ke * R.DH / 10);
+    var ctEq = Flownet.contours(function(i,j){ return F.h[j*F.nx+i]; },
+      function(i){ return 0.5*(F.xs[i]+F.xs[i+1]); }, function(j){ return 0.5*(F.zs[j]+F.zs[j+1]); },
+      F.nx, F.nz, function(i,j){ return F.actif[j*F.nx+i] && F.actif[j*F.nx+i+1] &&
+                                        F.actif[(j+1)*F.nx+i] && F.actif[(j+1)*F.nx+i+1]; }, nivEq);
+    for (var ce = 0; ce < ctEq.length; ce++)
+      poly(ctEq[ce].lignes, 'stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.8"');
+
+    if (F.q > 0){
+      var nivPsi = [];
+      for (var kp = 1; kp <= 5; kp++) nivPsi.push(kp * F.q / 6);
+      var ctPsi = Flownet.contours(function(i,j){ return F.psi[i][j]; },
+        function(i){ return F.xs[i]; }, function(j){ return F.zs[j]; },
+        F.nx+1, F.nz+1, function(i,j){ return F.actif[j*F.nx+i]; }, nivPsi);
+      for (var cp = 0; cp < ctPsi.length; cp++)
+        poly(ctPsi[cp].lignes, 'stroke="#1a5276" stroke-width="1.3" opacity="0.9"');
+    }
+  }
+  else if (R.q > 0){
     for (var k = 1; k < Neq; k++){
       var hk = p.H_am - k * R.DH / Neq, xk = null;
       if (hk >= c.h1 - 1e-12 && (p.H_am - c.h1) > 1e-9){
@@ -1383,7 +1701,17 @@ function dessinerCoupe(R, iso){
   }
 
   svg.innerHTML = g.join("");
+  if (net){
+    $("legendeCoupe").innerHTML =
+      "<strong>Réseau d'écoulement calculé</strong> (§8)&nbsp;: traits bleus continus = lignes de courant (contours de la fonction de courant, six tubes de débit égal), " +
+      "traits bleus pointillés = équipotentielles, une par dixième de ΔH. Les deux familles sont orthogonales et forment des carrés curvilignes&nbsp;; " +
+      "la réfraction aux interfaces entre couches de conductivités différentes y apparaît. Charge amont imposée sur le fond de ZIT. " +
+      (Math.abs(exag - 1) < 0.02 ? "Échelles horizontale et verticale identiques."
+                                 : "<strong>Exagération verticale ×" + nb(exag, 1) + "</strong> — l'orthogonalité apparaît déformée par cette exagération.");
+    return;
+  }
   $("legendeCoupe").innerHTML =
+    "<strong>Tracé schématique</strong> (modèle à fragments) &mdash; lancer le calcul du §8 pour le réseau d'écoulement réel. " +
     "Traits bleus continus fléchés&nbsp;: lignes de courant, tracées en tubes de débit égal — chacune sépare deux cinquièmes du débit, " +
     "de sorte que leur densité reflète la transmissivité K&nbsp;×&nbsp;e de chaque couche et non son épaisseur — une couche peut n'en porter aucune " +
     "sans que son débit soit nul, la part transportée par chacune étant indiquée en regard. " +
@@ -1485,7 +1813,81 @@ function dessinerGraphe(R, qCible, dim){
    PARTIE 8 — ORCHESTRATION
    ========================================================================== */
 
-var dernierDim = null;
+var dernierDim = null, dernierNet = null;
+
+/** Signature des paramètres dont dépend le réseau 2D : le calcul est invalidé dès qu'ils changent. */
+function signatureNet(p){
+  return JSON.stringify([p.H_am, p.Z_TNam, p.Z_TNav, p.H_av_opt, p.Z_plaf, p.B_dig, p.x_ecr,
+    p.type, p.b, p.z_pied, p.K_ecr, p.rho,
+    p.couches.map(function(c){ return [c.zToit, c.zBase, c.K]; })]);
+}
+
+/** Lance la résolution 2D et met à jour le §8 puis la coupe. */
+function lancerReseau(){
+  var p = lireParams(), R = Calc.calculComplet(p);
+  if (!R.ok){ $("resNet").innerHTML = '<div class="msg msg-err">Corriger d\'abord les erreurs de saisie.</div>'; return; }
+  $("etatNet").textContent = "calcul en cours…";
+  setTimeout(function(){
+    var t0 = Date.now();
+    var F = Flownet.resoudre({
+      xToe0:0, xToe1:p.B_dig, xEcr:p.x_ecr, b:R.bEff, barriere:(p.type === "palplanches"),
+      rho:R.rho, zPied:p.z_pied, Kecr:p.K_ecr,
+      Z_sub:R.Z_sub, Z_plaf:p.Z_plaf, Z_TNam:p.Z_TNam, Z_TNav:p.Z_TNav,
+      H_am:p.H_am, H_av:R.H_av, couches:R.couches,
+      nz:32, dxFine:(R.bEff > 0 ? Math.max(0.12, Math.min(0.35, R.bEff / 3)) : 0.30),
+      iter:1200, omega:1.85
+    });
+    dernierNet = { signature:signatureNet(p), res:F };
+    rendreNet(R, F, Date.now() - t0);
+    $("etatNet").textContent = "";
+    majAffichage();
+  }, 20);
+}
+
+function rendreNet(R, F, ms){
+  var p = R.p, r = R.r;
+  var dhEnt = p.H_am - F.hAmontToe, dhSous = F.hAmontToe - F.hAvalToe, dhSor = F.hAvalToe - R.H_av;
+  // Coefficient alpha qui, dans le modèle à fragments, reproduirait le débit 2D pour la
+  // seule perte de charge sous la digue : c'est un vrai coefficient de convergence au pied,
+  // dégagé des pertes d'entrée et de sortie que le modèle à fragments ne représente pas.
+  var alphaEq = null;
+  if (F.q > 0 && dhSous > 0 && r.T_sous > 0 && r.D_ecran > 0){
+    var Rec = dhSous / F.q - r.R_amont - r.R_aval;
+    var invRa = (Rec > 0 ? 1 / Rec : 0)
+              - (Number.isFinite(r.R_b) ? 1 / r.R_b : 0)
+              - (Number.isFinite(r.R_serr) ? 1 / r.R_serr : 0);
+    if (invRa > 0) alphaEq = ((1 / invRa) * r.T_sous - R.bEff) / r.D_ecran;
+  }
+  var rap = R.q > 0 ? F.q / R.q : NaN;
+  var h = "";
+  h += '<div class="synth">' +
+       '<div class="tuile"><div class="lib">q &mdash; modèle à fragments</div><div class="val">' + nbz(R.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; valeur de dimensionnement</div></div>' +
+       '<div class="tuile"><div class="lib">q &mdash; calcul 2D</div><div class="val">' + nbz(F.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; ' + nb(F.q * p.L_dig * 3600, 1) + ' m&sup3;/h</div></div>' +
+       '<div class="tuile ' + (rap <= 1 ? "vert" : "rouge") + '"><div class="lib">Rapport 2D / fragments</div><div class="val">' + nb(rap, 3) + '</div><div class="u2">' +
+       (rap <= 1 ? "le modèle à fragments majore le débit" : "le modèle à fragments sous-estime le débit") + '</div></div>' +
+       "</div>";
+  h += '<h3>Décomposition de la perte de charge (calcul 2D)</h3><table><thead><tr><th>Poste</th><th class="num">&Delta;h (m)</th><th class="num">%</th><th>Représenté par le modèle à fragments&nbsp;?</th></tr></thead><tbody>';
+  function lg(nom, v, rep2){ h += "<tr><td>" + nom + '</td><td class="num">' + nb(v, 3) + '</td><td class="num">' +
+    nb(100 * v / R.DH, 1) + "</td><td>" + rep2 + "</td></tr>"; }
+  lg("Entrée &mdash; fond de ZIT vers le pied amont", dhEnt, "<strong>Non</strong> &mdash; percolation à travers la couverture, négligée");
+  lg("Sous la digue &mdash; pied amont vers pied aval", dhSous, "Oui &mdash; R_amont + R_écran + R_aval");
+  lg("Sortie &mdash; pied aval vers le terrain naturel", dhSor, "<strong>Non</strong> &mdash; remontée à travers la couverture, négligée");
+  h += '<tr style="background:var(--gris);font-weight:600"><td>Total</td><td class="num">' + nb(R.DH, 3) + '</td><td class="num">100,0</td><td></td></tr></tbody></table>';
+  if (alphaEq !== null){
+    h += '<p class="note" style="font-style:normal">Coefficient <strong>&alpha; équivalent = ' + nb(alphaEq, 2) +
+         "</strong> : valeur qui, injectée dans le modèle à fragments, reproduit le débit 2D <em>pour la seule perte de charge sous la digue</em> (" +
+         nb(dhSous, 3) + " m). Elle est donc comparable à la valeur saisie en section D (" + nb(p.alpha, 2) +
+         "), dégagée des pertes d'entrée et de sortie.</p>";
+  }
+  h += '<p class="note">Maillage ' + F.nx + " × " + F.nz + " mailles, domaine étendu de " + nb(F.Lext, 0) +
+       " m de part et d'autre (longueur de fuite de la couverture : " + nb(F.lambda, 0) + " m), " +
+       F.iterations + " itérations, résidu " + sci(F.residu, 1) + " m, " + ms + " ms. " +
+       "Solveur vérifié à mieux que 1,5 % contre la solution analytique par transformation conforme d'un rideau en couche d'épaisseur finie.</p>";
+  h += '<div class="msg msg-warn">Ce calcul 2D est un <strong>contrôle</strong>, pas la valeur de dimensionnement. Il repose sur les mêmes conductivités, tout aussi incertaines, ' +
+       "et suppose la couverture du fond de ZIT continue et non décapée. Le modèle à fragments du §1, qui néglige les pertes d'entrée et de sortie, reste l'hypothèse conservatrice.</div>";
+  $("resNet").innerHTML = h;
+  $("resNet").style.opacity = 1;
+}
 
 function majAffichage(){
   var p = lireParams();
@@ -1504,6 +1906,10 @@ function majAffichage(){
   dessinerGraphe(R, qCible, dernierDim);
 
   if (!R.ok){ $("resDim").innerHTML = ""; $("svgGraphe").innerHTML = ""; }
+  if (dernierNet && dernierNet.signature !== signatureNet(p)){
+    $("etatNet").textContent = "paramètres modifiés — relancer le calcul";
+    $("resNet").style.opacity = 0.45;
+  }
   return R;
 }
 
@@ -1624,6 +2030,7 @@ function majTypeEcran(){
   $("btnAddK").addEventListener("click", function(e){ e.preventDefault(); catK.push({ nom:"Nouveau sol", k:1e-5 }); rendreCatK(); majSelectsK(); });
   $("btnAddC").addEventListener("click", function(e){ e.preventDefault(); catC.push({ nom:"Nouveau sol", c:5 }); rendreCatC(); });
   $("btnDim").addEventListener("click", function(e){ e.preventDefault(); lancerDimensionnement(); });
+  $("btnNet").addEventListener("click", function(e){ e.preventDefault(); lancerReseau(); });
   $("btnImprimer").addEventListener("click", function(e){ e.preventDefault(); window.print(); });
 
   $("btnReset").addEventListener("click", function(e){
