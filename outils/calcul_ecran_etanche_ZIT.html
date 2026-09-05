@@ -1197,7 +1197,7 @@ function dessinerCoupe(R, iso){
   var Neq = 10;
   var xAm = p.x_ecr - R.bEff / 2, xAv = p.x_ecr + R.bEff / 2;   // faces amont et aval de l'écran
   var cx = X(p.x_ecr), cyPied = Y(p.z_pied), ySub = Y(R.Z_sub), yPlaf = Y(p.Z_plaf);
-  var arcs = [];
+  var arcs = [], eqDansEcran = "";   // équipotentielles internes à l'écran (cas de l'écran ancré)
   if (R.q > 0){
     for (var k = 1; k < Neq; k++){
       var hk = p.H_am - k * R.DH / Neq, xk = null;
@@ -1210,16 +1210,51 @@ function dessinerCoupe(R, iso){
       g.push('<line x1="' + X(xk).toFixed(1) + '" y1="' + yPlaf.toFixed(1) + '" x2="' + X(xk).toFixed(1) + '" y2="' + ySub.toFixed(1) +
              '" stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.75"/>');
     }
+    // Équipotentielles du fragment « écran » : elles ne peuvent traverser ni l'écran ni le
+    // substratum, tous deux imperméables. Chacune part donc du substratum, qu'elle rencontre
+    // perpendiculairement (verticalement), contourne le pied et vient s'appuyer perpendiculairement
+    // (horizontalement) sur une face de l'écran : c'est un faisceau en éventail autour du pied,
+    // de la face amont (charge la plus élevée) vers la face aval, et non un arc passant dessous —
+    // cette dernière forme est celle d'une ligne de courant.
     var hEcr = Math.abs(ySub - cyPied);
-    if (R.r.D_sous <= 1e-9) arcs = [];   // écran ancré : plus de contournement à représenter
+    if (R.r.D_sous <= 1e-9){
+      // Écran ancré au substratum : la charge n'est plus perdue par contournement mais dans la
+      // traversée de l'écran lui-même. Les équipotentielles sont alors internes à celui-ci, donc
+      // tracées sur sa largeur — et rien à tracer pour un rideau de palplanches, de largeur nulle.
+      // Nombre plafonné par la largeur disponible : au-delà, le tracé deviendrait illisible.
+      // La chute complète de charge au droit de l'écran reste lisible sur la ligne piézométrique.
+      var xa = X(xAm), xb = X(xAv);
+      var nInt = Math.min(arcs.length, Math.floor((xb - xa) / 5));
+      for (var ji = 0; ji < nInt; ji++){
+        var xi = xa + (xb - xa) * (ji + 1) / (nInt + 1);
+        eqDansEcran += '<line x1="' + xi.toFixed(1) + '" y1="' + yPlaf.toFixed(1) + '" x2="' + xi.toFixed(1) +
+                       '" y2="' + cyPied.toFixed(1) + '" stroke="#aed6f1" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.9"/>';
+      }
+      arcs = [];
+    }
+    var m = arcs.length;
+    // Échelle locale de la zone perturbée autour du pied : de l'ordre de la plus petite des
+    // deux dimensions qui la contraignent, l'épaisseur perméable résiduelle et la pénétration.
+    // Un plancher de 26 px garde le faisceau lisible lorsque la zone perturbée est très mince :
+    // le tracé y devient schématique, ce que signale la légende.
+    var ech = Math.min(hEcr, Math.abs(cyPied - yPlaf));
+    var etal = Math.min(Math.max(26, 1.25 * ech),
+                        0.30 * Math.min(cx - X(0), X(p.B_dig) - cx));   // étalement horizontal
+    // xe1/xe2 ne sont définis que plus bas (tracé de l'écran) : recalcul direct ici
+    var demiEcr = Math.max(2.5, (X(xAv) - X(xAm)) / 2);
     arcs.forEach(function(hk, j){
-      var rf = (j + 1) / (arcs.length + 1);
-      var rx = Math.max(10, (0.20 + 0.80 * rf) * Math.max(26, hEcr * 1.25));
-      var ry = (0.20 + 0.80 * rf) * Math.max(8, hEcr * 0.92);
-      g.push('<path d="M' + (cx - rx).toFixed(1) + "," + yPlaf.toFixed(1) +
-             " C" + (cx - rx).toFixed(1) + "," + (cyPied + ry).toFixed(1) +
-             " " + (cx + rx).toFixed(1) + "," + (cyPied + ry).toFixed(1) +
-             " " + (cx + rx).toFixed(1) + "," + yPlaf.toFixed(1) +
+      var u = 2 * (j + 0.5) / m - 1;                       // −1 côté amont … +1 côté aval
+      var sgn = (u < 0) ? -1 : 1;
+      var xPied = cx + u * etal;                           // pied de l'équipotentielle sur le substratum
+      var monte = Math.abs(u) * Math.min(Math.max(26, 1.25 * ech), 0.45 * (cyPied - yPlaf));
+      var yAtt = cyPied - monte;                           // point d'appui sur la face de l'écran
+      var xAtt = cx + sgn * demiEcr;
+      var c1y = ySub - 0.60 * (ySub - yAtt);
+      var c2x = xAtt + sgn * Math.max(6, 0.35 * Math.abs(xPied - xAtt));
+      g.push('<path d="M' + xPied.toFixed(1) + "," + ySub.toFixed(1) +
+             " C" + xPied.toFixed(1) + "," + c1y.toFixed(1) +
+             " " + c2x.toFixed(1) + "," + yAtt.toFixed(1) +
+             " " + xAtt.toFixed(1) + "," + yAtt.toFixed(1) +
              '" fill="none" stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.75"/>');
     });
 
@@ -1256,6 +1291,7 @@ function dessinerCoupe(R, iso){
   var fillEcr = (p.type === "palplanches") ? "#2c3e50" : "url(#pArgile)";
   g.push('<rect x="' + xe1.toFixed(1) + '" y="' + yPlaf.toFixed(1) + '" width="' + (xe2 - xe1).toFixed(1) +
          '" height="' + Math.max(0, cyPied - yPlaf).toFixed(1) + '" fill="' + fillEcr + '" stroke="#1b2631" stroke-width="1.2"/>');
+  if (eqDansEcran) g.push(eqDansEcran);   // tracées par-dessus l'écran, qui est opaque
   g.push("</g>");
 
   /* --- Ligne piézométrique --- */
@@ -1345,7 +1381,10 @@ function dessinerCoupe(R, iso){
     "Traits bleus continus fléchés&nbsp;: lignes de courant, tracées en tubes de débit égal — chacune sépare deux cinquièmes du débit, " +
     "de sorte que leur densité reflète la transmissivité K&nbsp;×&nbsp;e de chaque couche et non son épaisseur. " +
     "Elles restent horizontales à la traversée des interfaces&nbsp;: l'approximation de Dupuit exclut toute réfraction. " +
-    "Traits bleus pointillés&nbsp;: équipotentielles (une ligne par dixième de ΔH). " +
+    "Traits bleus pointillés&nbsp;: équipotentielles, une ligne par dixième de ΔH, positionnées d'après la répartition de charge calculée — " +
+    "verticales dans les fragments amont et aval (charge uniforme sur la verticale), en éventail autour du pied de l'écran, " +
+    "où elles s'appuient perpendiculairement sur le substratum et sur les faces de l'écran. L'étendue de cet éventail est schématique&nbsp;: " +
+    "le modèle à fragments ne calcule pas le champ 2D au voisinage du pied. " +
     "Trait rouge tireté&nbsp;: ligne piézométrique du modèle à fragments. " +
     (Math.abs(exag - 1) < 0.02 ? "Échelles horizontale et verticale identiques."
                                : "<strong>Exagération verticale ×" + nb(exag, 1) + "</strong> — cocher la case ci-dessous pour un tracé à échelles égales.");
