@@ -260,6 +260,7 @@ footer li{margin-bottom:4px}
   <ul>
     <li><strong>Régime permanent</strong> alors que le remplissage d'une ZIT est un phénomène transitoire&nbsp;: la charge amont est atteinte progressivement et le régime d'écoulement souterrain s'établit avec un temps de retard. Le calcul est donc <strong>conservateur en volume infiltré</strong>.</li>
     <li><strong>Approximation de Dupuit</strong>&nbsp;: lignes de courant supposées horizontales et charge supposée uniforme sur la verticale, hors du voisinage immédiat de l'écran. Cette hypothèse est d'autant moins valide que le rapport épaisseur d'aquifère / longueur d'écoulement est grand.</li>
+    <li><strong>Pas de réfraction des lignes de courant</strong> aux interfaces entre couches de conductivités différentes. La loi des tangentes (tan&nbsp;θ<sub>1</sub>&nbsp;/&nbsp;tan&nbsp;θ<sub>2</sub>&nbsp;=&nbsp;K<sub>1</sub>&nbsp;/&nbsp;K<sub>2</sub>) suppose une composante verticale d'écoulement, que l'approximation de Dupuit exclut par construction&nbsp;: la charge y est uniforme sur la verticale et les couches fonctionnent en parallèle, chacune transportant un débit proportionnel à sa transmissivité. Cet effet, réel au voisinage du pied de l'écran où l'écoulement traverse effectivement les interfaces en oblique, n'est ni calculé ni représenté&nbsp;; seule une modélisation 2D le restitue.</li>
     <li><strong>Milieu supposé isotrope au sein de chaque couche</strong> (K<sub>h</sub> = K<sub>v</sub>). L'anisotropie réelle des alluvions, souvent d'un facteur 3 à 10 en faveur de l'horizontale, n'est pas prise en compte&nbsp;: elle tendrait à augmenter le débit contourné et à réduire l'efficacité de l'écran.</li>
     <li><strong>Milieu entièrement saturé</strong>&nbsp;: ni la zone non saturée, ni la succion capillaire, ni le stockage dans la porosité efficace ne sont modélisés.</li>
     <li><strong>Écran homogène et continu</strong>&nbsp;: ni le colmatage progressif, ni la fissuration de dessiccation de l'argile en période sèche, ni les défauts de mise en œuvre (joints de panneaux, ancrage du pied, déchirure de serrures) ne sont modélisés. Ces défauts sont en pratique la première cause d'écart entre calcul et mesure.</li>
@@ -374,6 +375,25 @@ var Calc = (function(){
       if (e > 1e-9) d.push({ i: i, nom: couches[i].nom, K: couches[i].K, e: e, T: couches[i].K * e });
     }
     return d;
+  }
+
+  /** Cote z telle que la transmissivité cumulée depuis le substratum jusqu'à z représente
+   *  la fraction demandée de celle cumulée jusqu'à zMax. Sert à tracer des tubes de courant
+   *  de débit égal : dans l'approximation de Dupuit, chaque couche transporte un débit
+   *  proportionnel à K_i × e_i, et non à son épaisseur seule. */
+  function coteFractionT(couches, Z_sub, zMax, frac){
+    var Tref = transmissivite(couches, Z_sub, zMax);
+    if (!(Tref > 0)) return Z_sub;
+    var cible = frac * Tref, cumul = 0;
+    var tri = couches.slice().sort(function(a, b){ return a.zBase - b.zBase; });   // du bas vers le haut
+    for (var i = 0; i < tri.length; i++){
+      var bas = Math.max(tri[i].zBase, Z_sub), haut = Math.min(tri[i].zToit, zMax);
+      if (haut <= bas) continue;
+      var dT = tri[i].K * (haut - bas);
+      if (cumul + dT >= cible) return bas + (cible - cumul) / tri[i].K;
+      cumul += dT;
+    }
+    return zMax;
   }
 
   /** Noyau du modèle : résistances en série + chemins parallèles au droit de l'écran.
@@ -673,7 +693,7 @@ var Calc = (function(){
     return pts;
   }
 
-  return { overlap:overlap, transmissivite:transmissivite, detailT:detailT,
+  return { overlap:overlap, transmissivite:transmissivite, detailT:detailT, coteFractionT:coteFractionT,
            calculDebit:calculDebit, repartitionCharges:repartitionCharges,
            verifLane:verifLane, chargeExces:chargeExces, verifRenard:verifRenard,
            verifGradient:verifGradient, verifResurgence:verifResurgence,
@@ -1206,10 +1226,14 @@ function dessinerCoupe(R, iso){
     /* Lignes de courant contournant le pied de l'écran */
     if (R.r.D_sous > 1e-9){
       var Nl = 5;
+      var zPiedEff = Math.min(p.z_pied, p.Z_plaf);
       for (var j2 = 0; j2 < Nl; j2++){
+        // Tubes de courant de débit égal : la ligne j sépare les fractions j/N et (j+1)/N
+        // du débit total. Sa position suit donc la transmissivité cumulée, pas l'épaisseur :
+        // les lignes se concentrent dans les couches les plus perméables.
         var fr = (j2 + 0.5) / Nl;
-        var zFar = p.Z_plaf - fr * R.E_tot;
-        var zTip = p.z_pied - fr * R.r.D_sous;
+        var zFar = Calc.coteFractionT(R.couches, R.Z_sub, p.Z_plaf, fr);
+        var zTip = Calc.coteFractionT(R.couches, R.Z_sub, zPiedEff, fr);
         var d = "M" + X(xMin).toFixed(1) + "," + Y(zFar).toFixed(1) +
                 " L" + X(0).toFixed(1) + "," + Y(zFar).toFixed(1) +
                 " C" + X(xAm * 0.55).toFixed(1) + "," + Y(zFar).toFixed(1) +
@@ -1318,7 +1342,10 @@ function dessinerCoupe(R, iso){
 
   svg.innerHTML = g.join("");
   $("legendeCoupe").innerHTML =
-    "Traits bleus continus fléchés&nbsp;: lignes de courant. Traits bleus pointillés&nbsp;: équipotentielles (une ligne par dixième de ΔH). " +
+    "Traits bleus continus fléchés&nbsp;: lignes de courant, tracées en tubes de débit égal — chacune sépare deux cinquièmes du débit, " +
+    "de sorte que leur densité reflète la transmissivité K&nbsp;×&nbsp;e de chaque couche et non son épaisseur. " +
+    "Elles restent horizontales à la traversée des interfaces&nbsp;: l'approximation de Dupuit exclut toute réfraction. " +
+    "Traits bleus pointillés&nbsp;: équipotentielles (une ligne par dixième de ΔH). " +
     "Trait rouge tireté&nbsp;: ligne piézométrique du modèle à fragments. " +
     (Math.abs(exag - 1) < 0.02 ? "Échelles horizontale et verticale identiques."
                                : "<strong>Exagération verticale ×" + nb(exag, 1) + "</strong> — cocher la case ci-dessous pour un tracé à échelles égales.");
