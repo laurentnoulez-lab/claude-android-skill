@@ -1318,22 +1318,31 @@ var Flownet = (function(){
     return { iterations:it, residu:res };
   }
 
-  /* ---------- Assemblage et résolution ---------- */
+  /* ---------- Assemblage et résolution ----------
+     Le domaine englobe la fondation ET, lorsque le corps de digue est perméable, le remblai.
+     Dans le remblai la nappe est libre : sa surface est inconnue et déterminée par itérations
+     de Picard sur une perméabilité relative kr(h − z) lissée — kr = 1 sous la surface libre,
+     kr = kr_min au-dessus, avec une rampe sur deux mailles qui évite les oscillations du
+     schéma d'activation/désactivation brutale. Le talus aval porte une surface de suintement :
+     ses mailles sont à charge imposée h = z tant que le flux en sort, relâchées sinon. */
   function resoudre(P){
-    var Zt = Math.max(P.Z_TNam, P.Z_plaf, P.Z_TNav);
+    var digue = (P.K_digue > 0 && P.Z_crete > P.Z_plaf);
+    var Zt = Math.max(P.Z_TNam, P.Z_plaf, P.Z_TNav, digue ? P.Z_crete : -Infinity);
     var E  = Zt - P.Z_sub;
-    // Longueur de fuite de la couverture : fixe l'extension utile du domaine amont
+
+    // Longueur de fuite de la couverture : fixe l'extension utile du domaine
     var Tt = 0, cov = P.couches[0];
     for (var c0 = 0; c0 < P.couches.length; c0++)
-      Tt += P.couches[c0].K * Math.max(0, Math.min(P.couches[c0].zToit, Zt) - Math.max(P.couches[c0].zBase, P.Z_sub));
+      Tt += P.couches[c0].K * Math.max(0, Math.min(P.couches[c0].zToit, P.Z_plaf) - Math.max(P.couches[c0].zBase, P.Z_sub));
     var eCov = Math.max(0.1, Math.min(cov.zToit, Zt) - Math.max(cov.zBase, P.Z_sub));
-    var lam  = Math.sqrt(Tt * eCov / Math.max(cov.K, 1e-12));
-    var Lext = Math.min(4000, Math.max(8 * E, 3.5 * lam));
+    var lam  = Math.sqrt(Math.max(Tt, 1e-14) * eCov / Math.max(cov.K, 1e-14));
+    var Lext = Math.min(4000, Math.max(8 * (P.Z_plaf - P.Z_sub), 3.5 * lam, 20));
 
-    var bg = P.barriere ? 0 : P.b;
-    var xs = maillageX([P.xToe0, P.xToe1, P.xEcr - bg/2, P.xEcr + bg/2, P.xEcr],
-                       Math.min(P.xToe0, P.xEcr) - Lext, Math.max(P.xToe1, P.xEcr) + Lext,
-                       P.dxFine);
+    var bg  = P.barriere ? 0 : P.b;
+    var xc1 = (P.xToe0 + P.xToe1 - P.b_crete) / 2, xc2 = xc1 + P.b_crete;
+    var xDr = P.xToe1 - (P.Ld || 0);                       // amont du tapis drainant
+    var xs  = maillageX([P.xToe0, P.xToe1, xc1, xc2, xDr, P.xEcr - bg/2, P.xEcr + bg/2, P.xEcr],
+                        Math.min(P.xToe0, P.xEcr) - Lext, Math.max(P.xToe1, P.xEcr) + Lext, P.dxFine);
     var nz = P.nz, nx = xs.length - 1;
     var zs = []; for (var j0 = 0; j0 <= nz; j0++) zs.push(P.Z_sub + E * j0 / nz);
 
@@ -1342,65 +1351,153 @@ var Flownet = (function(){
     for (j=0;j<nz;j++){ dz.push(zs[j+1]-zs[j]); zc.push(0.5*(zs[j]+zs[j+1])); }
 
     var N = nx*nz;
-    var K=new Float64Array(N), h=new Float64Array(N);
-    var fixe=new Uint8Array(N), actif=new Uint8Array(N);
-    var id = function(i,j){ return j*nx+i; };
+    var K=new Float64Array(N), h=new Float64Array(N), kr=new Float64Array(N);
+    var fixe=new Uint8Array(N), actif=new Uint8Array(N), estDigue=new Uint8Array(N), suint=new Uint8Array(N);
+    var id = function(a,b){ return b*nx+a; };
 
     function Ksol(z){
       for (var c=0;c<P.couches.length;c++)
         if (z <= P.couches[c].zToit + 1e-12 && z >= P.couches[c].zBase - 1e-12) return P.couches[c].K;
       return P.couches[P.couches.length-1].K;
     }
-    function surface(x){
-      if (x < P.xToe0 - 1e-9) return { z:P.Z_TNam, h:P.H_am };
-      if (x > P.xToe1 + 1e-9) return { z:P.Z_TNav, h:P.H_av };
-      return { z:P.Z_plaf, h:null };
+    /** Cote de la surface du domaine : terrain naturel, ou profil du remblai entre les pieds. */
+    function zSurf(x){
+      if (x < P.xToe0 - 1e-9) return P.Z_TNam;
+      if (x > P.xToe1 + 1e-9) return P.Z_TNav;
+      if (!digue) return P.Z_plaf;
+      if (x <= xc1) return P.Z_plaf + (P.Z_crete - P.Z_plaf) * (x - P.xToe0) / Math.max(xc1 - P.xToe0, 1e-9);
+      if (x >= xc2) return P.Z_plaf + (P.Z_crete - P.Z_plaf) * (P.xToe1 - x) / Math.max(P.xToe1 - xc2, 1e-9);
+      return P.Z_crete;
     }
+    var hDrain = Math.max(P.Z_plaf, P.H_av);               // charge à l'exutoire du drain
+
     var xa = P.xEcr - bg/2, xb = P.xEcr + bg/2;
+    var jTop = new Int32Array(nx).fill(-1);
     for (i=0;i<nx;i++){
-      var sf = surface(xc[i]);
+      var zsf = zSurf(xc[i]), dansDigue = (xc[i] > P.xToe0 - 1e-9 && xc[i] < P.xToe1 + 1e-9);
       for (j=0;j<nz;j++){
         var k = id(i,j);
-        if (zc[j] > sf.z){ actif[k]=0; continue; }
-        actif[k]=1;
-        var dedans = (!P.barriere && xc[i] > xa - 1e-9 && xc[i] < xb + 1e-9 &&
-                      zc[j] < P.Z_plaf + 1e-9 && zc[j] > P.zPied - 1e-9);
-        K[k] = dedans ? Math.max(P.Kecr, 1e-12) : Ksol(zc[j]);
-        h[k] = P.H_av + (P.H_am - P.H_av) * (xc[i] < P.xEcr ? 0.75 : 0.25);
-      }
-      if (sf.h !== null){
-        var jT=-1; for (j=nz-1;j>=0;j--) if (actif[id(i,j)]){ jT=j; break; }
-        if (jT>=0){ h[id(i,jT)]=sf.h; fixe[id(i,jT)]=1; }
+        if (zc[j] > zsf){ actif[k]=0; continue; }
+        actif[k]=1; jTop[i]=j;
+        if (digue && dansDigue && zc[j] > P.Z_plaf){
+          estDigue[k]=1; K[k]=P.K_digue;
+        } else {
+          var ecr = (!P.barriere && xc[i] > xa - 1e-9 && xc[i] < xb + 1e-9 &&
+                     zc[j] < P.Z_plaf + 1e-9 && zc[j] > P.zPied - 1e-9);
+          K[k] = ecr ? Math.max(P.Kecr, 1e-12) : Ksol(zc[j]);
+        }
+        kr[k] = 1;
+        h[k] = P.H_av + (P.H_am - P.H_av) * (xc[i] < P.xEcr ? 0.7 : 0.3);
       }
     }
 
-    var Cx=new Float64Array((nx+1)*nz), Cz=new Float64Array(nx*(nz+1));
-    for (i=0;i<nx-1;i++) for (j=0;j<nz;j++){
-      var A=id(i,j), B=id(i+1,j); if(!actif[A]||!actif[B]) continue;
-      Cx[(i+1)*nz+j] = 2*dz[j] / (dx[i]/K[A] + dx[i+1]/K[B]);
+    /* ---- Conditions aux limites sur les mailles EXPOSÉES ----
+       Le parement discrétisé forme un escalier : imposer la charge sur la seule maille
+       sommitale de chaque colonne laisse les contremarches verticales en flux nul et
+       étrangle l'entrée. Toute maille active ayant un voisin inactif au-dessus, à gauche
+       ou à droite est donc traitée comme une maille de parement. */
+    for (i=0;i<nx;i++) for (j=0;j<nz;j++){
+      var kb = id(i,j); if (!actif[kb]) continue;
+      var gA = (i>0)    ? actif[id(i-1,j)] : 1;      // bord de maillage : pas une exposition
+      var dR = (i<nx-1) ? actif[id(i+1,j)] : 1;
+      // La rangée sommitale est une surface physique, non un bord artificiel : elle est exposée.
+      var hT = (j<nz-1) ? actif[id(i,j+1)] : 0;
+      if (gA && dR && hT) continue;                  // maille interne
+      if (xc[i] < P.xToe0 - 1e-9){                   // fond de ZIT : contact avec l'eau stockée
+        if (zc[j] <= P.H_am + 1e-9){ h[kb]=P.H_am; fixe[kb]=1; }
+      } else if (xc[i] > P.xToe1 + 1e-9){            // terrain naturel aval
+        if (j === jTop[i]){ h[kb]=P.H_av; fixe[kb]=1; }
+      } else if (digue){
+        // La face exposée décide, non la position : un parement vertical n'est exposé qu'en
+        // flanc, un parement en pente l'est en flanc et en sommet.
+        var resAm  = (!gA && zc[j] <= P.H_am + 1e-9) ||
+                     (!hT && xc[i] <= xc1 + 1e-9 && zSurf(xc[i]) <= P.H_am + 1e-9);
+        var resAv  = (!dR) || (!hT && xc[i] >= xc2 - 1e-9);
+        if (resAm){ h[kb]=P.H_am; fixe[kb]=1; }
+        else if (resAv){
+          if (zc[j] <= P.H_av + 1e-9){ h[kb]=P.H_av; fixe[kb]=1; }   // parement noyé par l'aval
+          else { suint[kb]=1; h[kb]=zc[j]; fixe[kb]=1; }             // surface de suintement
+        }
+      }
     }
-    for (i=0;i<nx;i++) for (j=0;j<nz-1;j++){
-      var A2=id(i,j), B2=id(i,j+1); if(!actif[A2]||!actif[B2]) continue;
-      Cz[i*(nz+1)+j+1] = 2*dx[i] / (dz[j]/K[A2] + dz[j+1]/K[B2]);
+
+    /* ---- Tapis drainant : mailles de remblai à charge imposée à l'exutoire ---- */
+    if (digue && P.Ld > 0){
+      for (i=0;i<nx;i++){
+        if (xc[i] < xDr - 1e-9 || xc[i] > P.xToe1 + 1e-9) continue;
+        for (j=0;j<nz;j++){ var kd = id(i,j);
+          if (actif[kd] && estDigue[kd]){ h[kd]=hDrain; fixe[kd]=1; suint[kd]=0; break; } }
+      }
     }
-    // Rideau de palplanches : barrière d'épaisseur nulle sur une face de colonne,
-    // conductance résiduelle = perméabilité de serrure rho fois la hauteur de la maille.
+
+    var Cx=new Float64Array((nx+1)*nz), Cz=new Float64Array(nx*(nz+1)), diag=new Float64Array(N);
     var iBar = -1;
     if (P.barriere){
       iBar = 0;
       for (i=0;i<=nx;i++) if (Math.abs(xs[i]-P.xEcr) < Math.abs(xs[iBar]-P.xEcr)) iBar = i;
-      for (j=0;j<nz;j++)
+    }
+    function assembler(){
+      Cx.fill(0); Cz.fill(0); diag.fill(0);
+      for (i=0;i<nx-1;i++) for (j=0;j<nz;j++){
+        var A=id(i,j), B=id(i+1,j); if(!actif[A]||!actif[B]) continue;
+        var KA=K[A]*kr[A], KB=K[B]*kr[B];
+        Cx[(i+1)*nz+j] = 2*dz[j] / (dx[i]/KA + dx[i+1]/KB);
+      }
+      for (i=0;i<nx;i++) for (j=0;j<nz-1;j++){
+        var A2=id(i,j), B2=id(i,j+1); if(!actif[A2]||!actif[B2]) continue;
+        var KA2=K[A2]*kr[A2], KB2=K[B2]*kr[B2];
+        Cz[i*(nz+1)+j+1] = 2*dx[i] / (dz[j]/KA2 + dz[j+1]/KB2);
+      }
+      if (iBar >= 0) for (j=0;j<nz;j++)
         if (zc[j] < P.Z_plaf + 1e-9 && zc[j] > P.zPied - 1e-9)
           Cx[iBar*nz+j] = (P.rho > 0) ? P.rho * dz[j] : 0;
+      for (i=0;i<nx;i++) for (j=0;j<nz;j++){
+        var k2=id(i,j); if(!actif[k2]) continue;
+        diag[k2] = Cx[i*nz+j] + Cx[(i+1)*nz+j] + Cz[i*(nz+1)+j] + Cz[i*(nz+1)+j+1];
+      }
+    }
+    /** Flux net entrant dans une maille à charge imposée (positif = l'eau entre). */
+    function fluxEntrant(i,j){
+      var k3=id(i,j), s=0;
+      if (i>0)    s += Cx[i*nz+j]     * (h[id(i-1,j)] - h[k3]);
+      if (i<nx-1) s += Cx[(i+1)*nz+j] * (h[id(i+1,j)] - h[k3]);
+      if (j>0)    s += Cz[i*(nz+1)+j]   * (h[id(i,j-1)] - h[k3]);
+      if (j<nz-1) s += Cz[i*(nz+1)+j+1] * (h[id(i,j+1)] - h[k3]);
+      return s;
     }
 
-    var diag=new Float64Array(N);
-    for (i=0;i<nx;i++) for (j=0;j<nz;j++){
-      var k2=id(i,j); if(!actif[k2]) continue;
-      diag[k2] = Cx[i*nz+j] + Cx[(i+1)*nz+j] + Cz[i*(nz+1)+j] + Cz[i*(nz+1)+j+1];
+    var nOut = digue ? (P.outer || 18) : 1;
+    var inner = digue ? (P.inner || 130) : (P.iter || 1200);
+    var epsKr = 1.0 * (E / nz), krMin = 1e-6, info = {iterations:0, residu:0}, chg = 0;
+    for (var out = 0; out < nOut; out++){
+      if (digue){                                        // perméabilité relative (surface libre)
+        for (i=0;i<nx;i++) for (j=0;j<nz;j++){
+          var k4=id(i,j); if(!actif[k4]||!estDigue[k4]) continue;
+          if (fixe[k4]){ kr[k4]=1; continue; }   // limite imposée : maille saturée par définition
+          var d4 = h[k4] - zc[j];
+          kr[k4] = (d4 >= 0) ? 1 : (d4 <= -epsKr ? krMin : krMin + (1-krMin)*(1 + d4/epsKr));
+        }
+      }
+      assembler();
+      info = relaxer({nx:nx,nz:nz,h:h,Cx:Cx,Cz:Cz,actif:actif,fixe:fixe,diag:diag},
+                     inner, P.omega || 1.85, (P.tol || 1e-9)*Math.abs(P.H_am-P.H_av));
+      if (!digue) break;
+      chg = 0;                                           // mise à jour de la surface de suintement
+      for (i=0;i<nx;i++){
+        if (xc[i] < P.xToe0 - 1e-9 || xc[i] > P.xToe1 + 1e-9) continue;
+        for (j=0;j<nz;j++){
+          var kS = id(i,j); if (!actif[kS] || !estDigue[kS]) continue;
+          var gA2 = (i>0)?actif[id(i-1,j)]:1, dR2 = (i<nx-1)?actif[id(i+1,j)]:1, hT2 = (j<nz-1)?actif[id(i,j+1)]:0;
+          if (gA2 && dR2 && hT2) continue;
+          // Une maille de suintement évacue l'eau : flux net entrant positif. Un flux négatif
+          // voudrait dire que l'eau rentre depuis l'atmosphère : la maille est en fait sèche.
+          if (suint[kS] && fluxEntrant(i,j) < 0){ suint[kS]=0; fixe[kS]=0; chg++; }
+          else if (!suint[kS] && !fixe[kS] && h[kS] > zc[j] + 1e-6 && (!dR2 || (!hT2 && xc[i] >= xc2 - 1e-9))){
+            suint[kS]=1; fixe[kS]=1; h[kS]=zc[j]; chg++; }
+        }
+      }
+      if (out > 5 && chg === 0 && info.residu < 1e-7 * Math.abs(P.H_am - P.H_av)) break;
     }
-    var info = relaxer({nx:nx,nz:nz,h:h,Cx:Cx,Cz:Cz,actif:actif,fixe:fixe,diag:diag},
-                       P.iter||1200, P.omega||1.85, (P.tol||1e-9)*Math.abs(P.H_am-P.H_av));
 
     /* fonction de courant aux coins : psi = 0 le long du substratum imperméable */
     var psi=[]; for (i=0;i<=nx;i++) psi.push(new Float64Array(nz+1));
@@ -1412,17 +1509,32 @@ var Flownet = (function(){
     }
     function colonne(x){ var b0=0; for (var i5=0;i5<=nx;i5++) if (Math.abs(xs[i5]-x)<Math.abs(xs[b0]-x)) b0=i5; return b0; }
     var iE = colonne(P.xEcr);
-    var q = Math.abs(psi[iE][nz]);
+    var jPlaf = 0; for (j=0;j<=nz;j++) if (Math.abs(zs[j]-P.Z_plaf) < Math.abs(zs[jPlaf]-P.Z_plaf)) jPlaf = j;
+    var qTot  = Math.abs(psi[iE][nz]);
+    var qFond = Math.abs(psi[iE][jPlaf]);
+    var qDig  = Math.max(0, qTot - qFond);
 
-    /* charge moyenne, pondérée par la transmissivité, sur une verticale */
     function chargeMoy(x){
       var ic = Math.min(nx-1, Math.max(0, colonne(x) - 1)), num=0, den=0;
-      for (var j5=0;j5<nz;j5++){ var k5=id(ic,j5); if(!actif[k5]) continue;
+      for (var j5=0;j5<nz;j5++){ var k5=id(ic,j5); if(!actif[k5]||zc[j5]>P.Z_plaf) continue;
         var w5 = K[k5]*dz[j5]; num += w5*h[k5]; den += w5; }
       return den>0 ? num/den : NaN;
     }
-    return { xs:xs, zs:zs, nx:nx, nz:nz, h:h, psi:psi, actif:actif, K:K,
-             q:q, Lext:Lext, lambda:lam, iterations:info.iterations, residu:info.residu,
+    // Ligne de saturation calculée : par colonne, cote où h = z dans le remblai
+    var satur = [];
+    if (digue){
+      for (i=0;i<nx;i++){
+        if (xc[i] < P.xToe0 - 1e-9 || xc[i] > P.xToe1 + 1e-9) continue;
+        var zsat = null;
+        for (j=nz-1;j>=0;j--){ var k6=id(i,j);
+          if (actif[k6] && estDigue[k6] && h[k6] >= zc[j]){ zsat = Math.min(h[k6], zSurf(xc[i])); break; } }
+        if (zsat !== null) satur.push([xc[i], zsat]);
+      }
+    }
+    return { xs:xs, zs:zs, nx:nx, nz:nz, h:h, psi:psi, actif:actif, K:K, estDigue:estDigue,
+             q:qTot, qFond:qFond, qDigue:qDig, digue:digue, satur:satur,
+             Lext:Lext, lambda:lam, iterations:info.iterations, residu:info.residu,
+             outer:out, chgSuint:chg,
              hAmontToe:chargeMoy(P.xToe0 - 1e-6), hAvalToe:chargeMoy(P.xToe1 + 1e-6),
              iBar:iBar, bg:bg };
   }
@@ -1680,6 +1792,15 @@ function dessinerCoupe(R, iso){
     for (var ce = 0; ce < ctEq.length; ce++)
       poly(ctEq[ce].lignes, 'stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.8"');
 
+    if (F.digue && F.satur && F.satur.length > 1){
+      var dSat = "";
+      for (var ks = 0; ks < F.satur.length; ks++)
+        dSat += (ks === 0 ? "M" : "L") + X(F.satur[ks][0]).toFixed(1) + "," + Y(F.satur[ks][1]).toFixed(1) + " ";
+      g.push('<path d="' + dSat + '" fill="none" stroke="#0e6655" stroke-width="2.2"/>');
+      g.push('<text x="' + X(F.satur[Math.floor(F.satur.length * 0.55)][0]).toFixed(1) + '" y="' +
+             (Y(F.satur[Math.floor(F.satur.length * 0.55)][1]) - 6).toFixed(1) +
+             '" font-size="10" fill="#0e6655">surface libre calculée</text>');
+    }
     if (F.q > 0){
       var nivPsi = [];
       for (var kp = 1; kp <= 5; kp++) nivPsi.push(kp * F.q / 6);
@@ -2003,13 +2124,16 @@ function lancerReseau(){
   $("etatNet").textContent = "calcul en cours…";
   setTimeout(function(){
     var t0 = Date.now();
+    var avecDigue = (p.K_digue > 0);
     var F = Flownet.resoudre({
       xToe0:0, xToe1:p.B_dig, xEcr:p.x_ecr, b:R.bEff, barriere:(p.type === "palplanches"),
       rho:R.rho, zPied:p.z_pied, Kecr:p.K_ecr,
       Z_sub:R.Z_sub, Z_plaf:p.Z_plaf, Z_TNam:p.Z_TNam, Z_TNav:p.Z_TNav,
+      b_crete:p.b_crete, Z_crete:p.Z_crete, K_digue:p.K_digue,
+      Ld:(p.drain === "pied" ? Math.max(0, p.L_drain) : 0),
       H_am:p.H_am, H_av:R.H_av, couches:R.couches,
-      nz:32, dxFine:(R.bEff > 0 ? Math.max(0.12, Math.min(0.35, R.bEff / 3)) : 0.30),
-      iter:1200, omega:1.85
+      nz:(avecDigue ? 64 : 32), dxFine:(R.bEff > 0 ? Math.max(0.12, Math.min(0.35, R.bEff / 3)) : 0.30),
+      iter:1200, outer:20, inner:250, omega:1.85
     });
     dernierNet = { signature:signatureNet(p), res:F };
     rendreNet(R, F, Date.now() - t0);
@@ -2033,14 +2157,22 @@ function rendreNet(R, F, ms){
     if (invRa > 0) alphaEq = ((1 / invRa) * r.T_sous - R.bEff) / r.D_ecran;
   }
   // Le solveur 2D traite la fondation ; la percolation dans le remblai en est exclue.
-  var rap = R.qFond > 0 ? F.q / R.qFond : NaN;
+  var rap = R.qFond > 0 ? F.qFond / R.qFond : NaN;
   var h = "";
   h += '<div class="synth">' +
        '<div class="tuile"><div class="lib">q fondation &mdash; fragments</div><div class="val">' + nbz(R.qFond * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; valeur de dimensionnement</div></div>' +
-       '<div class="tuile"><div class="lib">q fondation &mdash; calcul 2D</div><div class="val">' + nbz(F.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; ' + nb(F.q * p.L_dig * 3600, 1) + ' m&sup3;/h</div></div>' +
+       '<div class="tuile"><div class="lib">q fondation &mdash; calcul 2D</div><div class="val">' + nbz(F.qFond * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; ' + nb(F.qFond * p.L_dig * 3600, 1) + ' m&sup3;/h</div></div>' +
        '<div class="tuile ' + (rap <= 1 ? "vert" : "rouge") + '"><div class="lib">Rapport 2D / fragments</div><div class="val">' + nb(rap, 3) + '</div><div class="u2">' +
        (rap <= 1 ? "le modèle à fragments majore le débit" : "le modèle à fragments sous-estime le débit") + '</div></div>' +
        "</div>";
+  if (F.digue){
+    var rapD = R.qDigue > 0 ? F.qDigue / R.qDigue : NaN;
+    h += '<h3>Percolation dans le remblai &mdash; surface libre calculée</h3><div class="synth">' +
+         '<div class="tuile"><div class="lib">q remblai &mdash; Kozeny / Casagrande</div><div class="val">' + nbz(R.qDigue * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; §1</div></div>' +
+         '<div class="tuile"><div class="lib">q remblai &mdash; calcul 2D</div><div class="val">' + nbz(F.qDigue * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; nappe libre et suintement résolus</div></div>' +
+         '<div class="tuile"><div class="lib">Rapport 2D / analytique</div><div class="val">' + nb(rapD, 2) + '</div><div class="u2">écart entre les deux méthodes</div></div>' +
+         "</div>";
+  }
   h += '<h3>Décomposition de la perte de charge (calcul 2D)</h3><table><thead><tr><th>Poste</th><th class="num">&Delta;h (m)</th><th class="num">%</th><th>Représenté par le modèle à fragments&nbsp;?</th></tr></thead><tbody>';
   function lg(nom, v, rep2){ h += "<tr><td>" + nom + '</td><td class="num">' + nb(v, 3) + '</td><td class="num">' +
     nb(100 * v / R.DH, 1) + "</td><td>" + rep2 + "</td></tr>"; }
@@ -2056,10 +2188,14 @@ function rendreNet(R, F, ms){
   }
   h += '<p class="note">Maillage ' + F.nx + " × " + F.nz + " mailles, domaine étendu de " + nb(F.Lext, 0) +
        " m de part et d'autre (longueur de fuite de la couverture : " + nb(F.lambda, 0) + " m), " +
-       F.iterations + " itérations, résidu " + sci(F.residu, 1) + " m, " + ms + " ms. " +
-       "Solveur vérifié à mieux que 1,5 % contre la solution analytique par transformation conforme d'un rideau en couche d'épaisseur finie.</p>";
+       F.iterations + " itérations internes, résidu " + sci(F.residu, 1) + " m" +
+       (F.digue ? ", " + (F.outer + 1) + " itérations de surface libre" + (F.chgSuint ? " (surface de suintement non stabilisée)" : " (surface de suintement stabilisée)") : "") +
+       ", " + ms + " ms.</p>" +
+       '<p class="note">Vérifications du solveur&nbsp;: écart inférieur à 1,5 % contre la solution analytique par transformation conforme d\'un rideau en couche d\'épaisseur finie&nbsp;; ' +
+       "environ 3 % contre la solution exacte de Charnyi pour un massif à nappe libre (q = K(h₁²−h₂²)/2L, exacte pour le débit)&nbsp;; " +
+       "environ 5 % contre le réseau d'écoulement de Poeter &amp; Hsieh (exercice 3), dont le comptage de tubes est lui-même à ±10 %.</p>";
   h += '<div class="msg msg-warn">Ce calcul 2D est un <strong>contrôle</strong>, pas la valeur de dimensionnement. Il repose sur les mêmes conductivités, tout aussi incertaines, ' +
-       "et suppose la couverture du fond de ZIT continue et non décapée. Il porte sur la <strong>fondation seule</strong>&nbsp;: la percolation à travers le corps de remblai, traitée par la formule de Dupuit au §1, en est exclue. " +
+       "et suppose la couverture du fond de ZIT continue et non décapée. " +
        "Le modèle à fragments du §1, qui néglige les pertes d'entrée et de sortie, reste l'hypothèse conservatrice.</div>";
   $("resNet").innerHTML = h;
   $("resNet").style.opacity = 1;
