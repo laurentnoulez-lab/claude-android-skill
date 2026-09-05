@@ -1327,12 +1327,18 @@ function dessinerCoupe(R, iso){
     g.push('<text x="' + (mL - 7) + '" y="' + (n.y + 3.4).toFixed(1) + '" text-anchor="end" font-size="10" fill="' + n.col + '">' + esc(n.t) + "</text>");
   });
 
-  /* --- Étiquettes de couches --- */
-  R.couches.forEach(function(co){
+  /* --- Étiquettes de couches, avec la part du débit transportée --- */
+  var partT = {};
+  R.detailT.forEach(function(d){ partT[d.i] = 100 * d.T / R.r.T_tot; });
+  R.couches.forEach(function(co, ic){
     var y1 = Y(Math.min(co.zToit, zTop)), y2 = Y(Math.max(co.zBase, zBot));
     if (y2 - y1 < 12) return;
+    var pc = partT[ic];
+    var part = (pc === undefined) ? "hors zone d'écoulement"
+             : (pc >= 0.1 ? nb(pc, 1) : "< 0,1") + " % du débit";
     g.push('<text x="' + (mL + pw - 6) + '" y="' + ((y1 + y2) / 2 + 3.4).toFixed(1) +
-           '" text-anchor="end" font-size="10" fill="#5d4037">' + esc(co.nom) + " — K = " + sci(co.K, 1) + " m/s</text>");
+           '" text-anchor="end" font-size="10" fill="#5d4037">' + esc(co.nom) + " — K = " + sci(co.K, 1) +
+           " m/s — " + part + "</text>");
   });
   g.push('<text x="' + (mL + pw - 6) + '" y="' + Math.min(mT + ph - 4, Y(R.Z_sub) + 13).toFixed(1) +
          '" text-anchor="end" font-size="10" fill="#2c3e50">substratum imperméable</text>');
@@ -1379,7 +1385,8 @@ function dessinerCoupe(R, iso){
   svg.innerHTML = g.join("");
   $("legendeCoupe").innerHTML =
     "Traits bleus continus fléchés&nbsp;: lignes de courant, tracées en tubes de débit égal — chacune sépare deux cinquièmes du débit, " +
-    "de sorte que leur densité reflète la transmissivité K&nbsp;×&nbsp;e de chaque couche et non son épaisseur. " +
+    "de sorte que leur densité reflète la transmissivité K&nbsp;×&nbsp;e de chaque couche et non son épaisseur — une couche peut n'en porter aucune " +
+    "sans que son débit soit nul, la part transportée par chacune étant indiquée en regard. " +
     "Elles restent horizontales à la traversée des interfaces&nbsp;: l'approximation de Dupuit exclut toute réfraction. " +
     "Traits bleus pointillés&nbsp;: équipotentielles, une ligne par dixième de ΔH, positionnées d'après la répartition de charge calculée — " +
     "verticales dans les fragments amont et aval (charge uniforme sur la verticale), en éventail autour du pied de l'écran, " +
