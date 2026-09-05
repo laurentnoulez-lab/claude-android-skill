@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculateur d'écran étanche sous digue de ZIT</title>
+<style>
+:root{
+  --bleu:#1b4f72; --bleu-clair:#d6eaf8; --gris:#f4f6f7; --bord:#c8d0d4;
+  --vert:#1e8449; --vert-fond:#d5f5e3; --orange:#b9770e; --orange-fond:#fdebd0;
+  --rouge:#943126; --rouge-fond:#fadbd8; --texte:#1c2833;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:13.5px; color:var(--texte); background:#eef1f2; line-height:1.45;
+}
+h1{font-size:19px; margin:14px 16px 4px}
+h2{font-size:15px; margin:0 0 8px; color:var(--bleu); border-bottom:2px solid var(--bleu-clair); padding-bottom:4px}
+h3{font-size:13.5px; margin:14px 0 6px; color:var(--bleu)}
+p.sous-titre{margin:0 16px 12px; color:#5d6d7e; font-size:12.5px}
+
+/* ---------- Bandeau d'avertissement permanent ---------- */
+.bandeau{
+  background:#7b241c; color:#fff; padding:10px 16px; font-size:12.5px; line-height:1.5;
+}
+.bandeau strong{color:#f9e79f}
+
+/* ---------- Mise en page 2 colonnes ---------- */
+.grille{display:grid; grid-template-columns:410px minmax(0,1fr); gap:16px; padding:0 16px 24px; align-items:start}
+@media (max-width:1150px){ .grille{grid-template-columns:minmax(0,1fr)} }
+
+.carte{background:#fff; border:1px solid var(--bord); border-radius:5px; padding:12px 14px; margin-bottom:14px}
+details.carte>summary{
+  font-weight:600; color:var(--bleu); cursor:pointer; font-size:14px;
+  list-style:none; padding:2px 0; user-select:none;
+}
+details.carte>summary::before{content:"\25B8 "; display:inline-block; transition:transform .15s}
+details.carte[open]>summary::before{transform:rotate(90deg)}
+details.carte>summary::-webkit-details-marker{display:none}
+details.carte>div.contenu{margin-top:10px}
+
+/* ---------- Champs de saisie ---------- */
+.champ{display:grid; grid-template-columns:1fr 92px 78px; gap:6px; align-items:center; margin-bottom:5px}
+.champ label{font-size:12.5px; cursor:help}
+.champ .u{font-size:11px; color:#7b8a8b}
+input[type=text],select{
+  width:100%; padding:3px 5px; border:1px solid var(--bord); border-radius:3px;
+  font-family:inherit; font-size:12.5px; background:#fff;
+}
+input[type=text]:focus,select:focus{outline:2px solid var(--bleu-clair); border-color:var(--bleu)}
+input.err{border-color:var(--rouge); background:#fdf2f0}
+.opt{color:#7b8a8b; font-style:italic}
+
+/* ---------- Tableaux ---------- */
+table{border-collapse:collapse; width:100%; font-size:12px; margin:6px 0}
+th,td{border:1px solid var(--bord); padding:3px 5px; text-align:left; vertical-align:middle}
+th{background:var(--gris); font-weight:600}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+table.strati input[type=text]{padding:2px 4px; font-size:11.5px}
+table.strati select{padding:2px; font-size:11px}
+
+/* ---------- Boutons ---------- */
+button{
+  font-family:inherit; font-size:12.5px; padding:5px 11px; border:1px solid var(--bleu);
+  background:var(--bleu); color:#fff; border-radius:3px; cursor:pointer;
+}
+button:hover{background:#154360}
+button.sec{background:#fff; color:var(--bleu)}
+button.sec:hover{background:var(--bleu-clair)}
+button.mini{padding:1px 6px; font-size:11px; background:#fff; color:var(--rouge); border-color:var(--bord)}
+.actions{display:flex; flex-wrap:wrap; gap:7px; margin-top:8px}
+
+/* ---------- Statuts ---------- */
+.st{display:inline-block; padding:1px 7px; border-radius:3px; font-size:11px; font-weight:600; white-space:nowrap}
+.st-ok{background:var(--vert-fond); color:var(--vert)}
+.st-att{background:var(--orange-fond); color:var(--orange)}
+.st-ko{background:var(--rouge-fond); color:var(--rouge)}
+.st-na{background:#eaeded; color:#566573}
+
+.msg{padding:7px 10px; border-radius:4px; margin-bottom:8px; font-size:12.5px}
+.msg-err{background:var(--rouge-fond); border-left:4px solid var(--rouge); color:#641e16}
+.msg-warn{background:var(--orange-fond); border-left:4px solid var(--orange); color:#7e5109}
+.msg ul{margin:4px 0 0 16px; padding:0}
+
+/* ---------- Synthèse ---------- */
+.synth{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px}
+.tuile{border:1px solid var(--bord); border-radius:4px; padding:8px 10px; background:var(--gris)}
+.tuile .lib{font-size:11px; color:#5d6d7e; text-transform:uppercase; letter-spacing:.4px}
+.tuile .val{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums}
+.tuile .u2{font-size:11px; color:#5d6d7e}
+.tuile.vert{background:var(--vert-fond); border-color:#a9dfbf}
+.tuile.orange{background:var(--orange-fond); border-color:#f5cba7}
+.tuile.rouge{background:var(--rouge-fond); border-color:#f5b7b1}
+
+/* ---------- Détail des formules ---------- */
+table.formules td:nth-child(2),table.formules td:nth-child(3){font-family:"Consolas","DejaVu Sans Mono",monospace; font-size:11px}
+table.formules td:nth-child(1){white-space:nowrap; font-weight:600}
+.note{font-size:11.5px; color:#5d6d7e; margin:5px 0 0; font-style:italic}
+
+svg{display:block; max-width:100%; height:auto; background:#fff}
+.legende{font-size:11px; color:#5d6d7e; margin-top:4px}
+
+footer{background:#fff; border-top:3px solid var(--bleu); padding:14px 16px 30px; font-size:12.5px}
+footer h2{margin-top:0}
+footer ul{margin:6px 0 0 18px}
+footer li{margin-bottom:4px}
+
+/* ---------- Impression A4 ---------- */
+@media print{
+  body{background:#fff; font-size:10.5px}
+  .grille{grid-template-columns:1fr; gap:8px; padding:0 6mm}
+  .carte{border:1px solid #999; break-inside:avoid; page-break-inside:avoid; margin-bottom:8px}
+  details.carte{display:block}
+  details.carte>div.contenu{display:block !important}
+  .no-print,.actions{display:none !important}
+  .bandeau{background:#fff; color:#000; border:2px solid #000; padding:6px}
+  .bandeau strong{color:#000}
+  h1{font-size:15px}
+  svg{page-break-inside:avoid}
+  a{text-decoration:none; color:#000}
+  @page{size:A4; margin:12mm 10mm}
+}
+</style>
+</head>
+<body>
+
+<div class="bandeau">
+  Outil de <strong>pré-dimensionnement</strong>. Le modèle repose sur l'hypothèse d'un écoulement permanent, bidimensionnel,
+  en milieu saturé, avec approximation de Dupuit (lignes de courant horizontales hors du voisinage de l'écran).
+  Il ne remplace pas une étude géotechnique ni une modélisation par éléments finis (type SEEP/W, MODFLOW) pour un projet
+  en phase d'exécution. Les conductivités hydrauliques doivent être établies par essais in situ.
+</div>
+
+<h1>Écran étanche sous digue de ZIT &mdash; pré-dimensionnement du débit de fuite</h1>
+<p class="sous-titre">Calcul par résistances hydrauliques en série (Dupuit + méthode des fragments) &mdash; cotes absolues, calcul 2D par mètre linéaire de digue.</p>
+
+<div class="grille">
+
+<!-- ============================ COLONNE SAISIE ============================ -->
+<div>
+
+  <details class="carte" open><summary>A. Géométrie générale</summary><div class="contenu">
+    <div class="champ"><label for="H_am" title="Cote du plan d'eau moyen dans la ZIT pendant l'événement. C'est la charge amont du calcul.">Niveau d'eau moyen dans la ZIT</label><input id="H_am" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="Z_TNam" title="Cote moyenne du fond de la ZIT (terrain naturel côté amont, prairie).">Cote TN amont / fond de ZIT</label><input id="Z_TNam" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="Z_TNav" title="Cote moyenne du terrain naturel côté habitat. Sert d'exutoire par défaut et de référence pour la fiche de l'écran.">Cote TN aval (côté habitat)</label><input id="Z_TNav" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="H_av_opt" title="Optionnel. Si la cote de la nappe aval est connue, la saisir ici : elle remplace le TN aval comme charge aval imposée. Laisser vide sinon.">Niveau de nappe aval <span class="opt">(optionnel)</span></label><input id="H_av_opt" type="text" inputmode="decimal" placeholder="vide = TN aval"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="Z_plaf" title="Cote de la sous-face de la digue = plafond de l'aquifère sollicité. Le corps de digue étant imperméabilisé, l'écoulement est confiné entre cette cote et le substratum. Par défaut : la plus basse des deux cotes de TN.">Cote de sous-face de digue (plafond aquifère)</label><input id="Z_plaf" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="B_dig" title="Largeur de l'emprise de la digue au niveau du terrain naturel, mesurée du pied amont au pied aval.">Largeur en base de la digue</label><input id="B_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="L_dig" title="Longueur développée de la digue, utilisée pour passer du débit unitaire au débit total.">Longueur de la digue</label><input id="L_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="x_ecr" title="Distance horizontale entre le pied amont de la digue et l'axe de l'écran. Détermine L_amont et L_aval.">Position de l'écran depuis le pied amont</label><input id="x_ecr" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="t_crue" title="Durée pendant laquelle la ZIT reste remplie à la charge considérée. Sert au calcul du volume infiltré.">Durée de l'événement de crue</label><input id="t_crue" type="text" inputmode="decimal"><span class="u">h</span></div>
+    <div class="champ"><label for="V_zit" title="Optionnel. Volume stocké dans la ZIT, pour évaluer la part perdue par infiltration.">Volume stocké dans la ZIT <span class="opt">(optionnel)</span></label><input id="V_zit" type="text" inputmode="decimal" placeholder="vide = non calculé"><span class="u">m&sup3;</span></div>
+  </div></details>
+
+  <details class="carte" open><summary>B. Stratigraphie</summary><div class="contenu">
+    <table class="strati">
+      <thead><tr><th style="width:29%">Désignation</th><th class="num" style="width:17%">Toit (m)</th><th class="num" style="width:17%">Base (m)</th><th style="width:20%">K (m/s)</th><th style="width:13%">Indic.</th><th style="width:4%"></th></tr></thead>
+      <tbody id="corpsStrati"></tbody>
+    </table>
+    <div class="actions no-print"><button class="sec" id="btnAddCouche">+ Ajouter une couche</button></div>
+    <p class="note">La base de la couche la plus profonde définit le substratum imperméable. Les couches doivent être jointives et ordonnées du haut vers le bas. K saisissable en notation scientifique (ex. <code>1e-5</code> ou <code>1,2e-4</code>).</p>
+    <div id="synthStrati"></div>
+  </div></details>
+
+  <details class="carte" open><summary>C. Écran étanche</summary><div class="contenu">
+    <div class="champ"><label for="type_ecran" title="Tranchée d'argile : écran de largeur finie traversable. Palplanches : écran de largeur nulle, non traversable hors serrures.">Type d'écran</label><select id="type_ecran"><option value="argile">Tranchée d'argile</option><option value="palplanches">Rideau de palplanches</option></select><span class="u"></span></div>
+    <div class="champ" data-si="argile"><label for="b_ecr" title="Largeur de la tranchée mesurée dans le sens de l'écoulement.">Largeur de la tranchée b</label><input id="b_ecr" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="z_pied" title="Cote du fond de tranchée ou de la pointe des palplanches. C'est le paramètre principal de dimensionnement.">Cote de pied / de fond de l'écran</label><input id="z_pied" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ" data-si="argile"><label for="K_ecr" title="Conductivité hydraulique de l'argile réellement mise en œuvre et compactée, pas celle du matériau d'emprunt en place.">K de l'argile mise en œuvre</label><input id="K_ecr" type="text" inputmode="decimal"><span class="u">m/s</span></div>
+    <div class="champ" data-si="palplanches"><label for="f_serrures" title="Coefficient multiplicateur traduisant la fuite aux serrures. 1,0 = serrures parfaitement étanches (hypothèse théorique).">Coefficient de fuite aux serrures</label><input id="f_serrures" type="text" inputmode="decimal"><span class="u">&ndash;</span></div>
+    <p class="note" data-si="palplanches">L'étanchéité réelle des serrures dépend du produit et de la mise en œuvre&nbsp;: elle doit être justifiée par le fournisseur. Le coefficient est appliqué en réduisant la résistance de l'écran (<code>R_écran / f</code>), afin de rester cohérent avec la répartition des charges affichée.</p>
+  </div></details>
+
+  <details class="carte" open><summary>D. Paramètres de vérification</summary><div class="contenu">
+    <div class="champ"><label for="alpha" title="Coefficient d'ajustement empirique traduisant la résistance additionnelle liée à la convergence puis à la divergence des lignes de courant au droit du pied de l'écran. Il est appliqué à la longueur de convergence L_conv, dont la définition est choisie au champ suivant. Valeur par défaut 1,0 ; plage usuelle à tester : 1 à 2. Ce n'est pas une valeur normative.">&alpha; &mdash; coefficient de contraction</label><input id="alpha" type="text" inputmode="decimal"><span class="u">&ndash;</span></div>
+    <div class="champ"><label for="L_conv_mode" title="Grandeur à laquelle le coefficient α est appliqué dans le chemin de contournement. « D_écran » (hauteur d'écran obstruant les couches perméables) est la formulation retenue par défaut : elle est croissante avec la profondeur de l'écran, donc monotone. « D_sous » (épaisseur perméable résiduelle sous le pied) est la formulation initiale : elle peut produire, dans un profil dont la couche transmissive est profonde, un débit décroissant lorsque l'écran est raccourci.">Longueur de convergence L_conv</label><select id="L_conv_mode"><option value="ecran">D_écran (monotone)</option><option value="sous">D_sous (formule initiale)</option></select><span class="u"></span></div>
+    <div class="champ"><label for="gamma_p" title="Poids volumique déjaugé du sol du prisme aval (γ_sat − γw).">&gamma;&prime; du sol (déjaugé)</label><input id="gamma_p" type="text" inputmode="decimal"><span class="u">kN/m&sup3;</span></div>
+    <div class="champ"><label for="gamma_w" title="Poids volumique de l'eau.">&gamma;w de l'eau</label><input id="gamma_w" type="text" inputmode="decimal"><span class="u">kN/m&sup3;</span></div>
+    <div class="champ"><label for="FS_cible" title="Facteur de sécurité visé au soulèvement du prisme aval. Valeur à choisir par l'ingénieur au regard du référentiel du projet ; 3,0 est une valeur d'usage, pas une prescription.">FS cible au renard</label><input id="FS_cible" type="text" inputmode="decimal"><span class="u">&ndash;</span></div>
+    <div class="champ"><label for="C_adm" title="Rapport de cheminement pondéré de Lane admissible, fonction de la nature du sol. Valeur à valider par l'ingénieur.">C de Lane admissible</label><input id="C_adm" type="text" inputmode="decimal"><span class="u">&ndash;</span></div>
+    <div class="champ"><label for="q_cible" title="Débit de fuite maximal accepté. Sert au code couleur de la synthèse et au mode dimensionnement inverse.">Débit cible à ne pas dépasser</label><input id="q_cible" type="text" inputmode="decimal"><span class="u"><select id="q_cible_unite" style="font-size:10.5px;padding:1px"><option value="l">l/s/ml</option><option value="m3h">m&sup3;/h (total)</option></select></span></div>
+  </div></details>
+
+  <details class="carte"><summary>E. Valeurs indicatives (éditables)</summary><div class="contenu">
+    <div class="msg msg-warn">Valeurs indicatives issues de la littérature &mdash; à valider par l'ingénieur au regard du référentiel applicable au projet, et à confirmer par essais in situ pour les conductivités.</div>
+    <h3>Conductivités hydrauliques K</h3>
+    <table><thead><tr><th>Nature de sol</th><th class="num" style="width:34%">K (m/s)</th><th style="width:8%"></th></tr></thead><tbody id="corpsCatK"></tbody></table>
+    <div class="actions no-print"><button class="sec" id="btnAddK">+ Ligne</button></div>
+    <h3>Rapports de Lane C admissibles</h3>
+    <table><thead><tr><th>Nature de sol</th><th class="num" style="width:24%">C</th><th style="width:20%"></th><th style="width:8%"></th></tr></thead><tbody id="corpsCatC"></tbody></table>
+    <div class="actions no-print"><button class="sec" id="btnAddC">+ Ligne</button></div>
+  </div></details>
+
+  <div class="carte no-print">
+    <div class="actions">
+      <button id="btnExport">Exporter en JSON</button>
+      <button class="sec" id="btnImport">Importer un JSON</button>
+      <input type="file" id="fichierImport" accept=".json,application/json" style="display:none">
+      <button class="sec" id="btnReset">Réinitialiser</button>
+      <button class="sec" id="btnImprimer">Imprimer</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================ COLONNE RESULTATS ============================ -->
+<div>
+
+  <div class="carte">
+    <h2>1. Synthèse</h2>
+    <div id="messages"></div>
+    <div class="synth" id="synthese"></div>
+    <p class="note" id="noteSynthese"></p>
+  </div>
+
+  <div class="carte">
+    <h2>2. Coupe en travers</h2>
+    <svg id="svgCoupe" viewBox="0 0 940 560" width="940" height="560" xmlns="http://www.w3.org/2000/svg"></svg>
+    <p class="legende" id="legendeCoupe"></p>
+    <div class="actions no-print"><label style="font-size:12px;cursor:pointer"><input type="checkbox" id="chkIso"> Forcer des échelles horizontale et verticale identiques (1:1)</label></div>
+  </div>
+
+  <div class="carte">
+    <h2>3. Détail du calcul</h2>
+    <table class="formules"><thead><tr><th style="width:15%">Grandeur</th><th style="width:33%">Formule</th><th style="width:37%">Application numérique</th><th class="num" style="width:15%">Résultat</th></tr></thead><tbody id="corpsDetail"></tbody></table>
+    <p class="note">Toutes les résistances sont en s/m, les transmissivités en m&sup2;/s, le débit unitaire q en m&sup2;/s (&equiv; m&sup3;/s par mètre linéaire de digue).</p>
+  </div>
+
+  <div class="carte">
+    <h2>4. Répartition des pertes de charge</h2>
+    <table><thead><tr><th>Fragment</th><th>Résistance</th><th class="num">R (s/m)</th><th class="num">&Delta;h (m)</th><th class="num">%</th><th class="num">Cote piézo. en sortie (m)</th></tr></thead><tbody id="corpsCharges"></tbody></table>
+  </div>
+
+  <div class="carte">
+    <h2>5. Vérifications</h2>
+    <table><thead><tr><th style="width:24%">Vérification</th><th style="width:40%">Valeur calculée</th><th style="width:19%">Critère</th><th style="width:17%">Statut</th></tr></thead><tbody id="corpsVerifs"></tbody></table>
+    <div id="alertesVerifs"></div>
+    <p class="note">Les critères de comparaison sont saisis par l'utilisateur. Aucune des valeurs proposées par défaut n'a de caractère normatif.</p>
+  </div>
+
+  <div class="carte" id="carteBilan">
+    <h2>6. Bilan volumétrique de la ZIT</h2>
+    <div id="bilanZIT"></div>
+  </div>
+
+  <div class="carte">
+    <h2>7. Dimensionnement inverse et sensibilité</h2>
+    <div class="actions no-print"><button id="btnDim">Dimensionner l'écran</button></div>
+    <div id="resDim"></div>
+    <svg id="svgGraphe" viewBox="0 0 940 380" width="940" height="380" xmlns="http://www.w3.org/2000/svg"></svg>
+    <h3>Sensibilité à la conductivité hydraulique</h3>
+    <div id="resSensi"></div>
+  </div>
+
+</div>
+</div>
+
+<footer>
+  <h2>Hypothèses et limites du modèle</h2>
+  <ul>
+    <li><strong>Régime permanent</strong> alors que le remplissage d'une ZIT est un phénomène transitoire&nbsp;: la charge amont est atteinte progressivement et le régime d'écoulement souterrain s'établit avec un temps de retard. Le calcul est donc <strong>conservateur en volume infiltré</strong>.</li>
+    <li><strong>Approximation de Dupuit</strong>&nbsp;: lignes de courant supposées horizontales et charge supposée uniforme sur la verticale, hors du voisinage immédiat de l'écran. Cette hypothèse est d'autant moins valide que le rapport épaisseur d'aquifère / longueur d'écoulement est grand.</li>
+    <li><strong>Milieu supposé isotrope au sein de chaque couche</strong> (K<sub>h</sub> = K<sub>v</sub>). L'anisotropie réelle des alluvions, souvent d'un facteur 3 à 10 en faveur de l'horizontale, n'est pas prise en compte&nbsp;: elle tendrait à augmenter le débit contourné et à réduire l'efficacité de l'écran.</li>
+    <li><strong>Milieu entièrement saturé</strong>&nbsp;: ni la zone non saturée, ni la succion capillaire, ni le stockage dans la porosité efficace ne sont modélisés.</li>
+    <li><strong>Écran homogène et continu</strong>&nbsp;: ni le colmatage progressif, ni la fissuration de dessiccation de l'argile en période sèche, ni les défauts de mise en œuvre (joints de panneaux, ancrage du pied, déchirure de serrures) ne sont modélisés. Ces défauts sont en pratique la première cause d'écart entre calcul et mesure.</li>
+    <li><strong>Effets de bord tridimensionnels</strong> aux extrémités de la digue et aux contournements latéraux non modélisés&nbsp;: le calcul 2D par mètre linéaire les ignore par construction.</li>
+    <li><strong>Coefficient &alpha;</strong> de contraction/expansion des lignes de courant&nbsp;: paramètre d'ajustement empirique, sans valeur normative. Il convient de tester la plage 1 à 2 et de retenir l'hypothèse la plus défavorable en phase de pré-dimensionnement.</li>
+    <li><strong>Longueur de convergence L<sub>conv</sub></strong>&nbsp;: le terme &alpha;&nbsp;×&nbsp;L<sub>conv</sub> du chemin de contournement porte par défaut sur D<sub>écran</sub>, hauteur d'écran obstruant les couches perméables — le détour imposé aux lignes de courant croît alors avec la pénétration de l'écran, et R<sub>a</sub> est strictement croissante avec la profondeur. La formulation alternative sur D<sub>sous</sub> (épaisseur perméable résiduelle sous le pied) reste disponible en section D&nbsp;: dans un profil dont la couche la plus transmissive est profonde, elle peut produire un débit <em>décroissant</em> lorsque l'écran est raccourci, comportement sans réalité physique. Le choix de cette convention modifie sensiblement le débit calculé et doit être explicité dans toute note de calcul issue de l'outil.</li>
+    <li><strong>Vérifications de stabilité</strong> (Lane, renard, gradient de sortie) conduites sur la base de la répartition de charge du modèle à fragments, elle-même approchée. Elles ne dispensent pas d'une vérification par un modèle d'écoulement complet et d'une étude géotechnique en phase projet.</li>
+    <li><strong>Charge aval imposée</strong>&nbsp;: par défaut au niveau du terrain naturel aval, ce qui revient à supposer que l'écoulement souterrain émerge au pied aval de la digue. Un exutoire réel plus bas (drain, fossé, nappe profonde) augmenterait la charge motrice et donc le débit.</li>
+  </ul>
+  <p class="note">Fichier autonome, sans dépendance externe ni accès réseau. Version du modèle&nbsp;: fragments en série (Dupuit), résistances hydrauliques.</p>
+</footer>
+
+<script>
+"use strict";
+/* ==========================================================================
+   PARTIE 1 — UTILITAIRES NUMERIQUES ET DE FORMATAGE
+   ========================================================================== */
+
+/** Lit un nombre en acceptant la virgule ou le point comme séparateur décimal,
+ *  ainsi que la notation scientifique (1e-5 ; 1,2e-4) et les espaces de milliers. */
+function parseNum(s){
+  if (typeof s === "number") return s;
+  if (s === null || s === undefined) return NaN;
+  var t = String(s).trim().replace(/[\s  ]/g, "").replace(",", ".");
+  if (t === "") return NaN;
+  var v = Number(t);
+  return Number.isFinite(v) ? v : NaN;
+}
+
+var SUP = {"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³",
+           "4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹","+":""};
+
+/** Format décimal français, n décimales. */
+function nb(v, n){
+  n = (n === undefined) ? 2 : n;
+  if (v === Infinity) return "∞";
+  if (v === -Infinity) return "−∞";
+  if (!Number.isFinite(v)) return "—";
+  return v.toFixed(n).replace(".", ",");
+}
+
+/** Format scientifique français : 1,20·10⁻⁵ */
+function sci(v, n){
+  n = (n === undefined) ? 2 : n;
+  if (v === Infinity) return "∞";
+  if (!Number.isFinite(v)) return "—";
+  if (v === 0) return "0";
+  var p = v.toExponential(n).split("e");
+  var exp = p[1].split("").map(function(c){ return (SUP[c] !== undefined) ? SUP[c] : c; }).join("");
+  return p[0].replace(".", ",") + "·10" + exp;
+}
+
+/** Format automatique : scientifique si très petit ou très grand. */
+function auto(v, n){
+  if (!Number.isFinite(v)) return nb(v, n);
+  var a = Math.abs(v);
+  if (a !== 0 && (a < 0.01 || a >= 1e5)) return sci(v, n === undefined ? 3 : n);
+  return nb(v, n === undefined ? 2 : n);
+}
+
+function esc(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* ==========================================================================
+   PARTIE 2 — MODULE DE CALCUL (fonctions pures, aucun accès au DOM)
+   ========================================================================== */
+var Calc = (function(){
+
+  var INF = Infinity;
+
+  /** Recouvrement de deux intervalles de cotes [aBas;aHaut] et [bBas;bHaut], en m. */
+  function overlap(aBas, aHaut, bBas, bHaut){
+    return Math.max(0, Math.min(aHaut, bHaut) - Math.max(aBas, bBas));
+  }
+
+  /** Transmissivité T = somme(K_i * e_i) sur la tranche [zBas ; zHaut].
+   *  Une couche partiellement recoupée est automatiquement découpée au prorata. */
+  function transmissivite(couches, zBas, zHaut){
+    var T = 0;
+    for (var i = 0; i < couches.length; i++){
+      T += couches[i].K * overlap(couches[i].zBase, couches[i].zToit, zBas, zHaut);
+    }
+    return T;
+  }
+
+  /** Détail par couche de la contribution à la transmissivité (pour l'affichage). */
+  function detailT(couches, zBas, zHaut){
+    var d = [];
+    for (var i = 0; i < couches.length; i++){
+      var e = overlap(couches[i].zBase, couches[i].zToit, zBas, zHaut);
+      if (e > 1e-9) d.push({ nom: couches[i].nom, K: couches[i].K, e: e, T: couches[i].K * e });
+    }
+    return d;
+  }
+
+  /** Noyau du modèle : résistances en série + chemins parallèles au droit de l'écran.
+   *  cfg = {couches, Z_sub, Z_plaf, z_pied, L_amont, L_aval, b, K_ecr, alpha, f, DH}
+   *  Retourne toutes les grandeurs intermédiaires, +Infini géré explicitement. */
+  function calculDebit(cfg){
+    var T_tot = transmissivite(cfg.couches, cfg.Z_sub, cfg.Z_plaf);
+    var zPiedEff = Math.min(cfg.z_pied, cfg.Z_plaf);
+
+    // Part perméable située SOUS le pied de l'écran
+    var D_sous = Math.max(0, zPiedEff - cfg.Z_sub);
+    var T_sous = transmissivite(cfg.couches, cfg.Z_sub, zPiedEff);
+    // Hauteur d'écran en contact avec les couches perméables
+    var D_ecran = Math.max(0, cfg.Z_plaf - Math.max(cfg.z_pied, cfg.Z_sub));
+
+    // Fragments amont et aval : écoulement horizontal sur toute l'épaisseur perméable
+    var R_amont = (T_tot > 0) ? cfg.L_amont / T_tot : INF;
+    var R_aval  = (T_tot > 0) ? cfg.L_aval  / T_tot : INF;
+
+    // Fragment écran, chemin (a) : contournement par le dessous.
+    // La longueur de convergence porte par défaut sur D_ecran, hauteur d'écran obstruant
+    // les couches perméables : le détour imposé aux lignes de courant croît avec la
+    // pénétration de l'écran, ce qui rend R_a strictement croissante avec la profondeur.
+    // La formulation alternative sur D_sous (épaisseur perméable résiduelle) est conservée
+    // en option ; dans un profil dont la couche transmissive est profonde, elle peut donner
+    // un débit décroissant lorsque l'écran est raccourci — comportement non monotone.
+    var L_conv = (cfg.modeConv === "sous") ? D_sous : D_ecran;
+    var R_a = (T_sous > 0) ? (cfg.b + cfg.alpha * L_conv) / T_sous : INF;
+    // Fragment écran, chemin (b) : traversée de l'écran lui-même
+    var R_b = (cfg.b > 0 && cfg.K_ecr > 0 && D_ecran > 0) ? cfg.b / (cfg.K_ecr * D_ecran) : INF;
+    // Mise en parallèle (1/INF = 0 ; 1/0 = INF : géré nativement par IEEE 754)
+    var R_ecran = 1 / (1 / R_a + 1 / R_b);
+    // Fuite aux serrures : réduction de la résistance de l'écran (cohérent avec les charges)
+    var R_ecran_eff = R_ecran / cfg.f;
+
+    var R_tot = R_amont + R_ecran_eff + R_aval;
+    var q = (Number.isFinite(R_tot) && R_tot > 0) ? cfg.DH / R_tot : 0;
+
+    return { T_tot:T_tot, T_sous:T_sous, D_sous:D_sous, D_ecran:D_ecran, L_conv:L_conv,
+             R_amont:R_amont, R_aval:R_aval, R_a:R_a, R_b:R_b,
+             R_ecran:R_ecran, R_ecran_eff:R_ecran_eff, R_tot:R_tot, q:q };
+  }
+
+  /** Répartition des charges le long du cheminement.
+   *  h0 = pied amont, h1 = face amont écran, h2 = face aval écran, h3 = pied aval (= H_av). */
+  function repartitionCharges(H_am, H_av, q, r){
+    if (!Number.isFinite(r.R_tot) || q === 0){
+      // Écran théoriquement imperméable : toute la charge est perdue au droit de l'écran
+      return { h0:H_am, h1:H_am, h2:H_av, h3:H_av,
+               dh_amont:0, dh_ecran:H_am - H_av, dh_aval:0 };
+    }
+    var dh_am = q * r.R_amont, dh_ec = q * r.R_ecran_eff, dh_av = q * r.R_aval;
+    return { h0:H_am, h1:H_am - dh_am, h2:H_am - dh_am - dh_ec, h3:H_am - dh_am - dh_ec - dh_av,
+             dh_amont:dh_am, dh_ecran:dh_ec, dh_aval:dh_av };
+  }
+
+  /** Cheminement pondéré de Lane. Les tronçons verticaux sont comptés depuis la tête
+   *  de l'écran (sous-face de digue) jusqu'au pied, à la descente puis à la remontée. */
+  function verifLane(p, geo, DH, C_adm){
+    var sigmaV = 2 * Math.max(0, p.Z_plaf - p.z_pied);
+    var sigmaH = p.L_amont + p.b + p.L_aval;
+    var Lw = sigmaV + sigmaH / 3;
+    var C = (DH > 0) ? Lw / DH : INF;
+    return { sigmaV:sigmaV, sigmaH:sigmaH, Lw:Lw, C:C, C_adm:C_adm, ok:(C >= C_adm) };
+  }
+
+  /** Charge en excès au pied de l'écran, côté aval.
+   *  h_a_face : valeur en face aval de l'écran (conservatrice, utilisée pour le gradient local).
+   *  h_a_moy  : moyenne sur le prisme de largeur D/2 (utilisée pour le soulèvement de Terzaghi). */
+  function chargeExces(charges, H_av, D, L_aval){
+    var face = Math.max(0, charges.h2 - H_av);
+    var moy = face;
+    if (L_aval > 0 && D > 0){
+      var w = Math.min(D / 2, L_aval);       // largeur effective du prisme
+      moy = face * (1 - w / (2 * L_aval));   // moyenne d'une décroissance linéaire
+    }
+    return { face:face, moy:moy };
+  }
+
+  /** Sécurité au renard — soulèvement du prisme aval de largeur D/2 (Terzaghi). */
+  function verifRenard(gamma_p, gamma_w, D, h_a_moy, FS_cible){
+    if (!(D > 0)) return { applicable:false };
+    var FS = (h_a_moy > 0) ? (gamma_p * D) / (gamma_w * h_a_moy) : INF;
+    return { applicable:true, D:D, h_a:h_a_moy, FS:FS, FS_cible:FS_cible, ok:(FS >= FS_cible) };
+  }
+
+  /** Gradient de sortie local et gradient critique i_c = gamma' / gamma_w. */
+  function verifGradient(gamma_p, gamma_w, D, h_a_face){
+    if (!(D > 0)) return { applicable:false };
+    var i_c = gamma_p / gamma_w;
+    var i = h_a_face / D;
+    var marge = (i > 0) ? i_c / i : INF;
+    return { applicable:true, i:i, i_c:i_c, marge:marge, ok:(i < i_c) };
+  }
+
+  /** Mise en charge sous la digue et résurgence en surface à l'aval.
+   *  - sous la digue, la surface du terrain est la sous-face de digue Z_plaf ;
+   *  - au-delà du pied aval, c'est Z_TNav. */
+  function verifResurgence(p, charges, H_av){
+    var r = { enCharge:false, exces:0, xCroise:null, resurgenceSurface:false, exutoireAuTN:false };
+    r.exces = charges.h2 - p.Z_plaf;
+    r.enCharge = r.exces > 1e-6;
+    if (r.enCharge){
+      if (H_av < p.Z_plaf - 1e-9){
+        // la ligne piézométrique recoupe la sous-face de digue à cette distance de l'écran
+        r.xCroise = p.L_aval * (charges.h2 - p.Z_plaf) / (charges.h2 - H_av);
+      } else {
+        r.xCroise = p.L_aval; // en charge sur tout le fragment aval
+      }
+    }
+    if (H_av > p.Z_TNav + 1e-9) r.resurgenceSurface = true;
+    else if (Math.abs(H_av - p.Z_TNav) <= 1e-9) r.exutoireAuTN = true;
+    return r;
+  }
+
+  /* ---------------- Orchestrateur ---------------- */
+
+  /** Calcul complet. Retourne un objet unique consommé par la couche d'affichage.
+   *  R.ok = false si des erreurs bloquantes ont été détectées. */
+  function calculComplet(p){
+    var err = [], warn = [];
+    var R = { ok:false, erreurs:err, avertissements:warn };
+
+    /* --- 1. Contrôle des champs numériques obligatoires --- */
+    var champs = [
+      ["H_am", "Niveau d'eau moyen dans la ZIT"], ["Z_TNam", "Cote TN amont"],
+      ["Z_TNav", "Cote TN aval"], ["Z_plaf", "Cote de sous-face de digue"],
+      ["B_dig", "Largeur en base de la digue"], ["L_dig", "Longueur de la digue"],
+      ["x_ecr", "Position de l'écran"], ["t_crue", "Durée de l'événement"],
+      ["z_pied", "Cote de pied de l'écran"], ["alpha", "Coefficient alpha"],
+      ["gamma_p", "gamma' du sol"], ["gamma_w", "gamma w"],
+      ["FS_cible", "FS cible au renard"], ["C_adm", "C de Lane admissible"]
+    ];
+    for (var i = 0; i < champs.length; i++){
+      if (!Number.isFinite(p[champs[i][0]])) err.push(champs[i][1] + " : valeur numérique manquante ou invalide.");
+    }
+    if (p.type === "argile"){
+      if (!Number.isFinite(p.b)) err.push("Largeur de la tranchée : valeur numérique manquante ou invalide.");
+      if (!Number.isFinite(p.K_ecr)) err.push("K de l'argile mise en œuvre : valeur numérique manquante ou invalide.");
+    } else {
+      if (!Number.isFinite(p.f)) err.push("Coefficient de fuite aux serrures : valeur numérique manquante ou invalide.");
+    }
+    if (err.length) return R;
+
+    /* --- 2. Contrôle de la stratigraphie --- */
+    if (!p.couches || p.couches.length === 0){ err.push("Aucune couche de sol définie."); return R; }
+    var couches = p.couches.slice().sort(function(a, b){ return b.zToit - a.zToit; });
+    for (var j = 0; j < couches.length; j++){
+      var c = couches[j], lib = "Couche « " + c.nom + " »";
+      if (!Number.isFinite(c.zToit) || !Number.isFinite(c.zBase) || !Number.isFinite(c.K)){
+        err.push(lib + " : cote ou conductivité invalide.");
+      } else {
+        if (c.zBase >= c.zToit) err.push(lib + " : la cote de base (" + nb(c.zBase) + ") doit être strictement inférieure à la cote du toit (" + nb(c.zToit) + ").");
+        if (c.K <= 0) err.push(lib + " : K doit être strictement positif.");
+      }
+    }
+    if (err.length) return R;
+    for (var k = 0; k < couches.length - 1; k++){
+      if (Math.abs(couches[k].zBase - couches[k + 1].zToit) > 1e-6){
+        err.push("Couches « " + couches[k].nom + " » et « " + couches[k + 1].nom + " » non jointives : base " +
+                 nb(couches[k].zBase) + " m ≠ toit " + nb(couches[k + 1].zToit) + " m.");
+      }
+    }
+    if (err.length) return R;
+
+    var Z_sub = couches[couches.length - 1].zBase;
+    var Z_toitStrati = couches[0].zToit;
+
+    /* --- 3. Cohérence géométrique --- */
+    var H_av = Number.isFinite(p.H_av_opt) ? p.H_av_opt : p.Z_TNav;
+    var DH = p.H_am - H_av;
+    if (DH <= 0) err.push("Charge motrice nulle ou négative : le niveau amont (" + nb(p.H_am) + " m) doit être supérieur à la charge aval (" + nb(H_av) + " m).");
+    if (!(p.B_dig > 0)) err.push("La largeur en base de la digue doit être strictement positive.");
+    if (!(p.L_dig > 0)) err.push("La longueur de la digue doit être strictement positive.");
+    if (!(p.t_crue > 0)) err.push("La durée de l'événement doit être strictement positive.");
+    if (p.B_dig > 0 && !(p.x_ecr > 0 && p.x_ecr < p.B_dig)) err.push("La position de l'écran doit être comprise strictement entre 0 et la largeur en base de la digue (" + nb(p.B_dig) + " m).");
+    if (p.Z_plaf <= Z_sub) err.push("La cote de sous-face de digue (" + nb(p.Z_plaf) + " m) doit être supérieure à celle du substratum (" + nb(Z_sub) + " m).");
+    if (p.Z_plaf > Z_toitStrati + 1e-6) err.push("La cote de sous-face de digue (" + nb(p.Z_plaf) + " m) est au-dessus du toit de la stratigraphie (" + nb(Z_toitStrati) + " m) : compléter la stratigraphie vers le haut.");
+    if (p.z_pied > p.Z_plaf + 1e-9) err.push("La cote de pied de l'écran (" + nb(p.z_pied) + " m) est au-dessus de la sous-face de digue (" + nb(p.Z_plaf) + " m) : l'écran ne pénètre pas dans le terrain.");
+    if (p.H_am <= p.Z_plaf) err.push("Le niveau d'eau dans la ZIT (" + nb(p.H_am) + " m) doit être supérieur à la sous-face de digue (" + nb(p.Z_plaf) + " m).");
+    if (p.type === "argile"){
+      if (!(p.b > 0)) err.push("La largeur de la tranchée d'argile doit être strictement positive.");
+      if (!(p.K_ecr > 0)) err.push("Le K de l'argile mise en œuvre doit être strictement positif.");
+    } else {
+      if (!(p.f >= 1)) err.push("Le coefficient de fuite aux serrures doit être supérieur ou égal à 1,0.");
+    }
+    if (!(p.alpha >= 0)) err.push("Le coefficient alpha doit être positif ou nul.");
+    if (!(p.gamma_p > 0)) err.push("gamma' doit être strictement positif.");
+    if (!(p.gamma_w > 0)) err.push("gamma w doit être strictement positif.");
+    if (Number.isFinite(p.V_zit) && p.V_zit <= 0) err.push("Le volume stocké dans la ZIT, s'il est renseigné, doit être strictement positif.");
+    if (err.length) return R;
+
+    /* --- 4. Avertissements non bloquants --- */
+    if (p.z_pied <= Z_sub + 1e-9) warn.push("L'écran est ancré dans le substratum imperméable : le modèle donne un débit de contournement nul. Ce résultat théorique ignore les défauts de mise en œuvre, l'ancrage réel du pied et la fissuration éventuelle du substratum.");
+    if (p.H_av_opt !== null && Number.isFinite(p.H_av_opt) && p.H_av_opt > p.Z_TNav) warn.push("Le niveau de nappe aval saisi (" + nb(p.H_av_opt) + " m) est au-dessus du terrain naturel aval (" + nb(p.Z_TNav) + " m) : la zone aval est déjà en eau libre.");
+    if (p.Z_TNav - p.z_pied <= 0) warn.push("La fiche de l'écran sous le terrain naturel aval est nulle ou négative : les vérifications au renard et au gradient de sortie ne sont pas applicables.");
+    if (p.modeConv === "sous") warn.push("Longueur de convergence calculée sur D_sous (formulation initiale) : dans un profil dont la couche la plus transmissive est profonde, le débit calculé peut décroître lorsque l'écran est raccourci. Comparer avec la formulation sur D_écran avant de retenir un résultat.");
+    if (p.Z_plaf > Math.min(p.Z_TNam, p.Z_TNav) + 1e-6) warn.push("La sous-face de digue (" + nb(p.Z_plaf) + " m) est au-dessus du plus bas des terrains naturels : vérifier la cohérence de la coupe.");
+
+    /* --- 5. Modèle hydraulique --- */
+    p.L_amont = p.x_ecr;
+    p.L_aval = p.B_dig - p.x_ecr;
+    var f = (p.type === "palplanches") ? p.f : 1;
+    var bEff = (p.type === "palplanches") ? 0 : p.b;
+
+    var cfg = { couches:couches, Z_sub:Z_sub, Z_plaf:p.Z_plaf, z_pied:p.z_pied,
+                L_amont:p.L_amont, L_aval:p.L_aval, b:bEff, K_ecr:p.K_ecr,
+                alpha:p.alpha, f:f, DH:DH, modeConv:(p.modeConv === "sous" ? "sous" : "ecran") };
+    var r = calculDebit(cfg);
+    if (!(r.T_tot > 0)){ err.push("Transmissivité totale nulle : vérifier les conductivités et l'épaisseur des couches."); return R; }
+
+    var E_tot = p.Z_plaf - Z_sub;
+    var K_eq = r.T_tot / E_tot;
+    if (p.type === "argile" && p.K_ecr >= K_eq) warn.push("Le K de l'argile mise en œuvre (" + sci(p.K_ecr, 2) + " m/s) est supérieur ou égal au K équivalent horizontal du terrain (" + sci(K_eq, 2) + " m/s) : l'écran n'est pas plus étanche que le sol qu'il traverse.");
+    var q = r.q;
+    var Q = q * p.L_dig;
+    var V = Q * p.t_crue * 3600;
+    var charges = repartitionCharges(p.H_am, H_av, q, r);
+
+    /* --- 6. Vérifications --- */
+    var D = p.Z_TNav - p.z_pied;               // fiche sous le terrain naturel aval
+    var hex = chargeExces(charges, H_av, D, p.L_aval);
+    var lane = verifLane({ Z_plaf:p.Z_plaf, z_pied:p.z_pied, L_amont:p.L_amont, L_aval:p.L_aval, b:bEff }, null, DH, p.C_adm);
+    var renard = verifRenard(p.gamma_p, p.gamma_w, D, hex.moy, p.FS_cible);
+    var grad = verifGradient(p.gamma_p, p.gamma_w, D, hex.face);
+    var resu = verifResurgence({ Z_plaf:p.Z_plaf, Z_TNav:p.Z_TNav, L_aval:p.L_aval }, charges, H_av);
+
+    /* --- 7. Bilan ZIT --- */
+    var bilan = null;
+    if (Number.isFinite(p.V_zit) && p.V_zit > 0) bilan = { V_zit:p.V_zit, V:V, pct:100 * V / p.V_zit };
+
+    /* --- 8. Sensibilité sur la couche la plus transmissive --- */
+    var det = detailT(couches, Z_sub, p.Z_plaf);
+    var sensi = null;
+    if (det.length){
+      var iMax = 0;
+      for (var m = 1; m < det.length; m++) if (det[m].T > det[iMax].T) iMax = m;
+      var nomMax = det[iMax].nom;
+      var facteurs = [1 / 3, 1, 3], vals = [];
+      for (var n2 = 0; n2 < facteurs.length; n2++){
+        var cm = couches.map(function(cc){
+          return (cc.nom === nomMax) ? { nom:cc.nom, zToit:cc.zToit, zBase:cc.zBase, K:cc.K * facteurs[n2] } : cc;
+        });
+        var cfg2 = Object.assign({}, cfg, { couches:cm });
+        vals.push({ facteur:facteurs[n2], q:calculDebit(cfg2).q });
+      }
+      sensi = { couche:nomMax, K:det[iMax].K, valeurs:vals };
+    }
+
+    R.ok = true;
+    Object.assign(R, {
+      couches:couches, Z_sub:Z_sub, Z_toitStrati:Z_toitStrati, H_av:H_av, DH:DH,
+      E_tot:E_tot, K_eq:K_eq, detailT:det, r:r, cfg:cfg, q:q, Q:Q, V:V,
+      charges:charges, D:D, hex:hex, lane:lane, renard:renard, grad:grad, resu:resu,
+      bilan:bilan, sensi:sensi, bEff:bEff, f:f, p:p
+    });
+    return R;
+  }
+
+  /** Dimensionnement inverse : cote de pied nécessaire pour respecter q_cible (m²/s).
+   *  q est une fonction croissante de la cote de pied (écran plus profond = q plus faible). */
+  function dimensionnerEcran(cfg, qCible){
+    if (!(qCible > 0)) return { statut:"invalide" };
+    var f = function(z){ return calculDebit(Object.assign({}, cfg, { z_pied:z })).q; };
+    var zHaut = cfg.Z_plaf, zBas = cfg.Z_sub;
+    var qHaut = f(zHaut);
+    if (qHaut <= qCible) return { statut:"aucun", z:zHaut, q:qHaut };
+    // Balayage descendant pour encadrer la première profondeur satisfaisant la cible,
+    // puis dichotomie dans cet intervalle. Ce balayage rend le résultat indépendant
+    // d'une éventuelle non-monotonie de q(z) (formulation D_sous, écran très perméable).
+    var N = 500, zPrec = zHaut;
+    for (var i = 1; i <= N; i++){
+      var z = zHaut - (zHaut - zBas) * i / N;
+      if (f(z) <= qCible){
+        var a = z, b = zPrec;                       // a satisfait la cible, b ne la satisfait pas
+        for (var k = 0; k < 60; k++){ var m = (a + b) / 2; if (f(m) > qCible) b = m; else a = m; }
+        return { statut:"ok", z:a, q:f(a) };
+      }
+      zPrec = z;
+    }
+    return { statut:"inatteignable", z:zBas, q:f(zBas) };
+  }
+
+  /** Courbe q = f(profondeur de l'écran sous la sous-face de digue). */
+  function courbeQ(cfg, n){
+    n = n || 60;
+    var pts = [], E = cfg.Z_plaf - cfg.Z_sub;
+    for (var i = 0; i <= n; i++){
+      var prof = E * i / n;
+      var z = cfg.Z_plaf - prof;
+      pts.push({ prof:prof, z:z, q:calculDebit(Object.assign({}, cfg, { z_pied:z })).q });
+    }
+    return pts;
+  }
+
+  return { overlap:overlap, transmissivite:transmissivite, detailT:detailT,
+           calculDebit:calculDebit, repartitionCharges:repartitionCharges,
+           verifLane:verifLane, chargeExces:chargeExces, verifRenard:verifRenard,
+           verifGradient:verifGradient, verifResurgence:verifResurgence,
+           calculComplet:calculComplet, dimensionnerEcran:dimensionnerEcran, courbeQ:courbeQ };
+})();
+
+/* ==========================================================================
+   PARTIE 3 — DONNEES PAR DEFAUT ET CATALOGUES INDICATIFS
+   ========================================================================== */
+
+/* Valeurs indicatives issues de la littérature — sans caractère normatif, éditables. */
+var CAT_K_DEFAUT = [
+  { nom:"Argile compacte",                  k:1e-9 },
+  { nom:"Argile silteuse / limon argileux", k:1e-8 },
+  { nom:"Limon",                            k:5e-7 },
+  { nom:"Limon sableux",                    k:1e-6 },
+  { nom:"Sable très fin / silteux",         k:3e-6 },
+  { nom:"Sable fin",                        k:3e-5 },
+  { nom:"Sable moyen",                      k:2e-4 },
+  { nom:"Sable grossier",                   k:5e-4 },
+  { nom:"Graviers sableux",                 k:1e-3 },
+  { nom:"Graviers propres",                 k:5e-3 },
+  { nom:"Craie fissurée",                   k:1e-4 },
+  { nom:"Argile compactée d'écran",         k:1e-9 }
+];
+
+/* Rapports de cheminement pondéré de Lane — valeurs indicatives de la littérature. */
+var CAT_C_DEFAUT = [
+  { nom:"Limon / sable très fin", c:8.5 }, { nom:"Sable fin",              c:7.0 },
+  { nom:"Sable moyen",            c:6.0 }, { nom:"Sable grossier",         c:5.0 },
+  { nom:"Gravier fin",            c:4.0 }, { nom:"Gravier moyen",          c:3.5 },
+  { nom:"Gravier grossier",       c:3.0 }, { nom:"Argile molle",           c:3.0 },
+  { nom:"Argile moyenne",         c:2.0 }, { nom:"Argile dure",            c:1.8 }
+];
+
+var DEFAUTS = {
+  H_am:"82,50", Z_TNam:"80,00", Z_TNav:"79,50", H_av_opt:"", Z_plaf:"79,50",
+  B_dig:"18,00", L_dig:"120", x_ecr:"9,00", t_crue:"24", V_zit:"12000",
+  type_ecran:"argile", b_ecr:"0,80", z_pied:"74,00", K_ecr:"1e-9", f_serrures:"1,0",
+  alpha:"1,0", L_conv_mode:"ecran", gamma_p:"11,0", gamma_w:"9,81", FS_cible:"3,0", C_adm:"5,0",
+  q_cible:"0,20", q_cible_unite:"l",
+  couches:[
+    { nom:"Limon",              zToit:"80,00", zBase:"78,00", K:"5e-7" },
+    { nom:"Sable fin",          zToit:"78,00", zBase:"75,50", K:"3e-5" },
+    { nom:"Graviers alluviaux", zToit:"75,50", zBase:"73,00", K:"5e-4" }
+  ]
+};
+
+var catK = CAT_K_DEFAUT.map(function(o){ return { nom:o.nom, k:o.k }; });
+var catC = CAT_C_DEFAUT.map(function(o){ return { nom:o.nom, c:o.c }; });
+
+/* ==========================================================================
+   PARTIE 4 — COUCHE D'AFFICHAGE : SAISIE
+   ========================================================================== */
+function $(id){ return document.getElementById(id); }
+function v(id){ return $(id).value; }
+
+/* ---- Tableau dynamique de stratigraphie ---- */
+function optionsK(){
+  var s = '<option value="">— indicatif —</option>';
+  for (var i = 0; i < catK.length; i++){
+    s += '<option value="' + catK[i].k + '">' + esc(catK[i].nom) + '</option>';
+  }
+  return s;
+}
+
+function ligneStrati(c){
+  var tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td><input type="text" class="c-nom" value="' + esc(c.nom) + '"></td>' +
+    '<td><input type="text" inputmode="decimal" class="c-toit" value="' + esc(c.zToit) + '"></td>' +
+    '<td><input type="text" inputmode="decimal" class="c-base" value="' + esc(c.zBase) + '"></td>' +
+    '<td><input type="text" inputmode="decimal" class="c-k" value="' + esc(c.K) + '"></td>' +
+    '<td><select class="c-sel">' + optionsK() + '</select></td>' +
+    '<td><button class="mini c-del no-print" title="Supprimer la couche">×</button></td>';
+  tr.querySelector(".c-sel").addEventListener("change", function(){
+    if (this.value){ tr.querySelector(".c-k").value = this.value; this.value = ""; majAffichage(); }
+  });
+  tr.querySelector(".c-del").addEventListener("click", function(e){
+    e.preventDefault();
+    if ($("corpsStrati").children.length > 1){ tr.remove(); majAffichage(); }
+  });
+  tr.querySelectorAll("input").forEach(function(inp){ inp.addEventListener("input", majAffichage); });
+  return tr;
+}
+
+function lireCouches(){
+  var out = [];
+  $("corpsStrati").querySelectorAll("tr").forEach(function(tr){
+    out.push({
+      nom:  tr.querySelector(".c-nom").value.trim() || "sans nom",
+      zToit:parseNum(tr.querySelector(".c-toit").value),
+      zBase:parseNum(tr.querySelector(".c-base").value),
+      K:    parseNum(tr.querySelector(".c-k").value)
+    });
+  });
+  return out;
+}
+
+/* ---- Catalogues éditables ---- */
+function rendreCatK(){
+  var tb = $("corpsCatK"); tb.innerHTML = "";
+  catK.forEach(function(o, i){
+    var tr = document.createElement("tr");
+    tr.innerHTML = '<td><input type="text" value="' + esc(o.nom) + '"></td>' +
+                   '<td><input type="text" inputmode="decimal" value="' + esc(String(o.k)) + '"></td>' +
+                   '<td><button class="mini no-print">×</button></td>';
+    var ins = tr.querySelectorAll("input");
+    ins[0].addEventListener("input", function(){ catK[i].nom = this.value; majSelectsK(); });
+    ins[1].addEventListener("input", function(){ var x = parseNum(this.value); if (Number.isFinite(x)) { catK[i].k = x; majSelectsK(); } });
+    tr.querySelector("button").addEventListener("click", function(e){ e.preventDefault(); catK.splice(i, 1); rendreCatK(); majSelectsK(); });
+    tb.appendChild(tr);
+  });
+}
+
+function majSelectsK(){
+  $("corpsStrati").querySelectorAll(".c-sel").forEach(function(sel){ sel.innerHTML = optionsK(); });
+}
+
+function rendreCatC(){
+  var tb = $("corpsCatC"); tb.innerHTML = "";
+  catC.forEach(function(o, i){
+    var tr = document.createElement("tr");
+    tr.innerHTML = '<td><input type="text" value="' + esc(o.nom) + '"></td>' +
+                   '<td><input type="text" inputmode="decimal" value="' + esc(String(o.c).replace(".", ",")) + '"></td>' +
+                   '<td><button class="sec no-print" style="padding:1px 6px;font-size:11px">Utiliser</button></td>' +
+                   '<td><button class="mini no-print">×</button></td>';
+    var ins = tr.querySelectorAll("input"), bts = tr.querySelectorAll("button");
+    ins[0].addEventListener("input", function(){ catC[i].nom = this.value; });
+    ins[1].addEventListener("input", function(){ var x = parseNum(this.value); if (Number.isFinite(x)) catC[i].c = x; });
+    bts[0].addEventListener("click", function(e){ e.preventDefault(); $("C_adm").value = String(catC[i].c).replace(".", ","); majAffichage(); });
+    bts[1].addEventListener("click", function(e){ e.preventDefault(); catC.splice(i, 1); rendreCatC(); });
+    tb.appendChild(tr);
+  });
+}
+
+/* ---- Lecture de l'ensemble des paramètres ---- */
+function lireParams(){
+  var type = v("type_ecran");
+  var hav = v("H_av_opt").trim();
+  var vzit = v("V_zit").trim();
+  return {
+    H_am:parseNum(v("H_am")), Z_TNam:parseNum(v("Z_TNam")), Z_TNav:parseNum(v("Z_TNav")),
+    H_av_opt:(hav === "" ? null : parseNum(hav)),
+    Z_plaf:parseNum(v("Z_plaf")), B_dig:parseNum(v("B_dig")), L_dig:parseNum(v("L_dig")),
+    x_ecr:parseNum(v("x_ecr")), t_crue:parseNum(v("t_crue")),
+    V_zit:(vzit === "" ? null : parseNum(vzit)),
+    couches:lireCouches(), type:type,
+    b:parseNum(v("b_ecr")), z_pied:parseNum(v("z_pied")), K_ecr:parseNum(v("K_ecr")),
+    f:parseNum(v("f_serrures")), alpha:parseNum(v("alpha")),
+    gamma_p:parseNum(v("gamma_p")), gamma_w:parseNum(v("gamma_w")),
+    FS_cible:parseNum(v("FS_cible")), C_adm:parseNum(v("C_adm")), modeConv:v("L_conv_mode"),
+    q_cible:parseNum(v("q_cible")), q_cible_unite:v("q_cible_unite")
+  };
+}
+
+/** Débit cible converti en m²/s (débit unitaire), quelle que soit l'unité saisie. */
+function qCibleUnitaire(p){
+  if (!Number.isFinite(p.q_cible) || p.q_cible <= 0) return null;
+  if (p.q_cible_unite === "l") return p.q_cible / 1000;
+  if (!(p.L_dig > 0)) return null;
+  return p.q_cible / 3600 / p.L_dig;
+}
+
+/* ==========================================================================
+   PARTIE 5 — COUCHE D'AFFICHAGE : RESULTATS
+   ========================================================================== */
+
+function rendreMessages(R){
+  var h = "";
+  if (R.erreurs.length){
+    h += '<div class="msg msg-err"><strong>Saisie à corriger &mdash; résultats non calculés :</strong><ul>';
+    R.erreurs.forEach(function(e){ h += "<li>" + esc(e) + "</li>"; });
+    h += "</ul></div>";
+  }
+  if (R.avertissements.length){
+    h += '<div class="msg msg-warn"><strong>Points de vigilance :</strong><ul>';
+    R.avertissements.forEach(function(e){ h += "<li>" + esc(e) + "</li>"; });
+    h += "</ul></div>";
+  }
+  $("messages").innerHTML = h;
+}
+
+function rendreSyntheseStrati(R){
+  if (!R.ok){ $("synthStrati").innerHTML = ""; return; }
+  var h = '<table><tbody>';
+  h += '<tr><th>Substratum imperméable (base)</th><td class="num">' + nb(R.Z_sub, 2) + ' m</td></tr>';
+  h += '<tr><th>Épaisseur perméable retenue E</th><td class="num">' + nb(R.E_tot, 2) + ' m</td></tr>';
+  h += '<tr><th>Transmissivité totale T<sub>tot</sub></th><td class="num">' + sci(R.r.T_tot, 3) + ' m&sup2;/s</td></tr>';
+  h += '<tr><th>K équivalent horizontal</th><td class="num">' + sci(R.K_eq, 3) + ' m/s</td></tr>';
+  h += "</tbody></table>";
+  $("synthStrati").innerHTML = h;
+}
+
+function rendreSynthese(R, qCible){
+  if (!R.ok){ $("synthese").innerHTML = ""; $("noteSynthese").textContent = ""; return; }
+  var cls = "";
+  if (qCible){
+    if (R.q <= qCible)            cls = "vert";
+    else if (R.q <= 1.25 * qCible) cls = "orange";
+    else                           cls = "rouge";
+  }
+  var h = "";
+  h += '<div class="tuile ' + cls + '"><div class="lib">Débit unitaire q</div><div class="val">' + nb(R.q * 1000, 3) + '</div><div class="u2">l/s/ml &nbsp;(' + sci(R.q, 3) + ' m&sup2;/s)</div></div>';
+  h += '<div class="tuile ' + cls + '"><div class="lib">Débit total Q</div><div class="val">' + nb(R.Q * 3600, 1) + '</div><div class="u2">m&sup3;/h &nbsp;(' + auto(R.Q, 4) + ' m&sup3;/s)</div></div>';
+  h += '<div class="tuile"><div class="lib">Volume infiltré V</div><div class="val">' + nb(R.V, 0) + '</div><div class="u2">m&sup3; en ' + nb(R.p.t_crue, 0) + ' h</div></div>';
+  h += '<div class="tuile"><div class="lib">Charge motrice &Delta;H</div><div class="val">' + nb(R.DH, 2) + '</div><div class="u2">m</div></div>';
+  $("synthese").innerHTML = h;
+
+  var note = "";
+  if (qCible){
+    note = "Débit cible : " + nb(qCible * 1000, 3) + " l/s/ml, soit " + nb(qCible * R.p.L_dig * 3600, 1) + " m³/h sur " +
+           nb(R.p.L_dig, 0) + " m de digue. " +
+           (R.q <= qCible ? "Objectif respecté." :
+            "Objectif dépassé de " + nb(100 * (R.q / qCible - 1), 0) + " % — utiliser le dimensionnement inverse (§7).");
+  } else {
+    note = "Aucun débit cible valide saisi : le code couleur de la synthèse est désactivé.";
+  }
+  $("noteSynthese").textContent = note;
+}
+
+function rendreDetail(R){
+  if (!R.ok){ $("corpsDetail").innerHTML = ""; return; }
+  var r = R.r, p = R.p, L = [];
+  function ligne(g, f, ap, res){ L.push("<tr><td>" + g + "</td><td>" + f + "</td><td>" + ap + "</td><td class=\"num\">" + res + "</td></tr>"); }
+
+  ligne("&Delta;H", "H_amont − H_aval",
+        nb(p.H_am, 2) + " − " + nb(R.H_av, 2), nb(R.DH, 3) + " m");
+
+  var apT = R.detailT.map(function(d){ return sci(d.K, 2) + "×" + nb(d.e, 2); }).join(" + ");
+  ligne("T<sub>tot</sub>", "Σ (K_i × e_i) entre substratum et sous-face de digue",
+        apT || "—", sci(r.T_tot, 3) + " m&sup2;/s");
+
+  ligne("K<sub>éq,h</sub>", "T_tot / E",
+        sci(r.T_tot, 3) + " / " + nb(R.E_tot, 2), sci(R.K_eq, 3) + " m/s");
+
+  var zpe = Math.min(p.z_pied, p.Z_plaf);
+  var apTs = Calc.detailT(R.couches, R.Z_sub, zpe).map(function(d){ return sci(d.K, 2) + "×" + nb(d.e, 2); }).join(" + ");
+  ligne("T<sub>sous</sub>", "Σ (K_i × e_i) sous le pied de l'écran",
+        apTs || "0 (écran ancré au substratum)", sci(r.T_sous, 3) + " m&sup2;/s");
+
+  ligne("D<sub>sous</sub>", "z_pied − Z_substratum",
+        nb(zpe, 2) + " − " + nb(R.Z_sub, 2), nb(r.D_sous, 3) + " m");
+
+  ligne("D<sub>écran</sub>", "Z_plafond − max(z_pied ; Z_substratum)",
+        nb(p.Z_plaf, 2) + " − " + nb(Math.max(p.z_pied, R.Z_sub), 2), nb(r.D_ecran, 3) + " m");
+
+  ligne("R<sub>amont</sub>", "L_amont / T_tot",
+        nb(p.L_amont, 2) + " / " + sci(r.T_tot, 3), auto(r.R_amont, 1) + " s/m");
+
+  ligne("L<sub>conv</sub>", (R.cfg.modeConv === "sous" ? "= D_sous (formulation initiale)" : "= D_écran (formulation monotone)"),
+        (R.cfg.modeConv === "sous" ? "épaisseur perméable résiduelle sous le pied" : "hauteur d'écran obstruant les couches perméables"),
+        nb(r.L_conv, 3) + " m");
+
+  ligne("R<sub>a</sub>", "(b + α × L_conv) / T_sous",
+        "(" + nb(R.bEff, 2) + " + " + nb(p.alpha, 2) + "×" + nb(r.L_conv, 2) + ") / " + sci(r.T_sous, 3),
+        auto(r.R_a, 1) + " s/m");
+
+  ligne("R<sub>b</sub>", "b / (K_écran × D_écran)",
+        (R.bEff > 0 ? nb(R.bEff, 2) + " / (" + sci(p.K_ecr, 2) + "×" + nb(r.D_ecran, 2) + ")"
+                    : "b = 0 → pas de traversée possible"),
+        (Number.isFinite(r.R_b) ? auto(r.R_b, 1) + " s/m" : "∞"));
+
+  ligne("R<sub>écran</sub>", "1 / (1/R_a + 1/R_b)",
+        "1 / (1/" + auto(r.R_a, 1) + " + 1/" + (Number.isFinite(r.R_b) ? auto(r.R_b, 1) : "∞") + ")",
+        auto(r.R_ecran, 1) + " s/m");
+
+  if (R.f !== 1){
+    ligne("R<sub>écran,eff</sub>", "R_écran / f_serrures",
+          auto(r.R_ecran, 1) + " / " + nb(R.f, 2), auto(r.R_ecran_eff, 1) + " s/m");
+  }
+
+  ligne("R<sub>aval</sub>", "L_aval / T_tot",
+        nb(p.L_aval, 2) + " / " + sci(r.T_tot, 3), auto(r.R_aval, 1) + " s/m");
+
+  ligne("R<sub>total</sub>", "R_amont + R_écran,eff + R_aval",
+        auto(r.R_amont, 1) + " + " + auto(r.R_ecran_eff, 1) + " + " + auto(r.R_aval, 1),
+        auto(r.R_tot, 1) + " s/m");
+
+  ligne("q", "ΔH / R_total",
+        nb(R.DH, 3) + " / " + auto(r.R_tot, 1), sci(R.q, 4) + " m&sup2;/s");
+
+  ligne("q", "q × 1000", sci(R.q, 4) + " × 1000", nb(R.q * 1000, 3) + " l/s/ml");
+
+  ligne("Q", "q × L_digue",
+        sci(R.q, 4) + " × " + nb(p.L_dig, 0), auto(R.Q, 4) + " m&sup3;/s");
+
+  ligne("Q", "Q × 3600", auto(R.Q, 4) + " × 3600", nb(R.Q * 3600, 2) + " m&sup3;/h");
+
+  ligne("V", "Q × durée × 3600",
+        auto(R.Q, 4) + " × " + nb(p.t_crue, 1) + " × 3600", nb(R.V, 0) + " m&sup3;");
+
+  $("corpsDetail").innerHTML = L.join("");
+}
+
+function rendreCharges(R){
+  if (!R.ok){ $("corpsCharges").innerHTML = ""; return; }
+  var c = R.charges, r = R.r, tot = R.DH;
+  function pct(x){ return tot > 0 ? nb(100 * x / tot, 1) : "—"; }
+  var h = "";
+  h += '<tr><td>Amont (pied de digue → écran)</td><td>R_amont</td><td class="num">' + auto(r.R_amont, 1) + '</td><td class="num">' + nb(c.dh_amont, 3) + '</td><td class="num">' + pct(c.dh_amont) + '</td><td class="num">' + nb(c.h1, 3) + '</td></tr>';
+  h += '<tr><td>Écran (contournement + traversée)</td><td>R_écran,eff</td><td class="num">' + auto(r.R_ecran_eff, 1) + '</td><td class="num">' + nb(c.dh_ecran, 3) + '</td><td class="num">' + pct(c.dh_ecran) + '</td><td class="num">' + nb(c.h2, 3) + '</td></tr>';
+  h += '<tr><td>Aval (écran → pied de digue)</td><td>R_aval</td><td class="num">' + auto(r.R_aval, 1) + '</td><td class="num">' + nb(c.dh_aval, 3) + '</td><td class="num">' + pct(c.dh_aval) + '</td><td class="num">' + nb(c.h3, 3) + '</td></tr>';
+  h += '<tr style="background:var(--gris);font-weight:600"><td>Total</td><td>R_total</td><td class="num">' + auto(r.R_tot, 1) + '</td><td class="num">' + nb(c.dh_amont + c.dh_ecran + c.dh_aval, 3) + '</td><td class="num">100,0</td><td class="num">' + nb(c.h3, 3) + '</td></tr>';
+  $("corpsCharges").innerHTML = h;
+}
+
+function badge(ok, texteOk, texteKo){
+  return ok ? '<span class="st st-ok">' + (texteOk || "OK") + '</span>'
+            : '<span class="st st-ko">' + (texteKo || "NON VÉRIFIÉ") + '</span>';
+}
+
+function rendreVerifs(R){
+  if (!R.ok){ $("corpsVerifs").innerHTML = ""; $("alertesVerifs").innerHTML = ""; return; }
+  var h = "", al = "", L = R.lane, Re = R.renard, G = R.grad, S = R.resu, p = R.p;
+
+  /* --- Lane --- */
+  h += "<tr><td>Cheminement pondéré de Lane</td><td>L_w = Σvert + Σhoriz/3 = " + nb(L.sigmaV, 2) + " + " +
+       nb(L.sigmaH, 2) + "/3 = <strong>" + nb(L.Lw, 2) + " m</strong><br>C = L_w/ΔH = " + nb(L.Lw, 2) + " / " +
+       nb(R.DH, 2) + " = <strong>" + nb(L.C, 2) + "</strong></td><td>C ≥ " + nb(L.C_adm, 2) + "</td><td>" +
+       badge(L.ok) + "</td></tr>";
+
+  /* --- Renard (Terzaghi) --- */
+  if (Re.applicable){
+    h += "<tr><td>Sécurité au renard<br>(soulèvement de Terzaghi)</td><td>D = " + nb(Re.D, 2) +
+         " m ; h_a moyen sur le prisme D/2 = " + nb(Re.h_a, 3) + " m<br>FS = (γ'×D)/(γw×h_a) = (" +
+         nb(p.gamma_p, 2) + "×" + nb(Re.D, 2) + ")/(" + nb(p.gamma_w, 2) + "×" + nb(Re.h_a, 3) +
+         ") = <strong>" + nb(Re.FS, 2) + "</strong></td><td>FS ≥ " + nb(Re.FS_cible, 2) + "</td><td>" +
+         badge(Re.ok) + "</td></tr>";
+  } else {
+    h += '<tr><td>Sécurité au renard</td><td>Fiche sous le terrain naturel aval nulle ou négative.</td><td>—</td><td><span class="st st-na">NON APPLICABLE</span></td></tr>';
+  }
+
+  /* --- Gradient de sortie --- */
+  if (G.applicable){
+    h += "<tr><td>Gradient de sortie</td><td>i_sortie = h_a/D = " + nb(R.hex.face, 3) + " / " + nb(R.D, 2) +
+         " = <strong>" + nb(G.i, 3) + "</strong><br>i_critique = γ'/γw = " + nb(p.gamma_p, 2) + " / " +
+         nb(p.gamma_w, 2) + " = <strong>" + nb(G.i_c, 3) + "</strong> &nbsp;(marge i_c/i = " + nb(G.marge, 2) +
+         ")</td><td>i_sortie &lt; i_c</td><td>" + badge(G.ok) + "</td></tr>";
+  } else {
+    h += '<tr><td>Gradient de sortie</td><td>Fiche sous le terrain naturel aval nulle ou négative.</td><td>—</td><td><span class="st st-na">NON APPLICABLE</span></td></tr>';
+  }
+
+  /* --- Mise en charge / résurgence --- */
+  var txt = "Cote piézométrique en aval de l'écran h₂ = <strong>" + nb(R.charges.h2, 3) +
+            " m</strong> ; sous-face de digue = " + nb(p.Z_plaf, 2) + " m ; TN aval = " + nb(p.Z_TNav, 2) + " m.";
+  if (S.enCharge){
+    txt += "<br>Excès de charge sous la digue : <strong>" + nb(S.exces, 3) + " m</strong>" +
+           (S.xCroise !== null ? ", la ligne piézométrique recoupe la sous-face de digue à " + nb(S.xCroise, 2) +
+            " m en aval de l'écran (pied aval à " + nb(p.L_aval, 2) + " m)." : ".");
+  }
+  if (S.resurgenceSurface) txt += "<br><strong>La charge aval imposée est au-dessus du terrain naturel aval : résurgence en surface dans la zone d'habitat.</strong>";
+  else if (S.exutoireAuTN) txt += "<br>Exutoire au niveau du terrain naturel aval : par hypothèse de calcul, le débit q émerge au pied aval de la digue.";
+  var statutS = S.resurgenceSurface ? '<span class="st st-ko">RÉSURGENCE</span>'
+              : (S.enCharge ? '<span class="st st-att">NAPPE EN CHARGE</span>' : '<span class="st st-ok">OK</span>');
+  h += "<tr><td>Résurgence / mise en charge à l'aval</td><td>" + txt + "</td><td>h₂ ≤ Z_plafond<br>H_aval ≤ Z_TN aval</td><td>" + statutS + "</td></tr>";
+
+  $("corpsVerifs").innerHTML = h;
+
+  if (S.enCharge){
+    al += '<div class="msg msg-warn"><strong>Nappe en charge sous la partie aval de la digue.</strong> ' +
+          "La charge piézométrique dépasse la sous-face de digue de " + nb(S.exces, 2) +
+          " m au droit de l'écran. Cette sous-pression sollicite le pied aval de la digue et la couverture peu perméable éventuelle&nbsp;: " +
+          "elle est à confronter aux vérifications au renard et au gradient de sortie ci-dessus, et à prendre en compte dans la stabilité du talus aval.</div>";
+  }
+  if (S.resurgenceSurface){
+    al += '<div class="msg msg-err"><strong>Alerte résurgence.</strong> La charge aval imposée (' + nb(R.H_av, 2) +
+          " m) est supérieure à la cote du terrain naturel côté habitat (" + nb(p.Z_TNav, 2) +
+          " m)&nbsp;: le modèle prévoit une émergence d'eau en surface dans la zone à protéger.</div>";
+  }
+  $("alertesVerifs").innerHTML = al;
+}
+
+function rendreBilan(R){
+  if (!R.ok){ $("bilanZIT").innerHTML = ""; return; }
+  if (!R.bilan){
+    $("bilanZIT").innerHTML = '<p class="note">Volume stocké dans la ZIT non renseigné (section A) : bilan non calculé.</p>';
+    return;
+  }
+  var b = R.bilan;
+  var cls = b.pct < 5 ? "vert" : (b.pct < 15 ? "orange" : "rouge");
+  $("bilanZIT").innerHTML =
+    '<div class="synth">' +
+    '<div class="tuile"><div class="lib">Volume stocké</div><div class="val">' + nb(b.V_zit, 0) + '</div><div class="u2">m&sup3;</div></div>' +
+    '<div class="tuile"><div class="lib">Volume infiltré</div><div class="val">' + nb(b.V, 0) + '</div><div class="u2">m&sup3; en ' + nb(R.p.t_crue, 0) + ' h</div></div>' +
+    '<div class="tuile ' + cls + '"><div class="lib">Part perdue</div><div class="val">' + nb(b.pct, 1) + '</div><div class="u2">% du volume stocké</div></div>' +
+    "</div>" +
+    '<p class="note">Le régime permanent étant supposé établi pendant toute la durée de l\'événement, ce pourcentage majore la perte réelle.</p>';
+}
+
+function rendreSensibilite(R){
+  if (!R.ok || !R.sensi){ $("resSensi").innerHTML = ""; return; }
+  var s = R.sensi, h = "";
+  h += '<table><thead><tr><th>Hypothèse sur la couche « ' + esc(s.couche) + ' »</th><th class="num">K (m/s)</th><th class="num">q (l/s/ml)</th><th class="num">Q (m&sup3;/h)</th><th class="num">Écart</th></tr></thead><tbody>';
+  var qRef = s.valeurs[1].q;
+  var libs = ["K / 3 (borne basse)", "K retenu", "K × 3 (borne haute)"];
+  s.valeurs.forEach(function(x, i){
+    var ec = (qRef > 0) ? nb(100 * (x.q / qRef - 1), 0) + " %" : "—";
+    h += "<tr" + (i === 1 ? ' style="background:var(--gris);font-weight:600"' : "") + "><td>" + libs[i] +
+         '</td><td class="num">' + sci(s.K * x.facteur, 2) + '</td><td class="num">' + nb(x.q * 1000, 3) +
+         '</td><td class="num">' + nb(x.q * R.p.L_dig * 3600, 1) + '</td><td class="num">' + (i === 1 ? "réf." : ec) + "</td></tr>";
+  });
+  h += "</tbody></table>";
+  h += '<p class="note">Couche la plus transmissive du profil. La conductivité étant le paramètre le plus incertain du calcul, ' +
+       "cette fourchette donne l'ordre de grandeur de l'incertitude à retenir en pré-dimensionnement, avant essais in situ.</p>";
+  $("resSensi").innerHTML = h;
+}
+
+/* ==========================================================================
+   PARTIE 6 — SCHEMA : COUPE EN TRAVERS (SVG généré)
+   ========================================================================== */
+
+var PALETTE = ["#efe0bd","#dfe8dc","#e8d7c3","#d7e2ec","#e6e2cd","#e2d6c6","#dce8e4","#eadfd0"];
+
+function dessinerCoupe(R, iso){
+  var svg = $("svgCoupe");
+  if (!R.ok){
+    svg.innerHTML = '<text x="470" y="280" text-anchor="middle" fill="#943126" font-size="14">' +
+                    "Schéma non tracé : corriger les erreurs de saisie.</text>";
+    $("legendeCoupe").textContent = "";
+    return;
+  }
+  var p = R.p, c = R.charges;
+  var W = 940, H = 560, mL = 108, mR = 26, mT = 52, mB = 74;
+  var pw = W - mL - mR, ph = H - mT - mB;
+
+  /* --- Domaine représenté --- */
+  var marge = Math.max(p.B_dig * 0.30, 4);
+  var xMin = -marge, xMax = p.B_dig + marge;
+  var crete = p.H_am + Math.max(0.60, 0.20 * R.DH);
+  var zTop = Math.max(crete, p.H_am, R.Z_toitStrati) + 0.60;
+  var zBot = R.Z_sub - Math.max(0.80, 0.15 * R.E_tot);
+
+  var sx = pw / (xMax - xMin), sy = ph / (zTop - zBot), offX = 0, offY = 0;
+  if (iso){ var s = Math.min(sx, sy); sx = s; sy = s;
+            offX = (pw - (xMax - xMin) * sx) / 2; offY = (ph - (zTop - zBot) * sy) / 2; }
+  var exag = sy / sx;
+  function X(x){ return mL + offX + (x - xMin) * sx; }
+  function Y(z){ return mT + offY + (zTop - z) * sy; }
+  function pts(arr){ return arr.map(function(a){ return X(a[0]).toFixed(1) + "," + Y(a[1]).toFixed(1); }).join(" "); }
+
+  var g = [];
+  g.push('<defs>' +
+    '<pattern id="pRemblai" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+      '<rect width="7" height="7" fill="#cfa77a"/><line x1="0" y1="0" x2="0" y2="7" stroke="#a9784d" stroke-width="1.2"/></pattern>' +
+    '<pattern id="pSubstratum" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+      '<rect width="6" height="6" fill="#9aa5a8"/><line x1="0" y1="0" x2="0" y2="6" stroke="#6b7679" stroke-width="1.4"/></pattern>' +
+    '<pattern id="pArgile" width="6" height="6" patternUnits="userSpaceOnUse">' +
+      '<rect width="6" height="6" fill="#8a6d3b"/><line x1="0" y1="3" x2="6" y2="3" stroke="#5d4a28" stroke-width="1.2"/></pattern>' +
+    '<marker id="fleche" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M0,1 L9,5 L0,9 z" fill="#1a5276"/></marker>' +
+    '<marker id="cote1" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+      '<path d="M2,2 L8,5 L2,8 z" fill="#333"/></marker>' +
+    '<clipPath id="clipSol"><rect x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '"/></clipPath>' +
+    "</defs>");
+
+  g.push('<rect x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="#ffffff" stroke="#c8d0d4"/>');
+  g.push('<g clip-path="url(#clipSol)">');
+
+  /* --- Couches de sol --- */
+  R.couches.forEach(function(co, i){
+    var y1 = Y(Math.min(co.zToit, zTop)), y2 = Y(Math.max(co.zBase, zBot));
+    if (y2 - y1 <= 0.3) return;
+    g.push('<rect x="' + X(xMin).toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + ((X(xMax) - X(xMin))).toFixed(1) +
+           '" height="' + (y2 - y1).toFixed(1) + '" fill="' + PALETTE[i % PALETTE.length] + '" stroke="#b3a98f" stroke-width="0.7"/>');
+  });
+  /* --- Substratum --- */
+  g.push('<rect x="' + X(xMin).toFixed(1) + '" y="' + Y(R.Z_sub).toFixed(1) + '" width="' + (X(xMax) - X(xMin)).toFixed(1) +
+         '" height="' + Math.max(0, Y(zBot) - Y(R.Z_sub)).toFixed(1) + '" fill="url(#pSubstratum)" opacity="0.85"/>');
+  g.push('<line x1="' + X(xMin) + '" y1="' + Y(R.Z_sub).toFixed(1) + '" x2="' + X(xMax) + '" y2="' + Y(R.Z_sub).toFixed(1) + '" stroke="#4d5656" stroke-width="1.8"/>');
+
+  /* --- Ciel : masque au-dessus du profil du terrain --- */
+  var profil = [[xMin, p.Z_TNam], [0, p.Z_TNam], [0, p.Z_plaf], [p.B_dig, p.Z_plaf], [p.B_dig, p.Z_TNav], [xMax, p.Z_TNav]];
+  g.push('<polygon points="' + pts(profil.concat([[xMax, zTop], [xMin, zTop]])) + '" fill="#eaf2f8"/>');
+
+  /* --- Eau amont (ZIT) --- */
+  var cw = Math.max(p.B_dig * 0.18, 0.8);
+  var xc1 = p.B_dig / 2 - cw / 2, xc2 = p.B_dig / 2 + cw / 2;
+  var tAm = Math.max(0, Math.min(1, (p.H_am - p.Z_plaf) / (crete - p.Z_plaf)));
+  var xf = tAm * xc1;
+  g.push('<polygon points="' + pts([[xMin, p.H_am], [xf, p.H_am], [0, p.Z_plaf], [0, p.Z_TNam], [xMin, p.Z_TNam]]) +
+         '" fill="#aed6f1" stroke="#3498db" stroke-width="1"/>');
+  /* --- Eau aval éventuelle --- */
+  if (R.H_av > p.Z_TNav + 1e-9){
+    var u = Math.max(0, Math.min(1, (crete - R.H_av) / (crete - p.Z_plaf)));
+    var xg = xc2 + u * (p.B_dig - xc2);
+    g.push('<polygon points="' + pts([[xg, R.H_av], [xMax, R.H_av], [xMax, p.Z_TNav], [p.B_dig, p.Z_TNav], [p.B_dig, p.Z_plaf]]) +
+           '" fill="#aed6f1" stroke="#3498db" stroke-width="1"/>');
+  }
+
+  /* --- Digue --- */
+  g.push('<polygon points="' + pts([[0, p.Z_plaf], [xc1, crete], [xc2, crete], [p.B_dig, p.Z_plaf]]) +
+         '" fill="url(#pRemblai)" stroke="#7e5109" stroke-width="1.4"/>');
+  g.push('<polyline points="' + pts([[p.B_dig / 2 - cw * 0.12, crete], [p.B_dig / 2 - cw * 0.12, p.Z_plaf]]) +
+         '" fill="none" stroke="#5d4037" stroke-width="2.5" stroke-dasharray="5 3" opacity="0.8"/>');
+  g.push('<text x="' + X(p.B_dig / 2).toFixed(1) + '" y="' + (Y(crete) - 7).toFixed(1) +
+         '" text-anchor="middle" font-size="11" fill="#7e5109">digue (corps imperméabilisé)</text>');
+
+  /* --- Profil du terrain --- */
+  g.push('<polyline points="' + pts(profil) + '" fill="none" stroke="#5d4037" stroke-width="1.6"/>');
+
+  /* --- Equipotentielles et lignes de courant --- */
+  var Neq = 10;
+  var cx = X(p.x_ecr), cyPied = Y(p.z_pied), ySub = Y(R.Z_sub), yPlaf = Y(p.Z_plaf);
+  var arcs = [];
+  if (R.q > 0){
+    for (var k = 1; k < Neq; k++){
+      var hk = p.H_am - k * R.DH / Neq, xk = null;
+      if (hk >= c.h1 - 1e-12 && (p.H_am - c.h1) > 1e-9){
+        xk = p.L_amont * (p.H_am - hk) / (p.H_am - c.h1);
+      } else if (hk <= c.h2 + 1e-12 && (c.h2 - R.H_av) > 1e-9){
+        xk = p.x_ecr + p.L_aval * (c.h2 - hk) / (c.h2 - R.H_av);
+      } else { arcs.push(hk); continue; }
+      if (xk === null || !Number.isFinite(xk)) continue;
+      g.push('<line x1="' + X(xk).toFixed(1) + '" y1="' + yPlaf.toFixed(1) + '" x2="' + X(xk).toFixed(1) + '" y2="' + ySub.toFixed(1) +
+             '" stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.75"/>');
+    }
+    var hEcr = Math.abs(ySub - cyPied);
+    if (R.r.D_sous <= 1e-9) arcs = [];   // écran ancré : plus de contournement à représenter
+    arcs.forEach(function(hk, j){
+      var rf = (j + 1) / (arcs.length + 1);
+      var rx = Math.max(10, (0.20 + 0.80 * rf) * Math.max(26, hEcr * 1.25));
+      var ry = (0.20 + 0.80 * rf) * Math.max(8, hEcr * 0.92);
+      g.push('<path d="M' + (cx - rx).toFixed(1) + "," + yPlaf.toFixed(1) +
+             " C" + (cx - rx).toFixed(1) + "," + (cyPied + ry).toFixed(1) +
+             " " + (cx + rx).toFixed(1) + "," + (cyPied + ry).toFixed(1) +
+             " " + (cx + rx).toFixed(1) + "," + yPlaf.toFixed(1) +
+             '" fill="none" stroke="#2874a6" stroke-width="0.9" stroke-dasharray="4 3" opacity="0.75"/>');
+    });
+
+    /* Lignes de courant contournant le pied de l'écran */
+    if (R.r.D_sous > 1e-9){
+      var Nl = 5;
+      for (var j2 = 0; j2 < Nl; j2++){
+        var fr = (j2 + 0.5) / Nl;
+        var zFar = p.Z_plaf - fr * R.E_tot;
+        var zTip = p.z_pied - fr * R.r.D_sous;
+        var d = "M" + X(xMin).toFixed(1) + "," + Y(zFar).toFixed(1) +
+                " L" + X(0).toFixed(1) + "," + Y(zFar).toFixed(1) +
+                " C" + X(p.x_ecr * 0.55).toFixed(1) + "," + Y(zFar).toFixed(1) +
+                " " + X(p.x_ecr * 0.90).toFixed(1) + "," + Y(zTip).toFixed(1) +
+                " " + cx.toFixed(1) + "," + Y(zTip).toFixed(1) +
+                " C" + X(p.x_ecr + p.L_aval * 0.10).toFixed(1) + "," + Y(zTip).toFixed(1) +
+                " " + X(p.x_ecr + p.L_aval * 0.45).toFixed(1) + "," + Y(zFar).toFixed(1) +
+                " " + X(p.B_dig).toFixed(1) + "," + Y(zFar).toFixed(1) +
+                " L" + X(xMax).toFixed(1) + "," + Y(zFar).toFixed(1);
+        g.push('<path d="' + d + '" fill="none" stroke="#1a5276" stroke-width="1.3" opacity="0.85"/>');
+        g.push('<line x1="' + X(xMin * 0.75).toFixed(1) + '" y1="' + Y(zFar).toFixed(1) + '" x2="' + X(xMin * 0.30).toFixed(1) +
+               '" y2="' + Y(zFar).toFixed(1) + '" stroke="#1a5276" stroke-width="1.3" marker-end="url(#fleche)"/>');
+      }
+    }
+  }
+
+  /* --- Écran étanche --- */
+  var xe1 = X(p.x_ecr - R.bEff / 2), xe2 = X(p.x_ecr + R.bEff / 2);
+  if (xe2 - xe1 < 5){ xe1 = cx - 2.5; xe2 = cx + 2.5; }
+  var fillEcr = (p.type === "palplanches") ? "#2c3e50" : "url(#pArgile)";
+  g.push('<rect x="' + xe1.toFixed(1) + '" y="' + yPlaf.toFixed(1) + '" width="' + (xe2 - xe1).toFixed(1) +
+         '" height="' + Math.max(0, cyPied - yPlaf).toFixed(1) + '" fill="' + fillEcr + '" stroke="#1b2631" stroke-width="1.2"/>');
+  g.push("</g>");
+
+  /* --- Ligne piézométrique --- */
+  if (R.q > 0){
+    var dp = "M" + X(xMin).toFixed(1) + "," + Y(p.H_am).toFixed(1) +
+             " L" + X(0).toFixed(1) + "," + Y(p.H_am).toFixed(1) +
+             " L" + cx.toFixed(1) + "," + Y(c.h1).toFixed(1) +
+             " L" + cx.toFixed(1) + "," + Y(c.h2).toFixed(1) +
+             " L" + X(p.B_dig).toFixed(1) + "," + Y(R.H_av).toFixed(1) +
+             " L" + X(xMax).toFixed(1) + "," + Y(R.H_av).toFixed(1);
+    g.push('<path d="' + dp + '" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 3"/>');
+    g.push('<text x="' + (cx + 8).toFixed(1) + '" y="' + (Y(c.h2) - 5).toFixed(1) + '" font-size="10.5" fill="#c0392b">ligne piézométrique</text>');
+  }
+
+  /* --- Repères de niveaux (colonne de gauche) --- */
+  var niveaux = [
+    { z:p.H_am,   t:"H amont " + nb(p.H_am, 2),   col:"#1b4f72" },
+    { z:p.Z_TNam, t:"TN amont " + nb(p.Z_TNam, 2), col:"#5d4037" },
+    { z:p.Z_plaf, t:"s/face digue " + nb(p.Z_plaf, 2), col:"#7e5109" },
+    { z:p.Z_TNav, t:"TN aval " + nb(p.Z_TNav, 2),  col:"#5d4037" },
+    { z:R.H_av,   t:"H aval " + nb(R.H_av, 2),     col:"#2874a6" },
+    { z:p.z_pied, t:"pied écran " + nb(p.z_pied, 2), col:"#1b2631" },
+    { z:R.Z_sub,  t:"substratum " + nb(R.Z_sub, 2), col:"#4d5656" }
+  ];
+  niveaux.forEach(function(n){ n.y = Y(n.z); });
+  niveaux.sort(function(a, b){ return a.y - b.y; });
+  for (var i3 = 1; i3 < niveaux.length; i3++){
+    if (niveaux[i3].y - niveaux[i3 - 1].y < 11.5) niveaux[i3].y = niveaux[i3 - 1].y + 11.5;
+  }
+  niveaux.forEach(function(n){
+    g.push('<line x1="' + (mL - 5) + '" y1="' + Y(n.z).toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + Y(n.z).toFixed(1) +
+           '" stroke="' + n.col + '" stroke-width="0.7" stroke-dasharray="2 4" opacity="0.55"/>');
+    g.push('<text x="' + (mL - 7) + '" y="' + (n.y + 3.4).toFixed(1) + '" text-anchor="end" font-size="10" fill="' + n.col + '">' + esc(n.t) + "</text>");
+  });
+
+  /* --- Étiquettes de couches --- */
+  R.couches.forEach(function(co){
+    var y1 = Y(Math.min(co.zToit, zTop)), y2 = Y(Math.max(co.zBase, zBot));
+    if (y2 - y1 < 12) return;
+    g.push('<text x="' + (mL + pw - 6) + '" y="' + ((y1 + y2) / 2 + 3.4).toFixed(1) +
+           '" text-anchor="end" font-size="10" fill="#5d4037">' + esc(co.nom) + " — K = " + sci(co.K, 1) + " m/s</text>");
+  });
+  g.push('<text x="' + (mL + pw - 6) + '" y="' + Math.min(mT + ph - 4, Y(R.Z_sub) + 13).toFixed(1) +
+         '" text-anchor="end" font-size="10" fill="#2c3e50">substratum imperméable</text>');
+
+  /* --- Cotation de la fiche et de D_sous --- */
+  function coteVert(px, z1, z2, txt, col, aGauche){
+    px = Number(px);                       // px peut arriver formaté : forcer le type numérique
+    var y1 = Y(z1), y2 = Y(z2);
+    if (Math.abs(y2 - y1) < 3) return;
+    g.push('<line x1="' + px + '" y1="' + y1.toFixed(1) + '" x2="' + px + '" y2="' + y2.toFixed(1) +
+           '" stroke="' + col + '" stroke-width="1" marker-start="url(#cote1)" marker-end="url(#cote1)"/>');
+    g.push('<text x="' + (px + (aGauche ? -5 : 5)) + '" y="' + ((y1 + y2) / 2 + 3.4).toFixed(1) +
+           '" text-anchor="' + (aGauche ? "end" : "start") + '" font-size="10" fill="' + col + '">' + esc(txt) + "</text>");
+  }
+  coteVert((xe2 + 32).toFixed(1), p.Z_TNav, p.z_pied, "fiche D = " + nb(R.D, 2) + " m", "#943126", false);
+  coteVert((xe1 - 32).toFixed(1), p.z_pied, R.Z_sub, "D_sous = " + nb(R.r.D_sous, 2) + " m", "#1a5276", true);
+
+  /* --- Cotation horizontale --- */
+  var yc = mT + ph + 18;
+  function coteHoriz(x1, x2, y, txt){
+    g.push('<line x1="' + X(x1).toFixed(1) + '" y1="' + y + '" x2="' + X(x2).toFixed(1) + '" y2="' + y +
+           '" stroke="#333" stroke-width="1" marker-start="url(#cote1)" marker-end="url(#cote1)"/>');
+    g.push('<text x="' + ((X(x1) + X(x2)) / 2).toFixed(1) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="10" fill="#333">' + esc(txt) + "</text>");
+  }
+  coteHoriz(0, p.x_ecr, yc, "L_amont = " + nb(p.L_amont, 2) + " m");
+  coteHoriz(p.x_ecr, p.B_dig, yc, "L_aval = " + nb(p.L_aval, 2) + " m");
+  coteHoriz(0, p.B_dig, yc + 22, "B = " + nb(p.B_dig, 2) + " m");
+  g.push('<line x1="' + X(0).toFixed(1) + '" y1="' + Y(p.Z_plaf).toFixed(1) + '" x2="' + X(0).toFixed(1) + '" y2="' + (yc + 26) + '" stroke="#999" stroke-width="0.6"/>');
+  g.push('<line x1="' + cx.toFixed(1) + '" y1="' + Y(p.Z_plaf).toFixed(1) + '" x2="' + cx.toFixed(1) + '" y2="' + (yc + 4) + '" stroke="#999" stroke-width="0.6"/>');
+  g.push('<line x1="' + X(p.B_dig).toFixed(1) + '" y1="' + Y(p.Z_plaf).toFixed(1) + '" x2="' + X(p.B_dig).toFixed(1) + '" y2="' + (yc + 26) + '" stroke="#999" stroke-width="0.6"/>');
+
+  /* --- Titre et échelle --- */
+  var tEcr = (p.type === "palplanches")
+    ? "rideau de palplanches, pied à " + nb(p.z_pied, 2) + " m"
+    : "tranchée d'argile b = " + nb(R.bEff, 2) + " m, K = " + sci(p.K_ecr, 1) + " m/s, fond à " + nb(p.z_pied, 2) + " m";
+  g.push('<text x="' + mL + '" y="20" font-size="12.5" font-weight="600" fill="#1b4f72">Coupe en travers — ' + esc(tEcr) + "</text>");
+  g.push('<text x="' + mL + '" y="36" font-size="10.5" fill="#5d6d7e">ΔH = ' + nb(R.DH, 2) + " m — q = " + nb(R.q * 1000, 3) +
+         " l/s/ml — " + (Math.abs(exag - 1) < 0.02 ? "échelles 1:1" : "exagération verticale ×" + nb(exag, 1)) + "</text>");
+  if (R.r.D_sous <= 1e-9){
+    g.push('<text x="' + cx.toFixed(1) + '" y="' + Math.min(mT + ph - 5, Y(R.Z_sub) + 26).toFixed(1) +
+           '" text-anchor="middle" font-size="10.5" font-weight="600" fill="#7b241c">écran ancré au substratum : pas de contournement</text>');
+  }
+
+  svg.innerHTML = g.join("");
+  $("legendeCoupe").innerHTML =
+    "Traits bleus continus fléchés&nbsp;: lignes de courant. Traits bleus pointillés&nbsp;: équipotentielles (une ligne par dixième de ΔH). " +
+    "Trait rouge tireté&nbsp;: ligne piézométrique du modèle à fragments. " +
+    (Math.abs(exag - 1) < 0.02 ? "Échelles horizontale et verticale identiques."
+                               : "<strong>Exagération verticale ×" + nb(exag, 1) + "</strong> — cocher la case ci-dessous pour un tracé à échelles égales.");
+}
+
+/* ==========================================================================
+   PARTIE 7 — GRAPHIQUE q = f(profondeur de l'écran)
+   ========================================================================== */
+
+/** Graduations « rondes » entre min et max, environ n intervalles. */
+function ticksNices(min, max, n){
+  var span = (max - min) || 1;
+  var brut = span / n;
+  var mag = Math.pow(10, Math.floor(Math.log10(brut)));
+  var norm = brut / mag;
+  var pas = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  var t = [];
+  for (var v = Math.ceil(min / pas - 1e-9) * pas; v <= max + 1e-9; v += pas) t.push(v);
+  return t;
+}
+
+function dessinerGraphe(R, qCible, dim){
+  var svg = $("svgGraphe");
+  if (!R.ok){ svg.innerHTML = ""; return; }
+  var W = 940, H = 380, mL = 74, mR = 22, mT = 26, mB = 52;
+  var pw = W - mL - mR, ph = H - mT - mB;
+
+  var pts = Calc.courbeQ(R.cfg, 80);
+  var xMax = R.E_tot;
+  var yVals = pts.map(function(o){ return o.q * 1000; });
+  var yMax = Math.max.apply(null, yVals);
+  if (qCible) yMax = Math.max(yMax, qCible * 1000 * 1.15);
+  yMax = yMax > 0 ? yMax * 1.05 : 1;
+
+  function X(x){ return mL + (x / xMax) * pw; }
+  function Y(y){ return mT + ph - (y / yMax) * ph; }
+
+  var g = [];
+  g.push('<rect x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="#fff" stroke="#c8d0d4"/>');
+
+  ticksNices(0, xMax, 8).forEach(function(t){
+    g.push('<line x1="' + X(t).toFixed(1) + '" y1="' + mT + '" x2="' + X(t).toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#e5e8e8"/>');
+    g.push('<text x="' + X(t).toFixed(1) + '" y="' + (mT + ph + 15) + '" text-anchor="middle" font-size="10" fill="#5d6d7e">' + nb(t, 1) + "</text>");
+  });
+  ticksNices(0, yMax, 6).forEach(function(t){
+    g.push('<line x1="' + mL + '" y1="' + Y(t).toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + Y(t).toFixed(1) + '" stroke="#e5e8e8"/>');
+    g.push('<text x="' + (mL - 6) + '" y="' + (Y(t) + 3.4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#5d6d7e">' + nb(t, 3) + "</text>");
+  });
+
+  var d = pts.map(function(o, i){ return (i ? "L" : "M") + X(o.prof).toFixed(1) + "," + Y(o.q * 1000).toFixed(1); }).join(" ");
+  g.push('<path d="' + d + '" fill="none" stroke="#1b4f72" stroke-width="2.2"/>');
+
+  if (qCible){
+    g.push('<line x1="' + mL + '" y1="' + Y(qCible * 1000).toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + Y(qCible * 1000).toFixed(1) +
+           '" stroke="#b9770e" stroke-width="1.8" stroke-dasharray="8 4"/>');
+    g.push('<text x="' + (mL + pw - 5) + '" y="' + (Y(qCible * 1000) - 5).toFixed(1) + '" text-anchor="end" font-size="10.5" fill="#b9770e">débit cible ' +
+           nb(qCible * 1000, 3) + " l/s/ml</text>");
+  }
+
+  /* Point de fonctionnement actuel */
+  var profAct = R.p.Z_plaf - R.p.z_pied;
+  if (profAct >= 0 && profAct <= xMax){
+    var aDroite = X(profAct) < mL + pw * 0.62;
+    g.push('<circle cx="' + X(profAct).toFixed(1) + '" cy="' + Y(R.q * 1000).toFixed(1) + '" r="5" fill="#c0392b" stroke="#fff" stroke-width="1.5"/>');
+    g.push('<text x="' + (X(profAct) + (aDroite ? 9 : -9)).toFixed(1) + '" y="' + (Y(R.q * 1000) - 8).toFixed(1) +
+           '" text-anchor="' + (aDroite ? "start" : "end") + '" font-size="10.5" fill="#c0392b">écran actuel : ' +
+           nb(profAct, 2) + " m / " + nb(R.q * 1000, 3) + " l/s/ml</text>");
+  }
+
+  /* Point retenu par le dimensionnement inverse */
+  if (dim && dim.statut === "ok"){
+    var pd = R.p.Z_plaf - dim.z;
+    g.push('<circle cx="' + X(pd).toFixed(1) + '" cy="' + Y(dim.q * 1000).toFixed(1) + '" r="5.5" fill="#1e8449" stroke="#fff" stroke-width="1.5"/>');
+    g.push('<line x1="' + X(pd).toFixed(1) + '" y1="' + (mT + ph) + '" x2="' + X(pd).toFixed(1) + '" y2="' + Y(dim.q * 1000).toFixed(1) +
+           '" stroke="#1e8449" stroke-width="1.2" stroke-dasharray="4 3"/>');
+    var dDroite = X(pd) < mL + pw * 0.62;
+    g.push('<text x="' + (X(pd) + (dDroite ? 9 : -9)).toFixed(1) + '" y="' + (Y(dim.q * 1000) + 17).toFixed(1) +
+           '" text-anchor="' + (dDroite ? "start" : "end") + '" font-size="10.5" fill="#1e8449">profondeur requise : ' +
+           nb(pd, 2) + " m (cote " + nb(dim.z, 2) + ")</text>");
+  }
+
+  g.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="11" fill="#1c2833">Profondeur de l\'écran sous la sous-face de digue (m)</text>');
+  g.push('<text transform="translate(16,' + (mT + ph / 2) + ') rotate(-90)" text-anchor="middle" font-size="11" fill="#1c2833">Débit unitaire q (l/s/ml)</text>');
+  g.push('<text x="' + mL + '" y="' + (mT - 8) + '" font-size="11" fill="#5d6d7e">Profondeur max. utile : ' + nb(xMax, 2) +
+         " m (ancrage au substratum, cote " + nb(R.Z_sub, 2) + ")</text>");
+
+  svg.innerHTML = g.join("");
+}
+
+/* ==========================================================================
+   PARTIE 8 — ORCHESTRATION
+   ========================================================================== */
+
+var dernierDim = null;
+
+function majAffichage(){
+  var p = lireParams();
+  var R = Calc.calculComplet(p);
+  var qCible = qCibleUnitaire(p);
+
+  rendreMessages(R);
+  rendreSyntheseStrati(R);
+  rendreSynthese(R, qCible);
+  rendreDetail(R);
+  rendreCharges(R);
+  rendreVerifs(R);
+  rendreBilan(R);
+  rendreSensibilite(R);
+  dessinerCoupe(R, $("chkIso").checked);
+  dessinerGraphe(R, qCible, dernierDim);
+
+  if (!R.ok){ $("resDim").innerHTML = ""; $("svgGraphe").innerHTML = ""; }
+  return R;
+}
+
+function lancerDimensionnement(){
+  var p = lireParams();
+  var R = Calc.calculComplet(p);
+  if (!R.ok){ $("resDim").innerHTML = '<div class="msg msg-err">Corriger d\'abord les erreurs de saisie.</div>'; return; }
+  var qCible = qCibleUnitaire(p);
+  if (!qCible){ $("resDim").innerHTML = '<div class="msg msg-err">Saisir un débit cible strictement positif (section D).</div>'; return; }
+
+  var dim = Calc.dimensionnerEcran(R.cfg, qCible);
+  dernierDim = dim;
+  var h = "";
+  if (dim.statut === "aucun"){
+    h = '<div class="msg msg-warn">Le débit cible (' + nb(qCible * 1000, 3) + " l/s/ml) est déjà respecté sans écran : " +
+        "le débit maximal, écran de profondeur nulle, vaut " + nb(dim.q * 1000, 3) + " l/s/ml. " +
+        "Un écran n'est pas nécessaire au seul titre du débit de fuite — les vérifications au renard et de gradient de sortie restent à examiner.</div>";
+  } else if (dim.statut === "inatteignable"){
+    h = '<div class="msg msg-err"><strong>Débit cible inatteignable par le seul écran.</strong> Même ancré au substratum (cote ' +
+        nb(dim.z, 2) + " m, profondeur " + nb(R.E_tot, 2) + " m), le modèle donne " + nb(dim.q * 1000, 3) + " l/s/ml, " +
+        "supérieur à la cible de " + nb(qCible * 1000, 3) + " l/s/ml. Ce résidu correspond à la traversée de l'écran lui-même : " +
+        "réduire le K de l'argile, augmenter la largeur b, ou combiner l'écran avec un dispositif de drainage aval.</div>";
+  } else {
+    var prof = R.p.Z_plaf - dim.z, ficheTN = R.p.Z_TNav - dim.z, ecartPied = dim.z - R.Z_sub;
+    h = '<div class="msg msg-warn" style="background:var(--vert-fond);border-left-color:var(--vert);color:#145a32">' +
+        "<strong>Cote de pied nécessaire : " + nb(dim.z, 2) + " m</strong><br>" +
+        "Profondeur sous la sous-face de digue : <strong>" + nb(prof, 2) + " m</strong> &nbsp;|&nbsp; " +
+        "fiche sous le TN aval : <strong>" + nb(ficheTN, 2) + " m</strong> &nbsp;|&nbsp; " +
+        "distance restante au substratum : " + nb(ecartPied, 2) + " m<br>" +
+        "Débit obtenu : " + nb(dim.q * 1000, 3) + " l/s/ml, soit " + nb(dim.q * R.p.L_dig * 3600, 1) + " m³/h sur la longueur de digue." +
+        "</div><p class=\"note\">Cote obtenue par dichotomie à 10⁻⁴ m près, à géométrie et conductivités inchangées par ailleurs. " +
+        "Reporter cette cote dans le champ « Cote de pied de l'écran » (section C) pour relancer l'ensemble des vérifications sur la configuration retenue.</p>";
+  }
+  $("resDim").innerHTML = h;
+  dessinerGraphe(R, qCible, dim);
+}
+
+/* ==========================================================================
+   PARTIE 9 — EXPORT / IMPORT / REINITIALISATION
+   ========================================================================== */
+
+var CHAMPS_SIMPLES = ["H_am","Z_TNam","Z_TNav","H_av_opt","Z_plaf","B_dig","L_dig","x_ecr","t_crue","V_zit",
+                      "type_ecran","b_ecr","z_pied","K_ecr","f_serrures","alpha","gamma_p","gamma_w",
+                      "FS_cible","C_adm","q_cible","q_cible_unite","L_conv_mode"];
+
+function etatCourant(){
+  var o = { _format:"calcul_ecran_etanche_ZIT", _version:1, champs:{}, couches:[], catK:catK, catC:catC };
+  CHAMPS_SIMPLES.forEach(function(id){ o.champs[id] = v(id); });
+  $("corpsStrati").querySelectorAll("tr").forEach(function(tr){
+    o.couches.push({ nom:tr.querySelector(".c-nom").value, zToit:tr.querySelector(".c-toit").value,
+                     zBase:tr.querySelector(".c-base").value, K:tr.querySelector(".c-k").value });
+  });
+  return o;
+}
+
+function appliquerEtat(o){
+  CHAMPS_SIMPLES.forEach(function(id){ if (o.champs && o.champs[id] !== undefined) $(id).value = o.champs[id]; });
+  if (Array.isArray(o.couches) && o.couches.length){
+    var tb = $("corpsStrati"); tb.innerHTML = "";
+    o.couches.forEach(function(c){ tb.appendChild(ligneStrati(c)); });
+  }
+  if (Array.isArray(o.catK) && o.catK.length){ catK = o.catK.slice(); rendreCatK(); majSelectsK(); }
+  if (Array.isArray(o.catC) && o.catC.length){ catC = o.catC.slice(); rendreCatC(); }
+  majTypeEcran();
+  dernierDim = null;
+  majAffichage();
+}
+
+function chargerDefauts(){
+  CHAMPS_SIMPLES.forEach(function(id){ if (DEFAUTS[id] !== undefined) $(id).value = DEFAUTS[id]; });
+  var tb = $("corpsStrati"); tb.innerHTML = "";
+  DEFAUTS.couches.forEach(function(c){ tb.appendChild(ligneStrati(c)); });
+  catK = CAT_K_DEFAUT.map(function(o){ return { nom:o.nom, k:o.k }; });
+  catC = CAT_C_DEFAUT.map(function(o){ return { nom:o.nom, c:o.c }; });
+  rendreCatK(); rendreCatC(); majSelectsK(); majTypeEcran();
+  dernierDim = null;
+}
+
+/** Affiche/masque les champs propres au type d'écran retenu. */
+function majTypeEcran(){
+  var t = v("type_ecran");
+  document.querySelectorAll("[data-si]").forEach(function(el){
+    el.style.display = (el.getAttribute("data-si") === t) ? "" : "none";
+  });
+}
+
+/* ==========================================================================
+   PARTIE 10 — INITIALISATION ET ECOUTEURS
+   ========================================================================== */
+(function init(){
+  chargerDefauts();
+
+  CHAMPS_SIMPLES.forEach(function(id){
+    var el = $(id);
+    el.addEventListener("input", function(){ dernierDim = null; majAffichage(); });
+    el.addEventListener("change", function(){ if (id === "type_ecran") majTypeEcran(); dernierDim = null; majAffichage(); });
+  });
+  $("chkIso").addEventListener("change", majAffichage);
+
+  $("btnAddCouche").addEventListener("click", function(e){
+    e.preventDefault();
+    var trs = $("corpsStrati").querySelectorAll("tr");
+    var derniere = trs[trs.length - 1];
+    var base = derniere ? derniere.querySelector(".c-base").value : "0,00";
+    var bn = parseNum(base);
+    $("corpsStrati").appendChild(ligneStrati({ nom:"Nouvelle couche", zToit:base,
+      zBase:(Number.isFinite(bn) ? nb(bn - 1, 2) : ""), K:"1e-5" }));
+    majAffichage();
+  });
+
+  $("btnAddK").addEventListener("click", function(e){ e.preventDefault(); catK.push({ nom:"Nouveau sol", k:1e-5 }); rendreCatK(); majSelectsK(); });
+  $("btnAddC").addEventListener("click", function(e){ e.preventDefault(); catC.push({ nom:"Nouveau sol", c:5 }); rendreCatC(); });
+  $("btnDim").addEventListener("click", function(e){ e.preventDefault(); lancerDimensionnement(); });
+  $("btnImprimer").addEventListener("click", function(e){ e.preventDefault(); window.print(); });
+
+  $("btnReset").addEventListener("click", function(e){
+    e.preventDefault();
+    if (window.confirm("Réinitialiser tous les paramètres aux valeurs par défaut ?")){ chargerDefauts(); $("resDim").innerHTML = ""; majAffichage(); }
+  });
+
+  $("btnExport").addEventListener("click", function(e){
+    e.preventDefault();
+    var blob = new Blob([JSON.stringify(etatCourant(), null, 2)], { type:"application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ecran_etanche_ZIT.json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  });
+
+  $("btnImport").addEventListener("click", function(e){ e.preventDefault(); $("fichierImport").click(); });
+  $("fichierImport").addEventListener("change", function(){
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function(){
+      try {
+        var o = JSON.parse(fr.result);
+        if (!o || o._format !== "calcul_ecran_etanche_ZIT") throw new Error("format non reconnu");
+        appliquerEtat(o);
+      } catch (ex){
+        window.alert("Fichier JSON non exploitable : " + ex.message);
+      }
+    };
+    fr.readAsText(f);
+    this.value = "";
+  });
+
+  majAffichage();
+})();
+</script>
+</body>
+</html>
