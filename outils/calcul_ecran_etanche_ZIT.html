@@ -146,7 +146,10 @@ footer li{margin-bottom:4px}
     <div class="champ"><label for="Z_TNav" title="Cote moyenne du terrain naturel côté habitat. Sert d'exutoire par défaut et de référence pour la fiche de l'écran.">Cote TN aval (côté habitat)</label><input id="Z_TNav" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
     <div class="champ"><label for="H_av_opt" title="Optionnel. Si la cote de la nappe aval est connue, la saisir ici : elle remplace le TN aval comme charge aval imposée. Laisser vide sinon.">Niveau de nappe aval <span class="opt">(optionnel)</span></label><input id="H_av_opt" type="text" inputmode="decimal" placeholder="vide = TN aval"><span class="u">m (cote)</span></div>
     <div class="champ"><label for="Z_plaf" title="Cote de la sous-face de la digue = plafond de l'aquifère sollicité. Le corps de digue étant imperméabilisé, l'écoulement est confiné entre cette cote et le substratum. Par défaut : la plus basse des deux cotes de TN.">Cote de sous-face de digue (plafond aquifère)</label><input id="Z_plaf" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
-    <div class="champ"><label for="B_dig" title="Largeur de l'emprise de la digue au niveau du terrain naturel, mesurée du pied amont au pied aval.">Largeur en base de la digue</label><input id="B_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="B_dig" title="Grande base du remblai : largeur de l'emprise au niveau du terrain naturel, du pied amont au pied aval.">Largeur en base de la digue (grande base)</label><input id="B_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="b_crete" title="Petite base du remblai : largeur de la crête. Doit être inférieure à la grande base.">Largeur en crête (petite base)</label><input id="b_crete" type="text" inputmode="decimal"><span class="u">m</span></div>
+    <div class="champ"><label for="Z_crete" title="Cote de la crête de la digue. La hauteur du remblai et les fruits de talus en sont déduits et affichés sur la coupe. Doit être supérieure au niveau d'eau dans la ZIT.">Cote de crête</label><input id="Z_crete" type="text" inputmode="decimal"><span class="u">m (cote)</span></div>
+    <div class="champ"><label for="K_digue" title="Conductivité hydraulique du corps de remblai. La valeur 0 correspond à un corps parfaitement imperméabilisé : aucun écoulement à travers la digue. Une valeur non nulle ajoute un débit de percolation à travers le remblai, calculé par la formule de Dupuit pour un barrage en terre, et trace la ligne de saturation sur la coupe.">K du corps de digue</label><input id="K_digue" type="text" inputmode="decimal"><span class="u">m/s</span></div>
     <div class="champ"><label for="L_dig" title="Longueur développée de la digue, utilisée pour passer du débit unitaire au débit total.">Longueur de la digue</label><input id="L_dig" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="x_ecr" title="Distance horizontale entre le pied amont de la digue et l'axe de l'écran. Détermine L_amont et L_aval.">Position de l'écran depuis le pied amont</label><input id="x_ecr" type="text" inputmode="decimal"><span class="u">m</span></div>
     <div class="champ"><label for="t_crue" title="Durée pendant laquelle la ZIT reste remplie à la charge considérée. Sert au calcul du volume infiltré.">Durée de l'événement de crue</label><input id="t_crue" type="text" inputmode="decimal"><span class="u">h</span></div>
@@ -273,6 +276,8 @@ footer li{margin-bottom:4px}
     <li><strong>Pas de réfraction des lignes de courant</strong> aux interfaces entre couches de conductivités différentes. La loi des tangentes (tan&nbsp;θ<sub>1</sub>&nbsp;/&nbsp;tan&nbsp;θ<sub>2</sub>&nbsp;=&nbsp;K<sub>1</sub>&nbsp;/&nbsp;K<sub>2</sub>) suppose une composante verticale d'écoulement, que l'approximation de Dupuit exclut par construction&nbsp;: la charge y est uniforme sur la verticale et les couches fonctionnent en parallèle, chacune transportant un débit proportionnel à sa transmissivité. Cet effet, réel au voisinage du pied de l'écran où l'écoulement traverse effectivement les interfaces en oblique, n'est ni calculé ni représenté&nbsp;; seule une modélisation 2D le restitue.</li>
     <li><strong>Milieu supposé isotrope au sein de chaque couche</strong> (K<sub>h</sub> = K<sub>v</sub>). L'anisotropie réelle des alluvions, souvent d'un facteur 3 à 10 en faveur de l'horizontale, n'est pas prise en compte&nbsp;: elle tendrait à augmenter le débit contourné et à réduire l'efficacité de l'écran.</li>
     <li><strong>Milieu entièrement saturé</strong>&nbsp;: ni la zone non saturée, ni la succion capillaire, ni le stockage dans la porosité efficace ne sont modélisés.</li>
+    <li><strong>Percolation à travers le corps de remblai</strong> traitée par la formule de Dupuit pour un barrage en terre sur base imperméable, <code>q = K (h₁² − h₂²) / (2L)</code>. Cette formule ignore la surface de suintement au talus aval et suppose le remblai homogène et isotrope, sans noyau ni drain&nbsp;: elle donne un ordre de grandeur, non un dimensionnement de remblai. La ligne de saturation tracée est la parabole de Dupuit correspondante. Ce chemin <strong>court-circuite l'écran</strong>, qui n'intéresse que la fondation&nbsp;: approfondir l'écran ne réduit en rien ce débit.</li>
+    <li><strong>Vérifications de fondation</strong> (Lane, renard, gradient de sortie, mise en charge) conduites sur le seul débit de fondation. La stabilité du talus aval sous l'effet de la ligne de saturation dans le remblai n'est pas examinée&nbsp;: elle relève d'un calcul de stabilité de pente.</li>
     <li><strong>Écran homogène et continu</strong>&nbsp;: ni le colmatage progressif, ni la fissuration de dessiccation de l'argile en période sèche, ni les défauts de mise en œuvre (joints de panneaux, ancrage du pied, déchirure de serrures) ne sont modélisés. Ces défauts sont en pratique la première cause d'écart entre calcul et mesure.</li>
     <li><strong>Effets de bord tridimensionnels</strong> aux extrémités de la digue et aux contournements latéraux non modélisés&nbsp;: le calcul 2D par mètre linéaire les ignore par construction.</li>
     <li><strong>Coefficient &alpha;</strong> de contraction/expansion des lignes de courant&nbsp;: paramètre empirique, sans valeur normative, appliqué à D<sub>écran</sub> (hauteur d'écran obstruant les couches perméables), de sorte que la résistance de contournement croît avec la pénétration de l'écran. <strong>Augmenter &alpha; diminue le débit calculé</strong>&nbsp;: c'est donc &alpha; faible qui constitue l'hypothèse sécuritaire, et &alpha;&nbsp;=&nbsp;0 un majorant sûr du débit. La valeur par défaut 0,3 est un ordre de grandeur calé sur des solutions d'écoulement 2D&nbsp;; plage à tester&nbsp;: 0 à 0,5.</li>
@@ -458,6 +463,25 @@ var Calc = (function(){
              dh_amont:dh_am, dh_ecran:dh_ec, dh_aval:dh_av };
   }
 
+  /** Percolation à travers le corps de remblai, formule de Dupuit pour un barrage en terre
+   *  sur base imperméable : q = K (h1² − h2²) / (2 L), h mesurées au-dessus de la base du
+   *  remblai et L pris comme la longueur horizontale du massif saturé, depuis l'intersection
+   *  du plan d'eau avec le talus amont jusqu'au pied aval. Ce chemin court-circuite l'écran,
+   *  qui n'intéresse que la fondation : les deux débits s'additionnent.
+   *  Retourne aussi les éléments nécessaires au tracé de la ligne de saturation (parabole). */
+  function percolationDigue(p, H_av){
+    var hCrete = p.Z_crete - p.Z_plaf;
+    var h1 = Math.max(0, p.H_am - p.Z_plaf);
+    var h2 = Math.max(0, H_av - p.Z_plaf);
+    if (!(p.K_digue > 0) || !(hCrete > 0) || !(h1 > h2)) return { q:0, applicable:false };
+    var xTalus = (p.B_dig - p.b_crete) / 2;                 // emprise horizontale du talus amont
+    var xAm = xTalus * Math.min(1, h1 / hCrete);            // plan d'eau sur le talus amont
+    var L = p.B_dig - xAm;
+    if (!(L > 0)) return { q:0, applicable:false };
+    return { q:p.K_digue * (h1*h1 - h2*h2) / (2*L), applicable:true,
+             h1:h1, h2:h2, xAm:xAm, L:L, hCrete:hCrete };
+  }
+
   /** Cheminement pondéré de Lane. Les tronçons verticaux sont comptés depuis la tête
    *  de l'écran (sous-face de digue) jusqu'au pied, à la descente puis à la remontée. */
   function verifLane(p, geo, DH, C_adm){
@@ -530,6 +554,7 @@ var Calc = (function(){
       ["H_am", "Niveau d'eau moyen dans la ZIT"], ["Z_TNam", "Cote TN amont"],
       ["Z_TNav", "Cote TN aval"], ["Z_plaf", "Cote de sous-face de digue"],
       ["B_dig", "Largeur en base de la digue"], ["L_dig", "Longueur de la digue"],
+      ["b_crete", "Largeur en crête"], ["Z_crete", "Cote de crête"], ["K_digue", "K du corps de digue"],
       ["x_ecr", "Position de l'écran"], ["t_crue", "Durée de l'événement"],
       ["z_pied", "Cote de pied de l'écran"], ["alpha", "Coefficient alpha"],
       ["gamma_p", "gamma' du sol"], ["gamma_w", "gamma w"],
@@ -575,6 +600,10 @@ var Calc = (function(){
     var DH = p.H_am - H_av;
     if (DH <= 0) err.push("Charge motrice nulle ou négative : le niveau amont (" + nb(p.H_am) + " m) doit être supérieur à la charge aval (" + nb(H_av) + " m).");
     if (!(p.B_dig > 0)) err.push("La largeur en base de la digue doit être strictement positive.");
+    if (!(p.b_crete > 0)) err.push("La largeur en crête doit être strictement positive.");
+    if (p.B_dig > 0 && p.b_crete >= p.B_dig) err.push("La largeur en crête (" + nb(p.b_crete) + " m) doit être inférieure à la largeur en base (" + nb(p.B_dig) + " m).");
+    if (p.Z_crete <= p.H_am) err.push("La cote de crête (" + nb(p.Z_crete) + " m) doit être supérieure au niveau d'eau dans la ZIT (" + nb(p.H_am) + " m) : la digue serait submergée.");
+    if (!(p.K_digue >= 0)) err.push("Le K du corps de digue doit être positif ou nul (0 = corps imperméabilisé).");
     if (!(p.L_dig > 0)) err.push("La longueur de la digue doit être strictement positive.");
     if (!(p.t_crue > 0)) err.push("La durée de l'événement doit être strictement positive.");
     var demiB = (p.type === "palplanches") ? 0 : (Number.isFinite(p.b) ? Math.max(0, p.b) / 2 : 0);
@@ -622,10 +651,16 @@ var Calc = (function(){
     var E_tot = p.Z_plaf - Z_sub;
     var K_eq = r.T_tot / E_tot;
     if (p.type === "argile" && p.K_ecr >= K_eq) warn.push("Le K de l'argile mise en œuvre (" + sci(p.K_ecr, 2) + " m/s) est supérieur ou égal au K équivalent horizontal du terrain (" + sci(K_eq, 2) + " m/s) : l'écran n'est pas plus étanche que le sol qu'il traverse.");
-    var q = r.q;
+    // Deux chemins indépendants entre la ZIT et l'aval : la fondation (que l'écran coupe)
+    // et le corps de remblai (que l'écran court-circuite). Les débits s'additionnent.
+    var qFond = r.q;
+    var perc = percolationDigue(p, H_av);
+    var qDigue = perc.q;
+    var q = qFond + qDigue;
     var Q = q * p.L_dig;
     var V = Q * p.t_crue * 3600;
-    var charges = repartitionCharges(p.H_am, H_av, q, r);
+    // La répartition des charges ne concerne que la fondation : elle est établie sur qFond.
+    var charges = repartitionCharges(p.H_am, H_av, qFond, r);
 
     /* --- 6. Vérifications --- */
     var D = p.Z_TNav - p.z_pied;               // fiche sous le terrain naturel aval
@@ -652,7 +687,7 @@ var Calc = (function(){
         var cm = couches.map(function(cc, ic){
           return (ic === idxMax) ? { nom:cc.nom, zToit:cc.zToit, zBase:cc.zBase, K:cc.K * fac } : cc;
         });
-        vals.push({ facteur:fac, q:calculDebit(Object.assign({}, cfg, { couches:cm })).q });
+        vals.push({ facteur:fac, q:calculDebit(Object.assign({}, cfg, { couches:cm })).q + qDigue });
       }
       sensi = { couche:det[iMax].nom, K:det[iMax].K, valeurs:vals };
     }
@@ -660,7 +695,7 @@ var Calc = (function(){
     R.ok = true;
     Object.assign(R, {
       couches:couches, Z_sub:Z_sub, Z_toitStrati:Z_toitStrati, H_av:H_av, DH:DH,
-      E_tot:E_tot, K_eq:K_eq, detailT:det, r:r, cfg:cfg, q:q, Q:Q, V:V,
+      E_tot:E_tot, K_eq:K_eq, detailT:det, r:r, cfg:cfg, q:q, qFond:qFond, qDigue:qDigue, perc:perc, Q:Q, V:V,
       charges:charges, D:D, hex:hex, lane:lane, renard:renard, grad:grad, resu:resu,
       bilan:bilan, sensi:sensi, bEff:bEff, rho:rho, p:p
     });
@@ -669,9 +704,12 @@ var Calc = (function(){
 
   /** Dimensionnement inverse : cote de pied nécessaire pour respecter q_cible (m²/s).
    *  q est une fonction croissante de la cote de pied (écran plus profond = q plus faible). */
-  function dimensionnerEcran(cfg, qCible){
+  function dimensionnerEcran(cfg, qCible, qDigue){
+    qDigue = qDigue || 0;
     if (!(qCible > 0)) return { statut:"invalide" };
-    var f = function(z){ return calculDebit(Object.assign({}, cfg, { z_pied:z })).q; };
+    // L'écran ne coupe que la fondation : la percolation à travers le remblai s'ajoute
+    // quelle que soit sa profondeur, et peut à elle seule rendre la cible inatteignable.
+    var f = function(z){ return calculDebit(Object.assign({}, cfg, { z_pied:z })).q + qDigue; };
     var zHaut = cfg.Z_plaf, zBas = cfg.Z_sub;
     var qHaut = f(zHaut);
     if (qHaut <= qCible) return { statut:"aucun", z:zHaut, q:qHaut };
@@ -698,12 +736,13 @@ var Calc = (function(){
     for (var i = 0; i <= n; i++){
       var prof = E * i / n;
       var z = cfg.Z_plaf - prof;
-      pts.push({ prof:prof, z:z, q:calculDebit(Object.assign({}, cfg, { z_pied:z })).q });
+      pts.push({ prof:prof, z:z, q:calculDebit(Object.assign({}, cfg, { z_pied:z })).q + (cfg.qDigue || 0) });
     }
     return pts;
   }
 
   return { overlap:overlap, transmissivite:transmissivite, detailT:detailT, coteFractionT:coteFractionT,
+           percolationDigue:percolationDigue,
            calculDebit:calculDebit, repartitionCharges:repartitionCharges,
            verifLane:verifLane, chargeExces:chargeExces, verifRenard:verifRenard,
            verifGradient:verifGradient, verifResurgence:verifResurgence,
@@ -741,7 +780,7 @@ var CAT_C_DEFAUT = [
 
 var DEFAUTS = {
   H_am:"82,50", Z_TNam:"80,00", Z_TNav:"79,50", H_av_opt:"", Z_plaf:"79,50",
-  B_dig:"18,00", L_dig:"120", x_ecr:"9,00", t_crue:"24", V_zit:"12000",
+  B_dig:"18,00", b_crete:"4,00", Z_crete:"83,50", K_digue:"0", L_dig:"120", x_ecr:"9,00", t_crue:"24", V_zit:"12000",
   type_ecran:"argile", b_ecr:"0,80", z_pied:"74,00", K_ecr:"1e-9", rho_serr:"0",
   alpha:"0,3", gamma_p:"11,0", gamma_w:"9,81", FS_cible:"3,0", C_adm:"5,0",
   q_cible:"0,20", q_cible_unite:"l",
@@ -848,7 +887,9 @@ function lireParams(){
   return {
     H_am:parseNum(v("H_am")), Z_TNam:parseNum(v("Z_TNam")), Z_TNav:parseNum(v("Z_TNav")),
     H_av_opt:(hav === "" ? null : parseNum(hav)),
-    Z_plaf:parseNum(v("Z_plaf")), B_dig:parseNum(v("B_dig")), L_dig:parseNum(v("L_dig")),
+    Z_plaf:parseNum(v("Z_plaf")), B_dig:parseNum(v("B_dig")),
+    b_crete:parseNum(v("b_crete")), Z_crete:parseNum(v("Z_crete")),
+    K_digue:(v("K_digue").trim() === "" ? 0 : parseNum(v("K_digue"))), L_dig:parseNum(v("L_dig")),
     x_ecr:parseNum(v("x_ecr")), t_crue:parseNum(v("t_crue")),
     V_zit:(vzit === "" ? null : parseNum(vzit)),
     couches:lireCouches(), type:type,
@@ -907,7 +948,12 @@ function rendreSynthese(R, qCible){
     else                           cls = "rouge";
   }
   var h = "";
-  h += '<div class="tuile ' + cls + '"><div class="lib">Débit unitaire q</div><div class="val">' + nbz(R.q * 1000, 3) + '</div><div class="u2">l/s/ml &nbsp;(' + sci(R.q, 3) + ' m&sup2;/s)</div></div>';
+  h += '<div class="tuile ' + cls + '"><div class="lib">Débit unitaire q total</div><div class="val">' + nbz(R.q * 1000, 3) + '</div><div class="u2">l/s/ml &nbsp;(' + sci(R.q, 3) + ' m&sup2;/s)</div></div>';
+  if (R.qDigue > 0){
+    h += '<div class="tuile"><div class="lib">dont fondation / remblai</div><div class="val" style="font-size:15px">' +
+         nbz(R.qFond * 1000, 3) + ' / ' + nbz(R.qDigue * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; le remblai porte ' +
+         nb(100 * R.qDigue / R.q, 1) + ' % du débit</div></div>';
+  }
   h += '<div class="tuile ' + cls + '"><div class="lib">Débit total Q</div><div class="val">' + nbz(R.Q * 3600, 1) + '</div><div class="u2">m&sup3;/h &nbsp;(' + auto(R.Q, 4) + ' m&sup3;/s)</div></div>';
   h += '<div class="tuile"><div class="lib">Volume infiltré V</div><div class="val">' + nbz(R.V, 0) + '</div><div class="u2">m&sup3; en ' + nb(R.p.t_crue, 0) + ' h</div></div>';
   h += '<div class="tuile"><div class="lib">Charge motrice &Delta;H</div><div class="val">' + nb(R.DH, 2) + '</div><div class="u2">m</div></div>';
@@ -981,9 +1027,16 @@ function rendreDetail(R){
         resis(r.R_amont) + " + " + resis(r.R_ecran) + " + " + resis(r.R_aval),
         resis(r.R_tot) + " s/m");
 
-  ligne("q", "ΔH / R_total",
-        nb(R.DH, 3) + " / " + resis(r.R_tot), sci(R.q, 4) + " m&sup2;/s");
-
+  ligne("q<sub>fond</sub>", "ΔH / R_total &mdash; débit de fondation", nb(R.DH, 3) + " / " + resis(r.R_tot),
+        sci(R.qFond, 4) + " m&sup2;/s");
+  if (R.perc && R.perc.applicable){
+    ligne("q<sub>digue</sub>", "K_digue × (h1² − h2²) / (2 L) &mdash; percolation dans le remblai (Dupuit)",
+          sci(p.K_digue, 2) + " × (" + nb(R.perc.h1, 2) + "² − " + nb(R.perc.h2, 2) + "²) / (2×" + nb(R.perc.L, 2) + ")",
+          sci(R.qDigue, 4) + " m&sup2;/s");
+    ligne("q", "q_fond + q_digue", sci(R.qFond, 4) + " + " + sci(R.qDigue, 4), sci(R.q, 4) + " m&sup2;/s");
+  } else {
+    ligne("q<sub>digue</sub>", "corps de digue imperméabilisé (K = 0)", "aucune percolation à travers le remblai", "0 m&sup2;/s");
+  }
   ligne("q", "q × 1000", sci(R.q, 4) + " × 1000", nbz(R.q * 1000, 3) + " l/s/ml");
 
   ligne("Q", "q × L_digue",
@@ -1395,7 +1448,7 @@ function dessinerCoupe(R, iso){
   /* --- Domaine représenté --- */
   var marge = Math.max(p.B_dig * 0.30, 4);
   var xMin = -marge, xMax = p.B_dig + marge;
-  var crete = p.H_am + Math.max(0.60, 0.20 * R.DH);
+  var crete = p.Z_crete;
   var zTop = Math.max(crete, p.H_am, R.Z_toitStrati) + 0.60;
   var zBot = R.Z_sub - Math.max(0.80, 0.15 * R.E_tot);
 
@@ -1442,8 +1495,8 @@ function dessinerCoupe(R, iso){
   g.push('<polygon points="' + pts(profil.concat([[xMax, zTop], [xMin, zTop]])) + '" fill="#eaf2f8"/>');
 
   /* --- Eau amont (ZIT) --- */
-  var cw = Math.max(p.B_dig * 0.18, 0.8);
-  var xc1 = p.B_dig / 2 - cw / 2, xc2 = p.B_dig / 2 + cw / 2;
+  var cw = p.b_crete;
+  var xc1 = (p.B_dig - cw) / 2, xc2 = (p.B_dig + cw) / 2;
   var tAm = Math.max(0, Math.min(1, (p.H_am - p.Z_plaf) / (crete - p.Z_plaf)));
   var xf = tAm * xc1;
   g.push('<polygon points="' + pts([[xMin, p.H_am], [xf, p.H_am], [0, p.Z_plaf], [0, p.Z_TNam], [xMin, p.Z_TNam]]) +
@@ -1461,8 +1514,31 @@ function dessinerCoupe(R, iso){
          '" fill="url(#pRemblai)" stroke="#7e5109" stroke-width="1.4"/>');
   g.push('<polyline points="' + pts([[p.B_dig / 2 - cw * 0.12, crete], [p.B_dig / 2 - cw * 0.12, p.Z_plaf]]) +
          '" fill="none" stroke="#5d4037" stroke-width="2.5" stroke-dasharray="5 3" opacity="0.8"/>');
-  g.push('<text x="' + X(p.B_dig / 2).toFixed(1) + '" y="' + (Y(crete) - 7).toFixed(1) +
-         '" text-anchor="middle" font-size="11" fill="#7e5109">digue (corps imperméabilisé)</text>');
+  var fruitAm = (p.Z_crete > p.Z_plaf) ? xc1 / (p.Z_crete - p.Z_plaf) : 0;
+  // Libellés maintenus dans le cadre lorsque la crête approche le haut du dessin
+  var yLab = Math.max(mT + 13, Y(crete) - 20);
+  g.push('<text x="' + X(p.B_dig / 2).toFixed(1) + '" y="' + yLab.toFixed(1) +
+         '" text-anchor="middle" font-size="11" fill="#7e5109">digue &mdash; H = ' + nb(p.Z_crete - p.Z_plaf, 2) +
+         " m, crête " + nb(p.b_crete, 2) + " m, fruits " + nb(fruitAm, 2) + "H/1V</text>");
+  g.push('<text x="' + X(p.B_dig / 2).toFixed(1) + '" y="' + (yLab + 13).toFixed(1) +
+         '" text-anchor="middle" font-size="11" fill="#7e5109">' +
+         (p.K_digue > 0 ? "corps perméable, K = " + sci(p.K_digue, 1) + " m/s" : "corps imperméabilisé") + "</text>");
+
+  /* --- Ligne de saturation dans le remblai (parabole de Dupuit) --- */
+  if (R.perc && R.perc.applicable){
+    var pc = R.perc, ptsSat = [], nsat = 40;
+    for (var is = 0; is <= nsat; is++){
+      var xs2 = pc.xAm + (p.B_dig - pc.xAm) * is / nsat;
+      var h2c = pc.h1*pc.h1 - (pc.h1*pc.h1 - pc.h2*pc.h2) * (xs2 - pc.xAm) / pc.L;
+      ptsSat.push([xs2, p.Z_plaf + Math.sqrt(Math.max(0, h2c))]);
+    }
+    g.push('<polygon points="' + pts(ptsSat.concat([[p.B_dig, p.Z_plaf], [pc.xAm, p.Z_plaf]])) +
+           '" fill="#5dade2" opacity="0.30"/>');
+    g.push('<polyline points="' + pts(ptsSat) + '" fill="none" stroke="#1a5276" stroke-width="1.8"/>');
+    g.push('<text x="' + X(pc.xAm + (p.B_dig - pc.xAm) * 0.45).toFixed(1) + '" y="' +
+           (Y(p.Z_plaf + Math.sqrt(Math.max(0, pc.h1*pc.h1 * 0.55))) - 5).toFixed(1) +
+           '" font-size="10" fill="#1a5276">ligne de saturation</text>');
+  }
 
   /* --- Profil du terrain --- */
   g.push('<polyline points="' + pts(profil) + '" fill="none" stroke="#5d4037" stroke-width="1.6"/>');
@@ -1516,7 +1592,7 @@ function dessinerCoupe(R, iso){
         poly(ctPsi[cp].lignes, 'stroke="#1a5276" stroke-width="1.3" opacity="0.9"');
     }
   }
-  else if (R.q > 0){
+  else if (R.qFond > 0){
     for (var k = 1; k < Neq; k++){
       var hk = p.H_am - k * R.DH / Neq, xk = null;
       if (hk >= c.h1 - 1e-12 && (p.H_am - c.h1) > 1e-9){
@@ -1613,7 +1689,7 @@ function dessinerCoupe(R, iso){
   g.push("</g>");
 
   /* --- Ligne piézométrique --- */
-  if (R.q > 0){
+  if (R.qFond > 0){
     var dp = "M" + X(xMin).toFixed(1) + "," + Y(p.H_am).toFixed(1) +
              " L" + X(0).toFixed(1) + "," + Y(p.H_am).toFixed(1) +
              " L" + cx.toFixed(1) + "," + Y(c.h1).toFixed(1) +
@@ -1693,7 +1769,7 @@ function dessinerCoupe(R, iso){
     ? "rideau de palplanches, ρ = " + sci(R.rho, 1) + " s⁻¹, pied à " + nb(p.z_pied, 2) + " m"
     : "tranchée d'argile b = " + nb(R.bEff, 2) + " m, K = " + sci(p.K_ecr, 1) + " m/s, fond à " + nb(p.z_pied, 2) + " m";
   g.push('<text x="' + mL + '" y="20" font-size="12.5" font-weight="600" fill="#1b4f72">Coupe en travers — ' + esc(tEcr) + "</text>");
-  g.push('<text x="' + mL + '" y="36" font-size="10.5" fill="#5d6d7e">ΔH = ' + nb(R.DH, 2) + " m — q = " + nb(R.q * 1000, 3) +
+  g.push('<text x="' + mL + '" y="36" font-size="10.5" fill="#5d6d7e">ΔH = ' + nb(R.DH, 2) + " m — q = " + nbz(R.q * 1000, 3) +
          " l/s/ml — " + (Math.abs(exag - 1) < 0.02 ? "échelles 1:1" : "exagération verticale ×" + nb(exag, 1)) + "</text>");
   if (R.r.D_sous <= 1e-9){
     g.push('<text x="' + cx.toFixed(1) + '" y="' + Math.min(mT + ph - 5, Y(R.Z_sub) + 26).toFixed(1) +
@@ -1747,7 +1823,7 @@ function dessinerGraphe(R, qCible, dim){
   var W = 940, H = 380, mL = 74, mR = 22, mT = 26, mB = 52;
   var pw = W - mL - mR, ph = H - mT - mB;
 
-  var pts = Calc.courbeQ(R.cfg, 80);
+  var pts = Calc.courbeQ(Object.assign({}, R.cfg, { qDigue:R.qDigue }), 80);
   var xMax = R.E_tot;
   var yVals = pts.map(function(o){ return o.q * 1000; });
   var yMax = Math.max.apply(null, yVals);
@@ -1858,11 +1934,12 @@ function rendreNet(R, F, ms){
               - (Number.isFinite(r.R_serr) ? 1 / r.R_serr : 0);
     if (invRa > 0) alphaEq = ((1 / invRa) * r.T_sous - R.bEff) / r.D_ecran;
   }
-  var rap = R.q > 0 ? F.q / R.q : NaN;
+  // Le solveur 2D traite la fondation ; la percolation dans le remblai en est exclue.
+  var rap = R.qFond > 0 ? F.q / R.qFond : NaN;
   var h = "";
   h += '<div class="synth">' +
-       '<div class="tuile"><div class="lib">q &mdash; modèle à fragments</div><div class="val">' + nbz(R.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; valeur de dimensionnement</div></div>' +
-       '<div class="tuile"><div class="lib">q &mdash; calcul 2D</div><div class="val">' + nbz(F.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; ' + nb(F.q * p.L_dig * 3600, 1) + ' m&sup3;/h</div></div>' +
+       '<div class="tuile"><div class="lib">q fondation &mdash; fragments</div><div class="val">' + nbz(R.qFond * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; valeur de dimensionnement</div></div>' +
+       '<div class="tuile"><div class="lib">q fondation &mdash; calcul 2D</div><div class="val">' + nbz(F.q * 1000, 3) + '</div><div class="u2">l/s/ml &mdash; ' + nb(F.q * p.L_dig * 3600, 1) + ' m&sup3;/h</div></div>' +
        '<div class="tuile ' + (rap <= 1 ? "vert" : "rouge") + '"><div class="lib">Rapport 2D / fragments</div><div class="val">' + nb(rap, 3) + '</div><div class="u2">' +
        (rap <= 1 ? "le modèle à fragments majore le débit" : "le modèle à fragments sous-estime le débit") + '</div></div>' +
        "</div>";
@@ -1884,7 +1961,8 @@ function rendreNet(R, F, ms){
        F.iterations + " itérations, résidu " + sci(F.residu, 1) + " m, " + ms + " ms. " +
        "Solveur vérifié à mieux que 1,5 % contre la solution analytique par transformation conforme d'un rideau en couche d'épaisseur finie.</p>";
   h += '<div class="msg msg-warn">Ce calcul 2D est un <strong>contrôle</strong>, pas la valeur de dimensionnement. Il repose sur les mêmes conductivités, tout aussi incertaines, ' +
-       "et suppose la couverture du fond de ZIT continue et non décapée. Le modèle à fragments du §1, qui néglige les pertes d'entrée et de sortie, reste l'hypothèse conservatrice.</div>";
+       "et suppose la couverture du fond de ZIT continue et non décapée. Il porte sur la <strong>fondation seule</strong>&nbsp;: la percolation à travers le corps de remblai, traitée par la formule de Dupuit au §1, en est exclue. " +
+       "Le modèle à fragments du §1, qui néglige les pertes d'entrée et de sortie, reste l'hypothèse conservatrice.</div>";
   $("resNet").innerHTML = h;
   $("resNet").style.opacity = 1;
 }
@@ -1920,7 +1998,7 @@ function lancerDimensionnement(){
   var qCible = qCibleUnitaire(p);
   if (!qCible){ $("resDim").innerHTML = '<div class="msg msg-err">Saisir un débit cible strictement positif (section D).</div>'; return; }
 
-  var dim = Calc.dimensionnerEcran(R.cfg, qCible);
+  var dim = Calc.dimensionnerEcran(R.cfg, qCible, R.qDigue);
   dernierDim = dim;
   var h = "";
   if (dim.statut === "aucun"){
@@ -1951,7 +2029,7 @@ function lancerDimensionnement(){
    PARTIE 9 — EXPORT / IMPORT / REINITIALISATION
    ========================================================================== */
 
-var CHAMPS_SIMPLES = ["H_am","Z_TNam","Z_TNav","H_av_opt","Z_plaf","B_dig","L_dig","x_ecr","t_crue","V_zit",
+var CHAMPS_SIMPLES = ["H_am","Z_TNam","Z_TNav","H_av_opt","Z_plaf","B_dig","b_crete","Z_crete","K_digue","L_dig","x_ecr","t_crue","V_zit",
                       "type_ecran","b_ecr","z_pied","K_ecr","rho_serr","alpha","gamma_p","gamma_w",
                       "FS_cible","C_adm","q_cible","q_cible_unite"];
 
