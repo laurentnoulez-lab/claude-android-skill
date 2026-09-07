@@ -49,7 +49,9 @@ def _restitution_amont(hauteur_mm, duree_min, s_pond, q_inf, q_aj, v_cap, n, dt)
         q_a = min(q_aj, max(dispo - q_i, 0.0))
         v += (qi - q_i - q_a) * dt * 60.0 / 1000.0
         q_deb = 0.0
-        if v_cap > 0 and v > v_cap:
+        if v > v_cap:
+            # La capacité se lit au pied de la lettre : un bassin amont déclaré
+            # sans volume de temporisation ne retient rien du tout.
             q_deb = (v - v_cap) * 1000.0 / (dt * 60.0)
             v = v_cap
         v = max(v, 0.0)

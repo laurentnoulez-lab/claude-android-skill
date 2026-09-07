@@ -191,6 +191,18 @@ annonce explicitement que ses volumes comprennent cet apport, et rappelle le dé
 auparavant le calcul en tenait compte, mais rien à l'écran ne le disait et l'ouvrage ne se
 déclarait que dans l'onglet de simulation.
 
+### Un bassin amont sans volume de temporisation ne lamine rien
+
+L'intégrateur lit une capacité nulle comme une capacité **illimitée** : c'est la bonne
+convention pour balayer l'ouvrage aval, dont on cherche justement le volume. Appliquée au
+bassin amont, elle était fausse — un amont déclaré sans volume de temporisation, c'est-à-dire
+**la valeur par défaut dès qu'on coche la case**, se comportait comme un ouvrage infiniment
+grand. Il laminait une averse qu'il ne retient pas, et le volume à prévoir en aval s'en
+trouvait sous-estimé jusqu'à 37 % sur les cas mesurés.
+
+Sans tampon, l'amont est un simple passage : ce qui arrive repart aussitôt, moins ce que son
+fond infiltre. Ce cas est désormais traité explicitement.
+
 ### Le dimensionnement intègre l'apport amont
 
 L'apport amont **entre dans le volume à mettre en œuvre**. Sans cela le tableau des

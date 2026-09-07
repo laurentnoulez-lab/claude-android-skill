@@ -331,6 +331,16 @@ def _hydrogramme_amont(hauteur_mm: float, duree_pluie_min: float, s_pond: float,
         return Apport()
     q_in = v_in * 1000.0 / (duree_pluie_min * 60.0)
 
+    if v_cap <= 0:
+        # Un bassin amont sans volume de temporisation ne tamponne rien : ce qui
+        # arrive repart aussitôt, l'ajutage passant sa part et le trop-plein tout
+        # le reste. Il faut le dire ici, car ``_avancer`` lit une capacité nulle
+        # comme une capacité infinie — convention utile au balayage de l'ouvrage
+        # aval, mais qui faisait laminer à l'amont une averse qu'il ne retient
+        # pas, et sous-estimait d'autant le volume à prévoir en aval.
+        restitue = max(q_in - q_inf, 0.0)
+        return Apport([(0.0, duree_pluie_min, restitue)] if restitue > 0 else [])
+
     # Horizon : l'averse puis la vidange du bassin amont.
     v_pointe = min(max(v_in - (q_inf + q_aj) * duree_pluie_min * 60.0 / 1000.0, 0.0),
                    v_cap if v_cap > 0 else 1e12)

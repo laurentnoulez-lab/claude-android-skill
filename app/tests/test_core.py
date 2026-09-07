@@ -17,6 +17,7 @@ from bassin.core.model import (  # noqa: E402
     SCENARIO_MIXTE,
     SCENARIO_SEUIL,
     SCENARIO_TEMPORISATION,
+    SurfaceIncidente,
     debit_infiltration_ls,
     surface_infiltration_requise_m2,
 )
@@ -1006,6 +1007,49 @@ class TestBassinAmont(unittest.TestCase):
         self.assertAlmostEqual(
             res.volume_au_dessus_ajutage_m3 + res.volume_sous_ajutage_m3, res.volume_m3, places=9)
         self.assertLess(res.volume_au_dessus_ajutage_m3, res.volume_m3)
+
+    def test_un_amont_sans_volume_ne_lamine_rien(self):
+        """Zéro mètre cube de temporisation, c'est zéro — pas l'infini.
+
+        L'intégrateur lit une capacité nulle comme une capacité illimitée, ce qui
+        est la bonne convention pour le balayage de l'ouvrage aval mais pas pour
+        l'amont : un bassin amont déclaré sans volume — c'est la valeur par
+        défaut dès qu'on coche la case — était modélisé comme infiniment grand.
+        Il laminait alors une averse qu'il ne retient pas, et le volume à prévoir
+        en aval s'en trouvait sous-estimé de plus d'un tiers sur certains cas.
+
+        Sans tampon, l'amont est un simple passage : ce qui arrive repart
+        aussitôt, moins ce que son fond infiltre.
+        """
+        h, duree = 40.0, 60.0
+        s_bv, q_amont = 20000.0, 40.0
+        p = Projet(commune_ins="63013", periode_retour=25,
+                   surfaces=[SurfaceIncidente("x", 1.0, 5000.0)])
+        p.amont = BassinAmont(actif=True, surface_bv_m2=s_bv, coef_ruissellement=1.0,
+                              debit_ajutage_ls=q_amont, surface_dispersion_m2=0.0,
+                              k_infiltration_ms=0.0, volume_temporisation_m3=0.0)
+        apport = simulation.hydrogramme_amont(p, h, duree)
+        # Tout ce qui tombe sur le bassin versant amont redescend, pendant l'averse.
+        attendu_ls = h * s_bv / (60.0 * duree)
+        self.assertAlmostEqual(max(q for _, _, q in apport.segments), attendu_ls, places=9)
+        self.assertAlmostEqual(apport.fin_min, duree, places=9)
+        self.assertAlmostEqual(apport.volume_m3, h * s_bv / 1000.0, places=6)
+
+        # Et le volume à maîtriser vaut tout ce qui ruisselle, moins ce qui sort.
+        q_aj = 10.0
+        volume = hydro.volume_pointe_amont(p, duree, h, 0.0, q_aj, 0.0)
+        ruissele = h * (5000.0 + s_bv) / 1000.0
+        evacue = q_aj * duree * 60.0 / 1000.0
+        self.assertAlmostEqual(volume, ruissele - evacue, places=6)
+
+    def test_un_amont_sans_volume_exige_plus_qu_un_amont_qui_tamponne(self):
+        """Le sens physique : moins l'amont retient, plus l'aval doit prévoir."""
+        p = self.projet_evere()
+        p.amont.volume_temporisation_m3 = 0.0
+        sans_tampon = hydro.dimensionner(p, SCENARIO_MIXTE, avec_minima=False).volume_m3
+        p.amont.volume_temporisation_m3 = 5000.0
+        avec_tampon = hydro.dimensionner(p, SCENARIO_MIXTE, avec_minima=False).volume_m3
+        self.assertGreater(sans_tampon, avec_tampon)
 
     def test_le_volume_minimal_amont_evite_le_debordement(self):
         p = self.projet_avec_amont()
