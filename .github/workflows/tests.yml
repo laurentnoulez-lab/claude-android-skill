@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt
+          pip install formulas
+
+      - name: Tests unitaires
+        working-directory: app
+        env:
+          HYDROBASSIN_TEST_FORMULES: "1"
+        run: python -m unittest discover -s tests -v
+
+      - name: Génération des rapports de démonstration
+        working-directory: app
+        run: python tools/exemple.py --sortie ../rapports_demo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rapports-demo
+          path: rapports_demo/
+          if-no-files-found: warn
