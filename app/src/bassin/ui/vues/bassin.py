@@ -74,7 +74,10 @@ class VueBassin(Vue):
                                                  p.coef_securite_infiltration)
         entete = ft.Row(
             [
-                theme.etiquette(f"Volume utile au-dessus de l'ajutage : {b.volume_tampon_m3:.1f} m³",
+                theme.etiquette(
+                    f"Volume tampon total {b.volume_total_m3:.1f} m³ = "
+                    f"{b.volume_sous_ajutage_m3:.1f} m³ sous l'ajutage + "
+                    f"{b.volume_tampon_m3:.1f} m³ au-dessus",
                                 theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART),
                 theme.etiquette(f"Q infiltration = {q_inf:.3f} l/s", theme.VERT, theme.VERT_CLAIR,
                                 ft.Icons.WATER_DROP),

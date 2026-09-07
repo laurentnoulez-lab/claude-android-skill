@@ -1,14 +1,17 @@
-"""Vue « Projet » : commune, récurrence, surfaces incidentes."""
+"""Vue « Projet » : commune, récurrence, surfaces incidentes, sauvegarde."""
 
 from __future__ import annotations
 
-from typing import List
+import os
+import shutil
+from typing import List, Optional
 
 import flet as ft
 
 from ...core import rainfall
 from ...core.model import Projet, SurfaceIncidente, TYPES_SURFACES
 from .. import theme
+from ..state import EXTENSION_PROJET, repertoire_documents
 from .base import Vue
 
 
@@ -16,6 +19,12 @@ class VueProjet(Vue):
     titre = "Projet"
     icone = ft.Icons.FOLDER_OPEN
     sous_titre = "Commune, récurrence et surfaces"
+
+    def __init__(self, page, etat):
+        super().__init__(page, etat)
+        self._selecteur_export: Optional[ft.FilePicker] = None
+        self._selecteur_import: Optional[ft.FilePicker] = None
+        self._dernier_export: str = ""
 
     # ---------------------------------------------------------------- commune
     def _ouvrir_selecteur_commune(self, e=None) -> None:
@@ -179,6 +188,108 @@ class VueProjet(Vue):
         self.rafraichir()
 
     # ---------------------------------------------------------------- rendu
+    # ---------------------------------------------------- import / export
+    def _exporter(self, _=None) -> None:
+        """Écrit le projet dans un fichier, puis propose de le ranger ailleurs."""
+        try:
+            chemin = self.etat.exporter_vers(
+                os.path.join(repertoire_documents(),
+                             os.path.basename(self.etat.nom_fichier_projet())))
+        except Exception as exc:
+            self.notifier(f"Enregistrement impossible : {type(exc).__name__} — {exc}", "erreur")
+            return
+        self._dernier_export = chemin
+        self.maj_resultats()
+        self.notifier(f"Projet enregistré dans {chemin}", "succes")
+        self._enregistrer_sous(chemin)
+
+    def _enregistrer_sous(self, chemin: str) -> None:
+        """Sélecteur du système, pour choisir soi-même la destination."""
+        if self._selecteur_export is None:
+            def _resultat(e: ft.FilePickerResultEvent) -> None:
+                cible = getattr(e, "path", None)
+                source = getattr(self._selecteur_export, "data", None)
+                if not cible or not source:
+                    return
+                if not cible.lower().endswith("." + EXTENSION_PROJET):
+                    cible = f"{cible}.{EXTENSION_PROJET}"
+                try:
+                    shutil.copyfile(source, cible)
+                    self._dernier_export = cible
+                    self.maj_resultats()
+                    self.notifier(f"Projet copié vers {cible}", "succes")
+                except Exception as exc:
+                    self.notifier(f"Copie impossible : {exc}", "erreur")
+
+            self._selecteur_export = ft.FilePicker(on_result=_resultat)
+            self.page.overlay.append(self._selecteur_export)
+            self.page.update()
+        self._selecteur_export.data = chemin
+        try:
+            self._selecteur_export.save_file(
+                dialog_title="Enregistrer le projet",
+                file_name=os.path.basename(chemin),
+                allowed_extensions=[EXTENSION_PROJET],
+            )
+        except Exception:
+            # Sur certaines plateformes le sélecteur n'existe pas : le fichier
+            # est déjà écrit, il suffit de dire où.
+            self.notifier(f"Le sélecteur de fichiers n'est pas disponible ici. "
+                          f"Le projet reste dans {os.path.dirname(chemin)}.", "alerte")
+
+    def _importer(self, _=None) -> None:
+        if self._selecteur_import is None:
+            def _resultat(e: ft.FilePickerResultEvent) -> None:
+                fichiers = getattr(e, "files", None) or []
+                chemin = getattr(fichiers[0], "path", None) if fichiers else None
+                if not chemin:
+                    return
+                self.charger_fichier(chemin)
+
+            self._selecteur_import = ft.FilePicker(on_result=_resultat)
+            self.page.overlay.append(self._selecteur_import)
+            self.page.update()
+        try:
+            self._selecteur_import.pick_files(
+                dialog_title="Ouvrir un projet HydroBassin",
+                allow_multiple=False,
+                allowed_extensions=[EXTENSION_PROJET],
+            )
+        except Exception as exc:
+            self.notifier(f"Le sélecteur de fichiers n'est pas disponible ici ({exc}).", "erreur")
+
+    def charger_fichier(self, chemin: str) -> bool:
+        """Charge un projet et reconstruit la vue. Renvoie False en cas d'échec."""
+        try:
+            self.etat.importer_fichier(chemin)
+        except Exception as exc:
+            self.notifier(str(exc), "erreur")
+            return False
+        self.rafraichir()
+        self.notifier(f"Projet « {self.etat.projet.nom_projet or os.path.basename(chemin)} » "
+                      f"chargé.", "succes")
+        return True
+
+    def _bloc_sauvegarde(self) -> ft.Control:
+        lignes: List[ft.Control] = [
+            ft.Text("Un projet exporté se recharge tel quel : surfaces, sol, ouvrage, bassin "
+                    "amont et scénario retenu. De quoi reprendre une étude sans tout resaisir, "
+                    "ou la transmettre à un collègue.", size=12, color=theme.GRIS),
+            ft.Row(
+                [
+                    theme.bouton_principal("Exporter le projet", ft.Icons.SAVE, self._exporter),
+                    theme.bouton_secondaire("Importer un projet", ft.Icons.FOLDER_OPEN,
+                                            self._importer),
+                ],
+                spacing=10,
+                wrap=True,
+            ),
+        ]
+        if self._dernier_export:
+            lignes.append(ft.Text(f"Dernier enregistrement : {self._dernier_export}",
+                                  size=11, color=theme.GRIS, selectable=True))
+        return ft.Column(lignes, spacing=12)
+
     def construire(self) -> List[ft.Control]:
         p = self.etat.projet
         commune = rainfall.commune_par_ins(p.commune_ins)
@@ -319,6 +430,8 @@ class VueProjet(Vue):
 
         return [
             theme.section("Identification du projet", identification, ft.Icons.EDIT_DOCUMENT),
+            theme.section("Sauvegarde du projet", self._bloc_sauvegarde(), ft.Icons.SAVE_ALT,
+                          "Exporter pour reprendre plus tard · importer un projet existant"),
             theme.section("Pluie de projet", ft.Column([pluie] + avertissements, spacing=12),
                           ft.Icons.WATER_DROP_OUTLINED,
                           "Pluies statistiques du GTI (Région wallonne)"),

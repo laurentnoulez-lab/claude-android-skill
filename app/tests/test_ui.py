@@ -7,6 +7,10 @@ erreur d'API (paramètre inconnu, icône ou couleur inexistante) est détectée.
 import os
 import re
 import sys
+import json
+import shutil
+import tempfile
+import threading
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
@@ -14,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import flet as ft  # noqa: E402
 
 from bassin.core import hydro, rainfall  # noqa: E402
-from bassin.core.model import Bassin  # noqa: E402
+from bassin.core.model import Bassin, BassinAmont, SCENARIO_SEUIL  # noqa: E402
 from bassin.reports import charts  # noqa: E402
 from bassin.ui import graphiques, theme  # noqa: E402
 from bassin.ui.state import EtatApplication  # noqa: E402
@@ -423,6 +427,225 @@ class TestConstructionDesVues(unittest.TestCase):
         champ.value = ""
         champ.on_change(_Evt())
         self.assertEqual(valeurs, [12.5, 0.0])
+
+
+def _champs_texte(controle, trouves=None):
+    """Tous les TextField de l'arbre, dans l'ordre."""
+    trouves = [] if trouves is None else trouves
+    if isinstance(controle, ft.TextField):
+        trouves.append(controle)
+    for attribut in ("controls", "content", "controle", "actions"):
+        valeur = getattr(controle, attribut, None)
+        if isinstance(valeur, list):
+            for enfant in valeur:
+                _champs_texte(enfant, trouves)
+        elif valeur is not None and hasattr(valeur, "__dict__"):
+            _champs_texte(valeur, trouves)
+    return trouves
+
+
+def _textes(controle, trouves=None):
+    trouves = [] if trouves is None else trouves
+    valeur = getattr(controle, "value", None)
+    if isinstance(controle, ft.Text) and isinstance(valeur, str):
+        trouves.append(valeur)
+    for attribut in ("controls", "content", "controle", "actions"):
+        v = getattr(controle, attribut, None)
+        if isinstance(v, list):
+            for enfant in v:
+                _textes(enfant, trouves)
+        elif v is not None and hasattr(v, "__dict__"):
+            _textes(v, trouves)
+    return trouves
+
+
+class _Saisie:
+    """Événement Flet minimal : seul ``control`` est lu par les gestionnaires."""
+
+    def __init__(self, controle):
+        self.control = controle
+
+
+class TestRafraichissementApresSaisie(unittest.TestCase):
+    """Une valeur saisie doit se voir à l'écran, même si le focus ne se perd pas.
+
+    Sous Windows, cliquer dans une zone non saisissable ne déclenche pas
+    toujours ``on_blur`` : l'écran gardait alors les anciens résultats, sans
+    aucun signe que la saisie n'avait pas été prise en compte.
+    """
+
+    def _vue_prete(self):
+        page = PageFactice()
+        etat = EtatApplication()
+        etat.projet.surfaces[7].aire_m2 = 20000.0
+        etat.projet.surface_infiltration_m2 = 250.0
+        etat.projet.debit_ajutage_ls = 10.0
+        vue = VueDimensionnement(page, etat)
+        vue.afficher()
+        return page, etat, vue
+
+    def _volume_affiche(self, vue):
+        return [t for t in _textes(vue.zone) if t.replace(",", ".").replace(" ", "")
+                .replace("m³", "").strip().replace(".", "").isdigit()]
+
+    def test_la_saisie_seule_programme_un_rafraichissement(self):
+        """Sans blur, le volume affiché restait celui d'avant la saisie."""
+        page, etat, vue = self._vue_prete()
+        avant = etat.resultat.volume_m3
+        affiche_avant = _textes(vue.zone)
+
+        champ = next(c for c in _champs_texte(vue.corps)
+                     if "infiltration" in (c.label or "").lower()
+                     and (c.suffix_text or "") == "m²")
+        champ.value = "5000"
+        champ.on_change(_Saisie(champ))          # frappe, sans quitter le champ
+
+        # Le modèle a changé, et un recalcul est programmé.
+        self.assertEqual(etat.projet.surface_infiltration_m2, 5000.0)
+        self.assertNotAlmostEqual(etat.resultat.volume_m3, avant, places=3)
+        self.assertTrue(vue.rafraichisseur.en_attente,
+                        "aucun rafraîchissement n'a été programmé après la saisie")
+
+        vue.rafraichisseur.executer_maintenant()
+        self.assertNotEqual(_textes(vue.zone), affiche_avant,
+                            "la zone de résultats n'a pas été rafraîchie après la saisie")
+        self.assertFalse(vue.rafraichisseur.en_attente)
+
+    def test_une_vue_masquee_ne_recalcule_pas(self):
+        """Sept vues qui recalculent à chaque frappe rendraient la saisie inutilisable."""
+        page, etat, vue = self._vue_prete()
+        vue.masquer()
+        etat.projet.surface_infiltration_m2 = 5000.0
+        etat.invalider()
+        self.assertFalse(vue.rafraichisseur.en_attente)
+
+    def test_le_minuteur_finit_par_jouer_tout_seul(self):
+        """C'est lui le filet quand la sortie de champ n'a pas lieu."""
+        from bassin.ui.rafraichissement import Rafraichisseur
+
+        joues = []
+        fini = threading.Event()
+
+        def action():
+            joues.append(1)
+            fini.set()
+
+        r = Rafraichisseur(action, delai_s=0.01)
+        for _ in range(5):          # cinq frappes rapprochées
+            r.demander()
+        self.assertTrue(fini.wait(2.0), "le minuteur n'a jamais joué")
+        self.assertEqual(joues, [1], "les frappes doivent être regroupées en un seul recalcul")
+
+    def test_une_panne_de_calcul_se_voit(self):
+        """Un écran figé ne dit rien : la panne doit s'afficher."""
+        page, etat, vue = self._vue_prete()
+        vue.resultats = lambda: (_ for _ in ()).throw(ValueError("boum"))
+        vue.maj_resultats()
+        self.assertTrue(any("recalcul" in t.lower() for t in _textes(vue.zone)),
+                        "la panne de recalcul n'est pas signalée à l'écran")
+
+    def test_le_blur_rafraichit_toujours(self):
+        page, etat, vue = self._vue_prete()
+        affiche_avant = _textes(vue.zone)
+        champ = next(c for c in _champs_texte(vue.corps)
+                     if "infiltration" in (c.label or "").lower()
+                     and (c.suffix_text or "") == "m²")
+        champ.value = "5000"
+        champ.on_blur(_Saisie(champ))
+        self.assertEqual(etat.projet.surface_infiltration_m2, 5000.0)
+        self.assertNotEqual(_textes(vue.zone), affiche_avant)
+
+
+class TestSauvegardeDeProjet(unittest.TestCase):
+    """Exporter puis réimporter doit rendre le projet à l'identique."""
+
+    def setUp(self):
+        self.repertoire = tempfile.mkdtemp(prefix="hydrobassin_projet_")
+
+    def tearDown(self):
+        shutil.rmtree(self.repertoire, ignore_errors=True)
+
+    def _etat_garni(self):
+        etat = EtatApplication()
+        p = etat.projet
+        p.nom_projet, p.auteur, p.localisation = "Lotissement", "L. N.", "Amay"
+        p.remarques = "essai d'infiltration du 12/03"
+        p.commune_ins, p.commune_nom, p.periode_retour = "61003", "Amay", 50
+        p.surfaces[7].aire_m2 = 12000.0
+        p.surfaces[2].aire_m2 = 3000.0
+        p.surface_reference_m2 = 30000.0
+        p.k_infiltration_ms, p.coef_securite_infiltration = 5e-6, 1.5
+        p.surface_infiltration_m2 = 400.0
+        p.fixer_ajutage_specifique(5.0)
+        p.bassin = Bassin(volume_total_m3=900.0, volume_sous_ajutage_m3=80.0,
+                          surface_dispersion_m2=400.0, debit_ajutage_ls=p.debit_ajutage_ls)
+        p.amont = BassinAmont(actif=True, surface_bv_m2=8000.0, coef_ruissellement=0.8,
+                              debit_ajutage_ls=4.0, volume_temporisation_m3=250.0,
+                              inclure_bv_dans_ajutage=True)
+        etat.scenario_principal = SCENARIO_SEUIL
+        return etat
+
+    def test_aller_retour_par_fichier(self):
+        etat = self._etat_garni()
+        chemin = etat.exporter_vers(os.path.join(self.repertoire, "essai.json"))
+        self.assertTrue(os.path.getsize(chemin) > 0)
+
+        relu = EtatApplication()
+        relu.importer_fichier(chemin)
+        self.assertEqual(relu.to_json(), etat.to_json())
+        # Et les résultats calculés coïncident, pas seulement les données.
+        self.assertAlmostEqual(relu.resultat.volume_m3, etat.resultat.volume_m3, places=9)
+        self.assertEqual(relu.scenario_principal, SCENARIO_SEUIL)
+        self.assertTrue(relu.projet.amont.actif)
+        self.assertTrue(relu.projet.ajutage_suit_la_surface)
+
+    def test_le_fichier_est_lisible_a_l_oeil(self):
+        """Un projet doit pouvoir s'inspecter et se corriger dans un éditeur."""
+        etat = self._etat_garni()
+        chemin = etat.exporter_vers(os.path.join(self.repertoire, "essai.json"))
+        with open(chemin, encoding="utf-8") as fh:
+            texte = fh.read()
+        self.assertIn("\n", texte, "le fichier doit être indenté")
+        self.assertIn("HydroBassin", texte)
+        self.assertIn("Lotissement", texte)
+
+    def test_la_vue_charge_un_fichier(self):
+        etat_source = self._etat_garni()
+        chemin = etat_source.exporter_vers(os.path.join(self.repertoire, "essai.json"))
+
+        page = PageFactice()
+        vue = VueProjet(page, EtatApplication())
+        vue.afficher()
+        self.assertTrue(vue.charger_fichier(chemin))
+        self.assertEqual(vue.etat.projet.nom_projet, "Lotissement")
+        self.assertEqual(vue.etat.projet.commune_ins, "61003")
+        self.assertAlmostEqual(vue.etat.projet.aire_totale_m2, 15000.0)
+
+    def test_un_fichier_etranger_est_refuse_avec_un_message(self):
+        page = PageFactice()
+        vue = VueProjet(page, EtatApplication())
+        vue.afficher()
+        avant = vue.etat.to_json()
+        chemin = os.path.join(self.repertoire, "autre.json")
+        with open(chemin, "w", encoding="utf-8") as fh:
+            fh.write('{"application": "AutreLogiciel", "projet": {}}')
+        self.assertFalse(vue.charger_fichier(chemin))
+        self.assertEqual(vue.etat.to_json(), avant, "le projet courant doit rester intact")
+        self.assertTrue(page.ouverts, "aucun message n'a été montré à l'utilisateur")
+
+    def test_un_projet_d_une_version_anterieure_se_recharge(self):
+        """Les champs ajoutés depuis ne doivent pas empêcher la relecture."""
+        ancien = json.dumps({
+            "projet": {"commune_ins": "61003", "commune_nom": "Amay", "periode_retour": 25,
+                       "surfaces": [{"libelle": "Toitures", "coefficient": 1.0,
+                                     "aire_m2": 5000.0, "note": ""}],
+                       "champ_disparu": 42},
+            "scenario": "mixte",
+        })
+        etat = EtatApplication()
+        etat.importer_texte(ancien)
+        self.assertEqual(etat.projet.commune_ins, "61003")
+        self.assertAlmostEqual(etat.projet.aire_totale_m2, 5000.0)
 
 
 class TestCoquilleApplication(unittest.TestCase):

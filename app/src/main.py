@@ -154,6 +154,10 @@ def main(page: ft.Page) -> None:
 
     def afficher(i: int) -> None:
         index["courant"] = i
+        # Une seule vue est à l'écran : les autres ne doivent pas recalculer.
+        for j, vue in enumerate(vues):
+            if j != i:
+                vue.masquer()
         try:
             contenu = vues[i].afficher()
         except Exception:

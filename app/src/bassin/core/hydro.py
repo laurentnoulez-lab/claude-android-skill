@@ -232,6 +232,17 @@ class Resultat:
         return f"{self.volume_m3:.1f}" if self.dimensionnable else "—"
 
     @property
+    def volume_au_dessus_ajutage_m3(self) -> float:
+        """Volume à prévoir au-dessus de l'axe de l'ajutage [m³].
+
+        Le volume à mettre en œuvre englobe le volume mort qui dort sous l'axe
+        et ne s'évacue que par le fond. C'est la part située au-dessus qui
+        constitue le tampon proprement dit, et c'est elle qu'il faut creuser en
+        plus du volume mort déjà prévu.
+        """
+        return max(self.volume_m3 - self.volume_sous_ajutage_m3, 0.0)
+
+    @property
     def temps_vidange_hm(self) -> str:
         if self.temps_vidange_h == float("inf"):
             return "infini"
@@ -313,7 +324,9 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     res.debit_infiltration_ls = q_inf
     res.debit_ajutage_ls = q_aj
     res.surface_infiltration_m2 = s_inf
-    res.volume_sous_ajutage_m3 = v_sous
+    # Seul le scénario à orifice surélevé retient un volume mort : les autres
+    # évacuent par le fond, rapporter le seuil y serait trompeur.
+    res.volume_sous_ajutage_m3 = v_sous if scenario == SCENARIO_SEUIL else 0.0
 
     res.debit_sortant_ls = q_inf + q_aj
     res.amont_pris_en_compte = projet.amont.actif

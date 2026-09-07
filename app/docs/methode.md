@@ -321,6 +321,20 @@ surélevé, avec et sans bassin amont : l'écart maximal relevé est de 0,04 % s
 et 0,4 % sur les temps de vidange, et il décroît quand on affine le pas du modèle naïf —
 c'est donc sa discrétisation, pas une divergence.
 
+### Volume mort et volume tampon
+
+Pour le scénario à orifice surélevé, le volume à mettre en œuvre englobe le **volume mort**
+qui dort sous l'axe de l'ajutage et ne s'évacue que par le fond. Comme ce volume est une
+donnée d'entrée, l'application isole désormais la part qu'il reste à creuser :
+
+```
+volume à mettre en œuvre = volume sous l'axe (encodé) + volume au-dessus de l'axe
+```
+
+Les trois autres scénarios évacuent par le fond et n'ont pas de volume mort : la colonne
+correspondante y reste vide, et le volume sous l'axe qu'ils rapportent est nul même quand un
+seuil est encodé pour le scénario 4.
+
 ## 6. Valeurs minimales
 
 * **Surface d'infiltration minimale** : plus petite surface telle que `t_vidange ≤ t_max`

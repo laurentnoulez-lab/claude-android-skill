@@ -149,14 +149,18 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
 def synthese_scenarios(dossier: Dossier) -> List[List[str]]:
     """Tableau de synthèse (entete + lignes) pour les rapports."""
     lignes = [[
-        "Scénario", "Volume [m³]", "Durée critique", "Pluie [mm]",
-        "Q sortie [l/s]", "Vidange après pluie", "S infiltration min [m²]", "Q ajutage min [l/s]",
+        "Scénario", "Volume [m³]", "dont au-dessus de l'ajutage [m³]", "Durée critique",
+        "Pluie [mm]", "Q sortie [l/s]", "Vidange après pluie", "S infiltration min [m²]",
+        "Q ajutage min [l/s]",
     ]]
     for s in ORDRE_SCENARIOS:
         r = dossier.resultats[s]
         lignes.append([
             LIBELLES_SCENARIOS[s],
             f"{r.volume_m3:.1f}",
+            # Le volume mort sous l'axe est une donnée d'entrée : c'est la part
+            # au-dessus qu'il reste à creuser.
+            f"{r.volume_au_dessus_ajutage_m3:.1f}" if s == SCENARIO_SEUIL else "—",
             r.duree_critique_hm,
             f"{r.hauteur_pluie_mm:.1f}",
             f"{r.debit_sortant_ls:.2f}",

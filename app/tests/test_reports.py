@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 from bassin.core import rainfall  # noqa: E402
-from bassin.core.model import Bassin, BassinAmont, Projet  # noqa: E402
+from bassin.core.model import Bassin, BassinAmont, Projet, SCENARIO_SEUIL  # noqa: E402
 from bassin.reports import charts, docx_report, dossier as mod_dossier, pdf_report, xlsx_report  # noqa: E402
 from bassin.reports.pdf_writer import Pdf, largeur_texte, nettoyer  # noqa: E402
 
@@ -59,7 +59,25 @@ class TestDossier(BaseRapport):
     def test_synthese(self):
         lignes = mod_dossier.synthese_scenarios(self.dossier)
         self.assertEqual(len(lignes), 5)
-        self.assertEqual(len(lignes[0]), 8)
+        self.assertEqual(len(lignes[0]), 9)
+        # Toutes les lignes ont la largeur de l'entête, sinon le tableau se décale.
+        for ligne in lignes:
+            self.assertEqual(len(ligne), len(lignes[0]))
+
+    def test_la_synthese_isole_le_volume_au_dessus_de_l_ajutage(self):
+        """Le volume mort est une donnée d'entrée : c'est le reste qu'on creuse."""
+        colonne = mod_dossier.synthese_scenarios(self.dossier)[0]
+        i = colonne.index("dont au-dessus de l'ajutage [m³]")
+        lignes = mod_dossier.synthese_scenarios(self.dossier)[1:]
+        for scenario, ligne in zip(mod_dossier.ORDRE_SCENARIOS, lignes):
+            res = self.dossier.resultats[scenario]
+            if scenario == SCENARIO_SEUIL:
+                self.assertEqual(ligne[i], f"{res.volume_au_dessus_ajutage_m3:.1f}")
+                self.assertAlmostEqual(
+                    res.volume_au_dessus_ajutage_m3 + res.volume_sous_ajutage_m3,
+                    res.volume_m3, places=6)
+            else:
+                self.assertEqual(ligne[i], "—")
 
     def test_graphiques(self):
         for g in (self.dossier.graphique_dimensionnement(), self.dossier.graphique_simulation(),

@@ -117,6 +117,14 @@ app/
 └── tools/                       génération de l'icône et du dossier de démonstration
 ```
 
+## Sauvegarde des projets
+
+L'onglet **Projet** exporte l'étude courante dans un fichier `.json` lisible et la réimporte
+telle quelle : surfaces, sol, ouvrage, bassin d'orage amont et scénario retenu. Le fichier
+porte une marque `HydroBassin` et un numéro de version ; un fichier étranger ou illisible est
+refusé avec un message, sans toucher au projet ouvert. Un projet enregistré par une version
+antérieure se recharge malgré les champs ajoutés depuis.
+
 ## Navigation
 
 Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+7** pour passer
@@ -130,6 +138,9 @@ directement à une section.
 * La saisie accepte indifféremment `1e-5`, `0,00001` ou `0.00001`. Une valeur fautive
   n'est signalée qu'une fois le champ quitté : taper `1e-5` passe par `1e`, qui n'est pas
   un nombre sans que l'utilisateur ait commis d'erreur.
+* Les résultats se recalculent à la sortie du champ, et à défaut peu après la dernière
+  frappe : sous Windows, un clic dans une zone non saisissable ne déclenche pas toujours
+  `on_blur`, et l'écran restait alors périmé sans le dire.
 * Les champs couplés se complètent dans les deux sens. Pour K (m/s ↔ mm/h) les deux
   cases expriment la même grandeur. Pour l'ajutage, l'unité de saisie décide : encodé
   en **l/(s·ha)** le débit en l/s se calcule seul sur la surface incidente totale

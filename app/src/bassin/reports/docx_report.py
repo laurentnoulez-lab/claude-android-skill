@@ -149,7 +149,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         r = dossier.resultats[s]
         fond = BLEU if s == dossier.scenario_principal else (ROUGE if not r.conforme else None)
         lignes.append([Cellule(str(v), fond=fond, gras=(s == dossier.scenario_principal)) for v in ligne])
-    doc.tableau(lignes, largeurs=[4.6, 1.7, 1.9, 1.5, 1.7, 1.6, 1.9, 1.6], taille=14)
+    doc.tableau(lignes, largeurs=[4.0, 1.5, 1.9, 1.6, 1.4, 1.5, 1.5, 1.7, 1.5], taille=13)
 
     doc.image(charts.rendre_png(dossier.graphique_dimensionnement(), 900, 420), largeur_cm=16.0,
               legende="Volume à maîtriser en fonction de la durée de pluie - "
@@ -171,9 +171,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         doc.tableau(
             [
                 ["Caractéristique", "Valeur", "Unité"],
-                ["Volume total du bassin", f"{b.volume_total_m3:.1f}", "m³"],
-                ["Volume sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
-                ["Volume tampon au-dessus de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
+                ["Volume tampon total (sous l'ajutage + au-dessus)",
+                 f"{b.volume_total_m3:.1f}", "m³"],
+                ["    dont sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
+                ["    dont au-dessus de l'axe de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
                 ["Surface de dispersion (fond du bassin)", f"{b.surface_dispersion_m2:.1f}", "m²"],
                 ["Débit d'infiltration", f"{sim.q_infiltration_ls:.3f}", "l/s"],
                 ["Débit d'ajutage", f"{sim.q_ajutage_ls:.3f}", "l/s"],

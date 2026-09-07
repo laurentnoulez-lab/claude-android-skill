@@ -986,6 +986,27 @@ class TestBassinAmont(unittest.TestCase):
         self.assertGreater(avec.surface_infiltration_min_m2, sans.surface_infiltration_min_m2)
         self.assertGreater(avec.debit_ajutage_min_ls, sans.debit_ajutage_min_ls)
 
+    def test_le_volume_mort_ne_compte_que_pour_l_orifice_sureleve(self):
+        """Les autres scénarios évacuent par le fond : pas de volume mort chez eux.
+
+        Le volume sous l'axe est encodé une fois pour toutes et partagé ; le
+        rapporter dans un scénario qui ne l'utilise pas ferait croire à un
+        volume à creuser plus petit qu'il n'est.
+        """
+        p = self.projet_evere()
+        p.amont.actif = False
+        for scenario in (SCENARIO_TEMPORISATION, SCENARIO_DISPERSION, SCENARIO_MIXTE):
+            with self.subTest(scenario=scenario):
+                res = hydro.dimensionner(p, scenario, avec_minima=False)
+                self.assertEqual(res.volume_sous_ajutage_m3, 0.0)
+                self.assertAlmostEqual(res.volume_au_dessus_ajutage_m3, res.volume_m3, places=9)
+        res = hydro.dimensionner(p, SCENARIO_SEUIL, avec_minima=False)
+        self.assertAlmostEqual(res.volume_sous_ajutage_m3,
+                               p.bassin.volume_sous_ajutage_m3, places=9)
+        self.assertAlmostEqual(
+            res.volume_au_dessus_ajutage_m3 + res.volume_sous_ajutage_m3, res.volume_m3, places=9)
+        self.assertLess(res.volume_au_dessus_ajutage_m3, res.volume_m3)
+
     def test_le_volume_minimal_amont_evite_le_debordement(self):
         p = self.projet_avec_amont()
         p.amont.volume_temporisation_m3 = hydro.volume_amont_minimal_m3(p)

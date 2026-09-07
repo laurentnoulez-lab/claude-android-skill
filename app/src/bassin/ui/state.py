@@ -21,6 +21,11 @@ from ..reports.dossier import ORDRE_SCENARIOS, Dossier, construire
 
 CLE_STOCKAGE = "hydrobassin.projet"
 
+#: Marqueur écrit dans les fichiers de projet, pour reconnaître ce qu'on ouvre.
+MARQUE_FICHIER = "HydroBassin"
+VERSION_FICHIER = 1
+EXTENSION_PROJET = "json"
+
 
 def _ecriture_possible(chemin: str) -> bool:
     """Vérifie réellement qu'on peut écrire dans ce répertoire."""
@@ -181,21 +186,67 @@ class EtatApplication:
         self.invalider()
 
     # -- persistance -------------------------------------------------------
-    def to_json(self) -> str:
+    def to_json(self, indente: bool = False) -> str:
+        """Projet complet, tel qu'il sera relu — reprise automatique et fichier."""
         return json.dumps(
-            {"projet": self.projet.to_dict(), "scenario": self.scenario_principal},
+            {
+                "application": MARQUE_FICHIER,
+                "version": VERSION_FICHIER,
+                "projet": self.projet.to_dict(),
+                "scenario": self.scenario_principal,
+            },
             ensure_ascii=False,
+            indent=2 if indente else None,
         )
 
     def charger_json(self, texte: str) -> bool:
+        """Reprise silencieuse au démarrage : un échec ne doit rien casser."""
         try:
-            data = json.loads(texte)
-            self.projet = Projet.from_dict(data["projet"])
-            self.scenario_principal = data.get("scenario", SCENARIO_MIXTE)
+            self.importer_texte(texte)
         except Exception:
             return False
-        self.invalider()
         return True
+
+    def importer_texte(self, texte: str) -> None:
+        """Charge un projet, en disant clairement ce qui cloche le cas échéant.
+
+        L'utilisateur choisit son fichier lui-même : il peut se tromper de
+        fichier, et un message précis vaut mieux qu'un écran inchangé.
+        """
+        try:
+            data = json.loads(texte)
+        except Exception as exc:
+            raise ValueError(f"Ce fichier n'est pas un projet lisible ({exc}).") from exc
+        if not isinstance(data, dict) or "projet" not in data:
+            raise ValueError("Ce fichier ne contient pas de projet HydroBassin.")
+        marque = data.get("application")
+        if marque not in (None, MARQUE_FICHIER):
+            raise ValueError(f"Ce fichier vient d'une autre application ({marque}).")
+        try:
+            projet = Projet.from_dict(data["projet"])
+        except Exception as exc:
+            raise ValueError(f"Projet illisible : {type(exc).__name__} — {exc}") from exc
+        self.projet = projet
+        self.scenario_principal = data.get("scenario", SCENARIO_MIXTE)
+        if self.scenario_principal not in LIBELLES_SCENARIOS:
+            self.scenario_principal = SCENARIO_MIXTE
+        self.invalider()
+
+    def exporter_vers(self, chemin: str) -> str:
+        """Écrit le projet et renvoie le chemin réellement utilisé."""
+        repertoire = os.path.dirname(chemin)
+        if repertoire:
+            os.makedirs(repertoire, exist_ok=True)
+        with open(chemin, "w", encoding="utf-8") as fh:
+            fh.write(self.to_json(indente=True))
+        return chemin
+
+    def importer_fichier(self, chemin: str) -> None:
+        with open(chemin, "r", encoding="utf-8") as fh:
+            self.importer_texte(fh.read())
+
+    def nom_fichier_projet(self) -> str:
+        return self.nom_fichier(EXTENSION_PROJET)
 
     def nom_fichier(self, extension: str) -> str:
         base = (self.projet.nom_projet or f"bassin_{self.projet.commune_nom}").strip()

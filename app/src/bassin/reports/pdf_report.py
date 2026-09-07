@@ -220,11 +220,12 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     fonds: Dict[Tuple[int, int], object] = {}
     for i, s in enumerate(ORDRE_SCENARIOS, start=1):
         if s == dossier.scenario_principal:
-            fonds.update({(i, j): BLEU_PALE for j in range(8)})
+            fonds.update({(i, j): BLEU_PALE for j in range(len(synth[0]))})
         elif not dossier.resultats[s].conforme:
-            fonds.update({(i, j): ROUGE_PALE for j in range(8)})
-    pdf.tableau(synth, [0.28 * L] + [0.103 * L] * 7, taille=7.5, fonds=fonds,
-                alignements=["left"] + ["center"] * 7)
+            fonds.update({(i, j): ROUGE_PALE for j in range(len(synth[0]))})
+    colonnes = len(synth[0]) - 1
+    pdf.tableau(synth, [0.26 * L] + [(0.74 / colonnes) * L] * colonnes, taille=7.0, fonds=fonds,
+                alignements=["left"] + ["center"] * colonnes)
     dessiner_graphique(pdf, dossier.graphique_dimensionnement(), 170)
 
     if res.alertes or res.messages:
@@ -241,9 +242,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         pdf.titre1("4. Vérification de l'ouvrage encodé")
         pdf.tableau(
             [["Caractéristique", "Valeur", "Unité"],
-             ["Volume total du bassin", f"{b.volume_total_m3:.1f}", "m³"],
-             ["Volume sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
-             ["Volume tampon au-dessus de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
+             ["Volume tampon total (sous l'ajutage + au-dessus)",
+              f"{b.volume_total_m3:.1f}", "m³"],
+             ["    dont sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
+             ["    dont au-dessus de l'axe de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
              ["Surface de dispersion (fond du bassin)", f"{b.surface_dispersion_m2:.1f}", "m²"],
              ["Débit d'infiltration", f"{sim.q_infiltration_ls:.3f}", "l/s"],
              ["Débit d'ajutage", f"{sim.q_ajutage_ls:.3f}", "l/s"]],

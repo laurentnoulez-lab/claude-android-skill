@@ -175,7 +175,11 @@ class VueDimensionnement(Vue):
             ("Vidange après la pluie", res.temps_vidange_hm),
         ]
         if cle == SCENARIO_SEUIL:
-            details.insert(1, ("Volume sous l'ajutage",
+            # C'est la part au-dessus de l'axe qu'il reste à creuser : le volume
+            # mort sous l'ajutage est déjà une donnée d'entrée.
+            details.insert(1, ("dont au-dessus de l'ajutage",
+                               theme.nombre(res.volume_au_dessus_ajutage_m3, 1, "m³")))
+            details.insert(2, ("dont sous l'ajutage",
                                theme.nombre(res.volume_sous_ajutage_m3, 1, "m³")))
         return ft.Container(
             content=ft.Column(
@@ -259,6 +263,12 @@ class VueDimensionnement(Vue):
                 ft.Container(theme.tuile(res.volume_affiche, "Volume à mettre en œuvre", "m³",
                                          theme.BLEU, ft.Icons.WATER),
                              col={"xs": 12, "sm": 6, "md": 3}),
+                ft.Container(theme.tuile(
+                    theme.nombre(res.volume_au_dessus_ajutage_m3, 1),
+                    "Volume au-dessus de l'ajutage", "m³", theme.BLEU_FONCE, ft.Icons.STAIRS,
+                    f"volume mort sous l'axe : {theme.nombre(res.volume_sous_ajutage_m3, 1)} m³"),
+                    col={"xs": 12, "sm": 6, "md": 3})
+                if self.etat.scenario_principal == SCENARIO_SEUIL else
                 ft.Container(theme.tuile(res.duree_critique_hm if res.dimensionnable else "—",
                                          "Durée de pluie critique", "",
                                          theme.ARDOISE, ft.Icons.TIMER),
