@@ -16,6 +16,7 @@ from ...core.model import (
 )
 from ...reports.dossier import ORDRE_SCENARIOS
 from .. import graphiques, theme
+from ..composants import panneau_amont
 from .base import Vue
 
 DESCRIPTIONS = {
@@ -296,6 +297,18 @@ class VueDimensionnement(Vue):
 
         alertes = [theme.message(a, "alerte") for a in res.alertes]
         alertes += [theme.message(m, "info") for m in res.messages]
+        if res.amont_pris_en_compte:
+            # Sans le dire, l'utilisateur ne peut pas savoir que ces volumes
+            # comprennent l'apport d'un ouvrage déclaré plus bas.
+            amont = p.amont
+            res_amont = hydro.dimensionner_amont(p)
+            alertes.insert(0, theme.message(
+                f"Ces volumes comprennent l'apport du bassin d'orage amont : "
+                f"{theme.nombre(amont.surface_bv_m2, 0)} m² de bassin versant à "
+                f"{theme.nombre(amont.coef_ruissellement, 2)}, restituant "
+                f"{theme.nombre(res_amont.debit_sortant_ls, 3)} l/s. Son apport varie dans le "
+                f"temps et se poursuit après l'averse : le volume est obtenu par intégration "
+                f"exacte, et non par la formule fermée.", "info"))
 
         return [
             info_debits,
@@ -337,6 +350,9 @@ class VueDimensionnement(Vue):
                 ft.Icons.TERRAIN,
                 "Q_infiltration = 1000 × S × K / coefficient de sécurité",
             ),
+            theme.section(
+                "Bassin d'orage amont", panneau_amont(self), ft.Icons.MERGE,
+                "Son apport entre dans le volume à mettre en œuvre ci-dessous"),
             self.zone,
         ]
 

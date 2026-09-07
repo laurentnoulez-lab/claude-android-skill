@@ -71,6 +71,30 @@ def repertoire_documents() -> str:
     return tempfile.gettempdir()
 
 
+def destination_utilisable(chemin: str) -> bool:
+    """Le chemin renvoyé par le sélecteur du système est-il vraiment ouvrable ?
+
+    Sous Android, le sélecteur renvoie un URI du Storage Access Framework, de la
+    forme ``/document/primary:Documents/projet.json``. Ce n'est pas un chemin de
+    fichier : Python ne peut ni l'ouvrir ni y copier quoi que ce soit, et
+    l'utilisateur ne récoltait qu'un « No such file or directory » alors que son
+    projet était bel et bien enregistré ailleurs.
+
+    Le test est direct : peut-on écrire dans le répertoire visé ?
+    """
+    if not chemin:
+        return False
+    repertoire = os.path.dirname(chemin)
+    if not repertoire:
+        return False
+    return os.path.isdir(repertoire) and os.access(repertoire, os.W_OK)
+
+
+def source_utilisable(chemin: str) -> bool:
+    """Le fichier désigné par le sélecteur est-il réellement lisible ?"""
+    return bool(chemin) and os.path.isfile(chemin) and os.access(chemin, os.R_OK)
+
+
 def diagnostic_stockage() -> List[Tuple[str, bool]]:
     """(répertoire, accessible en écriture) — affiché en cas de problème."""
     return [(c, _ecriture_possible(c)) for c in repertoires_candidats()]

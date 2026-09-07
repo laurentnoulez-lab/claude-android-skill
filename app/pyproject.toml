@@ -1,6 +1,6 @@
 [project]
 name = "hydrobassin"
-version = "1.0.0"
+version = "2.0.0"
 description = "Dimensionnement de bassins d'orage - méthode rationnelle, pluies statistiques du GTI (Région wallonne)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,7 +19,7 @@ product = "HydroBassin"
 company = "HydroBassin"
 copyright = "HydroBassin"
 build_number = 1
-build_version = "1.0.0"
+build_version = "2.0.0"
 
 [tool.flet.app]
 path = "src"

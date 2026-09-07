@@ -11,7 +11,8 @@ import flet as ft
 from ...core import rainfall
 from ...core.model import Projet, SurfaceIncidente, TYPES_SURFACES
 from .. import theme
-from ..state import EXTENSION_PROJET, repertoire_documents
+from ..state import (EXTENSION_PROJET, destination_utilisable, repertoire_documents,
+                     source_utilisable)
 from .base import Vue
 
 
@@ -189,6 +190,12 @@ class VueProjet(Vue):
 
     # ---------------------------------------------------------------- rendu
     # ---------------------------------------------------- import / export
+    def _sur_mobile(self) -> bool:
+        try:
+            return self.page.platform in (ft.PagePlatform.ANDROID, ft.PagePlatform.IOS)
+        except Exception:
+            return False
+
     def _exporter(self, _=None) -> None:
         """Écrit le projet dans un fichier, puis propose de le ranger ailleurs."""
         try:
@@ -199,7 +206,13 @@ class VueProjet(Vue):
             self.notifier(f"Enregistrement impossible : {type(exc).__name__} — {exc}", "erreur")
             return
         self._dernier_export = chemin
-        self.maj_resultats()
+        self.rafraichir()
+        if self._sur_mobile():
+            # Le sélecteur d'Android ne rend qu'un URI de document, inutilisable
+            # depuis Python : le fichier est déjà au bon endroit, dans un dossier
+            # que n'importe quel gestionnaire de fichiers sait ouvrir.
+            self.notifier(f"Projet enregistré : {chemin}", "succes")
+            return
         self.notifier(f"Projet enregistré dans {chemin}", "succes")
         self._enregistrer_sous(chemin)
 
@@ -213,10 +226,17 @@ class VueProjet(Vue):
                     return
                 if not cible.lower().endswith("." + EXTENSION_PROJET):
                     cible = f"{cible}.{EXTENSION_PROJET}"
+                if not destination_utilisable(cible):
+                    # Ce n'est pas un chemin de fichier mais un URI du système :
+                    # inutile d'alarmer, le projet est déjà enregistré.
+                    self.notifier(
+                        f"Cet emplacement n'est pas accessible en écriture directe. "
+                        f"Le projet reste enregistré dans {source}.", "alerte")
+                    return
                 try:
                     shutil.copyfile(source, cible)
                     self._dernier_export = cible
-                    self.maj_resultats()
+                    self.rafraichir()
                     self.notifier(f"Projet copié vers {cible}", "succes")
                 except Exception as exc:
                     self.notifier(f"Copie impossible : {exc}", "erreur")
@@ -260,6 +280,11 @@ class VueProjet(Vue):
 
     def charger_fichier(self, chemin: str) -> bool:
         """Charge un projet et reconstruit la vue. Renvoie False en cas d'échec."""
+        if not source_utilisable(chemin):
+            self.notifier(
+                "Ce fichier n'est pas accessible directement. Copiez-le dans le dossier "
+                "Téléchargements ou Documents, puis réessayez.", "erreur")
+            return False
         try:
             self.etat.importer_fichier(chemin)
         except Exception as exc:

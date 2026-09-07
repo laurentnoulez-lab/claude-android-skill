@@ -54,7 +54,7 @@ jobs:
             --org be.hydrobassin \
             --company HydroBassin \
             --copyright "HydroBassin" \
-            --build-version 1.0.0 \
+            --build-version 2.0.0 \
             --build-number ${{ github.run_number }} \
             --verbose
 
@@ -62,7 +62,7 @@ jobs:
         working-directory: app
         run: |
           mkdir -p ../livrables
-          find build -name "*.apk" -exec cp {} ../livrables/HydroBassin-1.0.0.apk \;
+          find build -name "*.apk" -exec cp {} ../livrables/HydroBassin-2.0.0.apk \;
           ls -la ../livrables
 
       - uses: actions/upload-artifact@v4

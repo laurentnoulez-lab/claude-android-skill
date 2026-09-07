@@ -556,6 +556,190 @@ class TestRafraichissementApresSaisie(unittest.TestCase):
         self.assertNotEqual(_textes(vue.zone), affiche_avant)
 
 
+class _ResultatSelecteur:
+    """Événement du sélecteur de fichiers du système."""
+
+    def __init__(self, path=None, files=None):
+        self.path = path
+        self.files = files
+
+
+class _FichierChoisi:
+    def __init__(self, path):
+        self.path = path
+
+
+class TestSauvegardeSousAndroid(unittest.TestCase):
+    """Le sélecteur d'Android rend un URI de document, pas un chemin de fichier.
+
+    Signalé depuis un téléphone : « Copie impossible : [Errno 2] No such file or
+    directory: '/document/primary:Documents/test_T25 (1).json' ». Le projet était
+    pourtant bien enregistré — seule la copie vers l'URI échouait, et le message
+    laissait croire que l'export n'avait pas marché.
+    """
+
+    URI_ANDROID = "/document/primary:Documents/test_T25 (1).json"
+
+    def setUp(self):
+        self.repertoire = tempfile.mkdtemp(prefix="hydrobassin_android_")
+
+    def tearDown(self):
+        shutil.rmtree(self.repertoire, ignore_errors=True)
+
+    def test_un_uri_de_document_n_est_pas_une_destination(self):
+        from bassin.ui.state import destination_utilisable, source_utilisable
+
+        self.assertFalse(destination_utilisable(self.URI_ANDROID))
+        self.assertFalse(destination_utilisable(
+            "content://com.android.externalstorage.documents/document/primary:Download/p.json"))
+        self.assertFalse(source_utilisable(self.URI_ANDROID))
+        # Un vrai chemin, lui, reste utilisable.
+        reel = os.path.join(self.repertoire, "projet.json")
+        self.assertTrue(destination_utilisable(reel))
+        with open(reel, "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        self.assertTrue(source_utilisable(reel))
+
+    def _vue(self):
+        page = PageFactice()
+        vue = VueProjet(page, EtatApplication())
+        vue.afficher()
+        return page, vue
+
+    def test_l_export_ne_crie_pas_a_l_echec_sur_un_uri(self):
+        page, vue = self._vue()
+        source = vue.etat.exporter_vers(os.path.join(self.repertoire, "source.json"))
+        vue._enregistrer_sous(source)          # installe le sélecteur
+        vue._selecteur_export.data = source
+        vue._selecteur_export.on_result(_ResultatSelecteur(path=self.URI_ANDROID))
+
+        messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
+        self.assertTrue(messages)
+        dernier = messages[-1]
+        self.assertNotIn("Copie impossible", dernier)
+        self.assertIn(source, dernier, "le message doit dire où le projet se trouve réellement")
+
+    def test_l_export_copie_vraiment_vers_un_chemin_reel(self):
+        page, vue = self._vue()
+        source = vue.etat.exporter_vers(os.path.join(self.repertoire, "source.json"))
+        cible = os.path.join(self.repertoire, "ailleurs.json")
+        vue._enregistrer_sous(source)
+        vue._selecteur_export.data = source
+        vue._selecteur_export.on_result(_ResultatSelecteur(path=cible))
+        self.assertTrue(os.path.exists(cible))
+        EtatApplication().importer_fichier(cible)      # relisible
+
+    def test_l_import_d_un_uri_est_refuse_avec_un_conseil(self):
+        page, vue = self._vue()
+        avant = vue.etat.to_json()
+        self.assertFalse(vue.charger_fichier(self.URI_ANDROID))
+        self.assertEqual(vue.etat.to_json(), avant)
+        messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
+        self.assertTrue(any("Téléchargements" in m for m in messages),
+                        "le message doit dire quoi faire")
+
+    def test_sur_mobile_l_export_n_ouvre_pas_le_selecteur(self):
+        """Inutile de proposer un sélecteur qui ne rendra qu'un URI."""
+        page = PageFactice()
+        page.platform = ft.PagePlatform.ANDROID
+        vue = VueProjet(page, EtatApplication())
+        vue.afficher()
+        vue._exporter()
+        self.assertIsNone(vue._selecteur_export,
+                          "aucun sélecteur ne doit être ouvert sur téléphone")
+        self.assertTrue(vue._dernier_export and os.path.exists(vue._dernier_export))
+        messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
+        self.assertTrue(any("enregistré" in m for m in messages))
+
+
+class TestBassinAmontDansLeDimensionnement(unittest.TestCase):
+    """Le bassin amont se déclare et se voit depuis l'onglet Dimensionnement.
+
+    Le moteur l'intégrait déjà au volume à mettre en œuvre, mais l'onglet n'en
+    disait rien et ne permettait pas de l'encoder : il fallait le deviner dans
+    l'onglet Bassin, et rien à l'écran ne signalait qu'il comptait.
+    """
+
+    def _etat(self, actif=True):
+        etat = EtatApplication()
+        p = etat.projet
+        p.surfaces[7].aire_m2 = 20000.0
+        p.surface_infiltration_m2 = 250.0
+        p.fixer_ajutage_absolu(12.0)
+        p.bassin = Bassin(volume_total_m3=1200.0, volume_sous_ajutage_m3=50.0,
+                          surface_dispersion_m2=250.0, debit_ajutage_ls=12.0)
+        p.amont = BassinAmont(actif=actif, surface_bv_m2=10000.0, coef_ruissellement=0.9,
+                              debit_ajutage_ls=5.0, volume_temporisation_m3=300.0)
+        return etat
+
+    def test_le_panneau_amont_est_dans_les_deux_onglets(self):
+        etat = self._etat()
+        dim = VueDimensionnement(PageFactice(), etat)
+        bas = VueBassin(PageFactice(), etat)
+        dim.afficher()
+        bas.afficher()
+        for vue, nom in ((dim, "Dimensionnement"), (bas, "Bassin")):
+            with self.subTest(vue=nom):
+                textes = _textes(vue.corps)
+                self.assertIn("Bassin d'orage amont", textes)
+                champs = [c.label for c in _champs_texte(vue.corps) if c.label]
+                self.assertTrue(any("bassin versant amont" in (l or "").lower() for l in champs),
+                                f"pas de champ de saisie de l'amont dans l'onglet {nom}")
+
+    def test_encoder_l_amont_depuis_le_dimensionnement_change_les_volumes(self):
+        """C'est tout l'objet de la 2.0 : le déclarer là où l'on dimensionne."""
+        etat = self._etat(actif=False)
+        vue = VueDimensionnement(PageFactice(), etat)
+        vue.afficher()
+        sans = etat.resultat.volume_m3
+
+        etat.projet.amont.actif = True
+        etat.invalider()
+        vue.rafraichir()
+        champ = next(c for c in _champs_texte(vue.corps)
+                     if "bassin versant amont" in (c.label or "").lower())
+        champ.value = "40000"
+        champ.on_blur(_Saisie(champ))
+
+        self.assertAlmostEqual(etat.projet.amont.surface_bv_m2, 40000.0)
+        self.assertGreater(etat.resultat.volume_m3, sans,
+                           "le bassin amont encodé ici doit gonfler le volume à mettre en œuvre")
+        self.assertTrue(etat.resultat.amont_pris_en_compte)
+
+    def test_l_ecran_annonce_que_l_apport_est_compte(self):
+        etat = self._etat()
+        vue = VueDimensionnement(PageFactice(), etat)
+        vue.afficher()
+        avis = [t for t in _textes(vue.zone) if "comprennent l'apport" in t]
+        self.assertTrue(avis, "rien n'indique que les volumes comprennent l'apport amont")
+        self.assertIn("5,000 l/s", avis[0])
+
+    def test_sans_amont_aucune_mention_parasite(self):
+        etat = self._etat(actif=False)
+        vue = VueDimensionnement(PageFactice(), etat)
+        vue.afficher()
+        self.assertFalse([t for t in _textes(vue.zone) if "comprennent l'apport" in t])
+
+    def test_les_deux_onglets_partagent_le_meme_amont(self):
+        """Un seul ouvrage amont, deux endroits pour le décrire."""
+        etat = self._etat()
+        dim = VueDimensionnement(PageFactice(), etat)
+        bas = VueBassin(PageFactice(), etat)
+        dim.afficher()
+        bas.afficher()
+        champ = next(c for c in _champs_texte(dim.corps)
+                     if "ajutage amont" in (c.label or "").lower())
+        champ.value = "2,5"
+        champ.on_blur(_Saisie(champ))
+        self.assertAlmostEqual(etat.projet.amont.debit_ajutage_ls, 2.5)
+        bas.rafraichir()
+        valeurs = [c.value for c in _champs_texte(bas.corps)
+                   if "ajutage amont" in (c.label or "").lower()]
+        self.assertEqual(len(valeurs), 1)
+        self.assertAlmostEqual(float(valeurs[0].replace(",", ".")), 2.5,
+                               msg="l'onglet Bassin doit montrer ce qui a été encodé ailleurs")
+
+
 class TestSauvegardeDeProjet(unittest.TestCase):
     """Exporter puis réimporter doit rendre le projet à l'identique."""
 

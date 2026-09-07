@@ -72,8 +72,8 @@ Les binaires sont produits par GitHub Actions (`Actions` → workflow → *Run w
 
 | Workflow | Livrable |
 |---|---|
-| `Build APK Android` | `HydroBassin-1.0.0.apk` |
-| `Build Windows` | `HydroBassin-Setup-1.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
+| `Build APK Android` | `HydroBassin-2.0.0.apk` |
+| `Build Windows` | `HydroBassin-Setup-2.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
 | `Captures d'interface` | copies d'écran de chaque onglet en formats téléphone, tablette et bureau (branche `ui-captures`) |
 
 En local (Flutter 3.29.x requis, installé automatiquement par flet si absent) :
@@ -84,7 +84,7 @@ flet build apk        # Android
 flet build windows    # Windows (à lancer sur Windows, Visual Studio 2022 requis)
 
 # puis l'installeur (Inno Setup 6) :
-iscc /DSourceDir=..\..\build\windows /DExeName=HydroBassin.exe /DMaVersion=1.0.0 \
+iscc /DSourceDir=..\..\build\windows /DExeName=HydroBassin.exe /DMaVersion=2.0.0 \
      /DOutputDir=..\..\..\livrables packaging\windows\hydrobassin.iss
 ```
 
@@ -124,6 +124,14 @@ telle quelle : surfaces, sol, ouvrage, bassin d'orage amont et scénario retenu.
 porte une marque `HydroBassin` et un numéro de version ; un fichier étranger ou illisible est
 refusé avec un message, sans toucher au projet ouvert. Un projet enregistré par une version
 antérieure se recharge malgré les champs ajoutés depuis.
+
+Sur **Android**, le sélecteur du système ne rend pas un chemin de fichier mais un URI du
+*Storage Access Framework* (`/document/primary:Documents/…`), que Python ne sait pas ouvrir :
+la copie échouait avec un « No such file or directory » alors que le projet était bel et bien
+enregistré. L'application n'ouvre donc plus ce sélecteur sur téléphone — elle écrit dans le
+dossier **Téléchargements**, visible de n'importe quel gestionnaire de fichiers, et annonce le
+chemin. Sur ordinateur, le sélecteur reste proposé ; une destination qui ne serait pas
+réellement accessible est signalée sans faire croire à un échec de l'export.
 
 ## Navigation
 

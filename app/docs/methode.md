@@ -182,6 +182,15 @@ déversement prolongé dans tous les cas.
 L'application propose le volume minimal du bassin amont, calculé par la même méthode
 rationnelle sur son bassin versant.
 
+### Le bassin amont se déclare depuis le dimensionnement
+
+Depuis la version 2.0, le panneau du bassin d'orage amont est présent dans l'onglet
+**Dimensionnement** comme dans l'onglet **Bassin** — c'est le même ouvrage des deux côtés, si
+bien que l'encoder d'un onglet le montre aussitôt dans l'autre. Le tableau des scénarios
+annonce explicitement que ses volumes comprennent cet apport, et rappelle le débit restitué :
+auparavant le calcul en tenait compte, mais rien à l'écran ne le disait et l'ouvrage ne se
+déclarait que dans l'onglet de simulation.
+
 ### Le dimensionnement intègre l'apport amont
 
 L'apport amont **entre dans le volume à mettre en œuvre**. Sans cela le tableau des

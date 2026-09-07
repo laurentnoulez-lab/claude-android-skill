@@ -12,7 +12,7 @@ import flet as ft
 from ...core.model import LIBELLES_SCENARIOS
 from ...reports import docx_report, pdf_report, xlsx_report
 from .. import theme
-from ..state import diagnostic_stockage, repertoire_documents
+from ..state import destination_utilisable, diagnostic_stockage, repertoire_documents
 from .base import Vue
 
 FORMATS = (
@@ -86,6 +86,13 @@ class VueRapport(Vue):
                 cible = getattr(e, "path", None)
                 source = getattr(self.selecteur_fichier, "data", None)
                 if not cible or not source:
+                    return
+                if not destination_utilisable(cible):
+                    # Android ne rend qu'un URI de document : le rapport est déjà
+                    # écrit, autant dire où plutôt que d'afficher un échec.
+                    self.notifier(f"Cet emplacement n'est pas accessible en écriture directe. "
+                                  f"Le rapport reste disponible dans {os.path.dirname(source)}.",
+                                  "alerte")
                     return
                 try:
                     shutil.copyfile(source, cible)

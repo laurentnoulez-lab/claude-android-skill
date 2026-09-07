@@ -6,7 +6,7 @@
   #define MonApp "HydroBassin"
 #endif
 #ifndef MaVersion
-  #define MaVersion "1.0.0"
+  #define MaVersion "2.0.0"
 #endif
 #ifndef ExeName
   #define ExeName "HydroBassin.exe"
