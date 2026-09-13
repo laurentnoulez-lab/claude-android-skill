@@ -420,8 +420,12 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         sim = dossier.simulation
         b = p.bassin
         pdf.nouvelle_page()
-        pdf.titre1(f"{suivant()}. Vérification de l'ouvrage encodé — {dossier.ouvrage_courant.nom}"
-                   if dossier.reseau_multiple else f"{numero()}. Vérification de l'ouvrage encodé")
+        # Le compteur avance d'abord : dans une expression conditionnelle, la
+        # branche non retenue n'est pas évaluée, et la section suivante héritait
+        # du numéro de la précédente sur un projet à bassin unique.
+        rang_ouvrage = suivant()
+        pdf.titre1(f"{rang_ouvrage}. Vérification de l'ouvrage encodé"
+                   + (f" — {dossier.ouvrage_courant.nom}" if dossier.reseau_multiple else ""))
         pdf.tableau(
             [["Caractéristique", "Valeur", "Unité"],
              ["Volume tampon total (sous l'ajutage + au-dessus)",

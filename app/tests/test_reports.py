@@ -616,3 +616,73 @@ class TestLargeurDesTableauxWord(unittest.TestCase):
             with self.subTest(tableau=i):
                 self.assertLessEqual(largeur, self.LARGEUR_UTILE_CM,
                                      f"tableau {i} large de {largeur:.1f} cm")
+
+
+class TestNumerotationDesSections(unittest.TestCase):
+    """Les sections se numérotent au fil de l'écriture : la suite doit rester droite.
+
+    La synthèse du réseau s'insère en deuxième position quand le projet compte
+    plusieurs ouvrages, et tout ce qui suit se décale. Un numéro sauté ou répété
+    rend le dossier incohérent, sans que rien ne le signale.
+    """
+
+    TITRE = re.compile(r"^(\d+)\. \S")
+
+    def _numeros_pdf(self, dossier, chemin):
+        pdf_report.ecrire(dossier, chemin)
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        morceaux = re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))
+        octal = re.compile(r"\\(\d{3})")
+        numeros = []
+        for texte in morceaux:
+            lisible = octal.sub(lambda m: chr(int(m.group(1), 8)), texte[1:-1])
+            trouve = self.TITRE.match(lisible)
+            if trouve:
+                numeros.append(int(trouve.group(1)))
+        return numeros
+
+    def _numeros_word(self, dossier, chemin):
+        docx_report.ecrire(dossier, chemin)
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        numeros = []
+        for texte in re.findall(r"<w:t[^>]*>(.*?)</w:t>", document, re.S):
+            trouve = self.TITRE.match(texte)
+            if trouve:
+                numeros.append(int(trouve.group(1)))
+        return numeros
+
+    def _verifier(self, numeros, libelle):
+        self.assertGreaterEqual(len(numeros), 6, libelle)
+        self.assertEqual(numeros, list(range(1, len(numeros) + 1)),
+                         f"{libelle} : sections numérotées {numeros}")
+
+    def test_la_suite_est_droite_dans_les_deux_modes(self):
+        from bassin.core import exemple
+
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_numeros_")
+        try:
+            simple = mod_dossier.construire(projet_complet())
+            systeme = exemple.systeme_demonstration()
+            reseau = mod_dossier.construire(systeme.courant.etude,
+                                            systeme.courant.scenario, systeme=systeme)
+            for dossier, libelle in ((simple, "bassin unique"), (reseau, "réseau")):
+                with self.subTest(projet=libelle, format="PDF"):
+                    self._verifier(self._numeros_pdf(
+                        dossier, os.path.join(repertoire, f"{libelle}.pdf")), libelle)
+                with self.subTest(projet=libelle, format="Word"):
+                    self._verifier(self._numeros_word(
+                        dossier, os.path.join(repertoire, f"{libelle}.docx")), libelle)
+            # Et le réseau compte bien une section de plus.
+            self.assertEqual(
+                len(self._numeros_pdf(reseau, os.path.join(repertoire, "r.pdf"))),
+                len(self._numeros_pdf(simple, os.path.join(repertoire, "s.pdf"))) + 1)
+        finally:
+            shutil.rmtree(repertoire, ignore_errors=True)
