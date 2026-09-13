@@ -27,20 +27,42 @@ class Vue:
         self.zone = ft.Column(spacing=16)
         #: Vrai quand cette vue est celle affichée : les autres ne recalculent pas.
         self.affichee = False
+        #: Ce que décrivaient les champs de saisie lors du dernier tracé.
+        self._signature = None
         self.rafraichisseur = Rafraichisseur(self.maj_resultats)
         # Toute modification du projet doit finir par se voir, y compris quand
         # la sortie de champ n'a pas eu lieu.
         etat.abonner(self._sur_modification)
 
+    def signature(self) -> tuple:
+        """Ce qui, en changeant, rend les champs de saisie eux-mêmes caducs.
+
+        Une valeur retapée ne touche qu'aux résultats : les champs affichent
+        déjà ce qu'il faut, et les redessiner ferait sauter le curseur. Mais
+        changer d'ouvrage étudié, ou ajouter un bassin versant, change ce que
+        les champs *décrivent* : ils ne valent plus rien.
+        """
+        etat = self.etat
+        return (etat.systeme.ouvrage_courant, len(etat.ouvrages), len(etat.versants))
+
     def _sur_modification(self) -> None:
-        if self.affichee:
-            self.rafraichisseur.demander()
+        if not self.affichee:
+            return
+        if self._signature is not None and self._signature != self.signature():
+            # Les champs décrivent autre chose qu'avant : les recalculer ne
+            # suffit pas, il faut les reconstruire. Sans quoi l'onglet gardait
+            # les valeurs de l'ouvrage précédent jusqu'à ce qu'on en sorte et
+            # qu'on y revienne.
+            self.rafraichir()
+            return
+        self.rafraichisseur.demander()
 
     def construire(self) -> List[ft.Control]:
         raise NotImplementedError
 
     def afficher(self) -> ft.Control:
         self.affichee = True
+        self._signature = self.signature()
         self.corps.controls = self.construire()
         return self.corps
 
@@ -71,6 +93,7 @@ class Vue:
             pass
 
     def rafraichir(self) -> None:
+        self._signature = self.signature()
         self.corps.controls = self.construire()
         try:
             self.corps.update()

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 import flet as ft  # noqa: E402
 
-from bassin.core import hydro, rainfall  # noqa: E402
+from bassin.core import exemple, hydro, rainfall  # noqa: E402
 from bassin.core.model import (  # noqa: E402
     Bassin, BassinAmont, SurfaceIncidente, SCENARIO_SEUIL,
 )
@@ -674,6 +674,77 @@ def _dossier_interne(chemin):
         yield
     finally:
         vue_projet.repertoire_documents = origine
+
+
+class TestRafraichissementDesChamps(unittest.TestCase):
+
+    """Changer d'ouvrage doit changer les champs, pas seulement les résultats.
+
+    Signalé à l'usage : « quand dans l'onglet bassin je sélectionne le bassin
+    étudié, les autres paramètres ne changeaient pas, il faut changer d'onglet
+    puis revenir ». Les vues ne reconstruisaient que leur zone de résultats ;
+    les champs de saisie restaient sur l'ouvrage précédent.
+    """
+
+    def setUp(self):
+        self.etat = EtatApplication()
+        self.etat.systeme = exemple.systeme_demonstration()
+        self.etat.systeme.synchroniser()
+        self.etat.invalider()
+        self.page = PageFactice()
+
+    def _champs(self, vue):
+        return {c.label: c.value for c in _rechercher(vue.corps, ft.TextField) if c.label}
+
+    def test_changer_d_ouvrage_met_a_jour_les_champs_de_saisie(self):
+        for classe in (VueBassin, VueDimensionnement):
+            with self.subTest(vue=classe.__name__):
+                etat = EtatApplication()
+                etat.systeme = exemple.systeme_demonstration()
+                etat.systeme.synchroniser()
+                etat.invalider()
+                vue = classe(PageFactice(), etat)
+                vue.afficher()
+                avant = self._champs(vue)
+                autre = [o for o in etat.ouvrages if o.id != etat.ouvrage.id][0]
+                # Sans rafraichir() explicite : c'est tout l'enjeu.
+                etat.choisir_ouvrage(autre.id)
+                apres = self._champs(vue)
+                self.assertNotEqual(avant, apres,
+                                    "les champs restent sur l'ouvrage précédent")
+
+    def test_ajouter_un_bassin_versant_le_fait_apparaitre(self):
+        """Sa carte naît repliée — c'est voulu —, mais elle doit être là."""
+        vue = VueVersants(self.page, self.etat)
+        vue.afficher()
+        def noms():
+            return [c.value for c in _rechercher(vue.corps, ft.Text) if c.value]
+        avant = noms()
+        nouveau = self.etat.ajouter_versant("Parking du hall")
+        apres = noms()
+        self.assertNotIn(nouveau.nom, " ".join(avant))
+        self.assertIn(nouveau.nom, " ".join(apres),
+                      "le bassin versant ajouté n'apparaît pas dans la liste")
+
+    def test_une_simple_valeur_retapee_ne_reconstruit_pas_les_champs(self):
+        """Reconstruire à chaque frappe ferait sauter le curseur de saisie."""
+        vue = VueBassin(self.page, self.etat)
+        vue.afficher()
+        temoin = _rechercher(vue.corps, ft.TextField)[0]
+        self.etat.projet.bassin.volume_total_m3 = 123.0
+        self.etat.invalider()
+        self.assertIs(_rechercher(vue.corps, ft.TextField)[0], temoin,
+                      "les champs ont été reconstruits alors que seul un nombre a changé")
+
+    def test_une_vue_masquee_ne_se_reconstruit_pas(self):
+        vue = VueBassin(self.page, self.etat)
+        vue.afficher()
+        vue.masquer()
+        temoin = list(vue.corps.controls)
+        autre = [o for o in self.etat.ouvrages if o.id != self.etat.ouvrage.id][0]
+        self.etat.choisir_ouvrage(autre.id)
+        self.assertEqual(list(vue.corps.controls), temoin,
+                         "une vue hors écran n'a pas à se redessiner")
 
 
 class TestSauvegardeSousAndroid(unittest.TestCase):
