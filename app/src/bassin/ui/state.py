@@ -14,7 +14,6 @@ from ..core.model import (
     Projet,
     SCENARIO_DISPERSION,
     SCENARIO_MIXTE,
-    SCENARIO_SEUIL,
     SCENARIO_TEMPORISATION,
 )
 from ..core.reseau import BassinVersant, Ouvrage, Systeme

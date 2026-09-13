@@ -34,16 +34,17 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
-from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from . import hydro, simulation
 from .model import (
     Bassin,
     BassinAmont,
     COEF_SECURITE_INFILTRATION,
-    LIBELLES_SCENARIOS,
     Projet,
+    SCENARIO_DISPERSION,
     SCENARIO_MIXTE,
+    SCENARIO_TEMPORISATION,
     SurfaceIncidente,
     TEMPS_VIDANGE_LIMITE_H,
     debit_infiltration_ls,
@@ -705,6 +706,11 @@ def dimensionner_en_cascade(systeme: Systeme, marge: float = 1.05) -> List[Tuple
     encaisser un trop-plein non laminé. En le dimensionnant d'abord, l'aval est
     calculé sur un amont qui retient réellement ce qu'il doit retenir.
 
+    Les **exutoires de l'ouvrage suivent le scénario retenu**, comme le fait
+    « Reprendre le dimensionnement » pour un bassin isolé. Sans cela l'ouvrage
+    encodé et l'hypothèse de calcul se contrediraient : un volume calculé avec
+    une infiltration que l'ouvrage n'a pas déborderait en simulation.
+
     Renvoie la liste ``(nom, volume retenu [m³])`` dans l'ordre de calcul.
     """
     systeme.synchroniser()
@@ -712,13 +718,14 @@ def dimensionner_en_cascade(systeme: Systeme, marge: float = 1.05) -> List[Tuple
     for o in systeme.ordre_amont_aval():
         systeme.synchroniser()   # l'amont vient d'être fixé : l'apport change
         res = hydro.dimensionner(o.etude, o.scenario, avec_minima=False)
-        volume = round(res.volume_m3 * marge, 1) if res.dimensionnable else 0.0
-        o.etude.bassin.volume_total_m3 = volume
-        if o.etude.bassin.surface_dispersion_m2 <= 0:
-            o.etude.bassin.surface_dispersion_m2 = o.etude.surface_infiltration_m2
-        if o.etude.bassin.debit_ajutage_ls <= 0:
-            o.etude.bassin.debit_ajutage_ls = o.etude.debit_ajutage_ls
-        retenus.append((o.nom, volume))
+        bassin = o.etude.bassin
+        # Les exutoires d'abord : le volume requis en dépend.
+        bassin.surface_dispersion_m2 = (
+            o.etude.surface_infiltration_m2 if o.scenario != SCENARIO_TEMPORISATION else 0.0)
+        bassin.debit_ajutage_ls = (
+            o.etude.debit_ajutage_ls if o.scenario != SCENARIO_DISPERSION else 0.0)
+        bassin.volume_total_m3 = round(res.volume_m3 * marge, 1) if res.dimensionnable else 0.0
+        retenus.append((o.nom, bassin.volume_total_m3))
     systeme.synchroniser()
     return retenus
 

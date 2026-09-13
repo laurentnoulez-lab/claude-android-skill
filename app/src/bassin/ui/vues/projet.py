@@ -14,7 +14,6 @@ from typing import List, Optional
 import flet as ft
 
 from ...core import rainfall
-from ...core.model import Projet
 from .. import theme
 from ..state import (EXTENSION_PROJET, destination_utilisable, repertoire_documents,
                      source_utilisable)

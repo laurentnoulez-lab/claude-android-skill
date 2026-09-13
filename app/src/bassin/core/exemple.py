@@ -37,7 +37,7 @@ def projet_demonstration() -> Projet:
     return projet
 
 
-def systeme_demonstration() -> "reseau.Systeme":
+def systeme_demonstration():
     """Réseau de démonstration : deux bassins versants, deux bassins d'orage.
 
     Un lotissement et la voirie qui le dessert aboutissent à deux ouvrages en

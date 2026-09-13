@@ -19,7 +19,7 @@ fonctionnalité s'y déclare simplement indisponible.
 from __future__ import annotations
 
 import threading
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 #: Fenêtres supplémentaires ouvertes, pour pouvoir les refermer proprement.
 _OUVERTES: List[Tuple[object, object]] = []

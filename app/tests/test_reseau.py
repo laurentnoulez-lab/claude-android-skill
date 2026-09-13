@@ -473,6 +473,25 @@ class DimensionnementDuReseau(unittest.TestCase):
                                 f"{fiche.nom} : {fiche.volume_encode_m3} m³ encodés pour "
                                 f"{fiche.volume_minimal_m3} m³ nécessaires")
 
+    def test_la_cascade_accorde_les_exutoires_au_scenario(self):
+        """Un volume calculé avec une infiltration que l'ouvrage n'a pas déborderait."""
+        systeme, _amont, aval = systeme_essai(volumes=(0.0, 0.0), s_inf=(0.0, 500.0))
+        aval.etude.bassin.surface_dispersion_m2 = 0.0     # l'ouvrage n'infiltre pas
+        aval.scenario = SCENARIO_MIXTE                    # mais le calcul y compte
+        reseau.dimensionner_en_cascade(systeme)
+        self.assertAlmostEqual(aval.etude.bassin.surface_dispersion_m2, 500.0)
+        for duree in rainfall.QDF_DURATIONS_MIN:
+            sim = reseau.simuler(systeme, float(duree))
+            self.assertLess(sim.resultat(aval.id).volume_debordement_m3, 1e-6,
+                            f"débordement à {duree} min")
+
+    def test_la_cascade_n_ouvre_pas_d_exutoire_hors_scenario(self):
+        systeme, _amont, aval = systeme_essai(volumes=(0.0, 0.0), s_inf=(0.0, 500.0))
+        aval.scenario = SCENARIO_TEMPORISATION
+        reseau.dimensionner_en_cascade(systeme)
+        self.assertAlmostEqual(aval.etude.bassin.surface_dispersion_m2, 0.0,
+                               msg="la temporisation seule n'infiltre pas")
+
     def test_les_minima_sont_calcules_par_ouvrage(self):
         systeme, _amont, aval = systeme_essai(volumes=(200.0, 0.0))
         fiches = reseau.dimensionner(systeme)

@@ -11,7 +11,6 @@ from typing import List
 
 import flet as ft
 
-from ...core import reseau as coeur
 from ...core.model import LIBELLES_SCENARIOS
 from ...reports.dossier import ORDRE_SCENARIOS
 from .. import theme
@@ -399,7 +398,9 @@ class VueReseau(Vue):
                         ),
                         ft.Text("« Dimensionner en cascade » calcule de l'amont vers l'aval : "
                                 "un ouvrage amont correctement dimensionné ne surverse plus, "
-                                "et l'ouvrage aval s'en trouve allégé.",
+                                "et l'ouvrage aval s'en trouve allégé. Les exutoires encodés "
+                                "de chaque ouvrage sont accordés à son scénario, comme le fait "
+                                "« Reprendre le dimensionnement ».",
                                 size=11.5, color=theme.GRIS),
                         self.zone,
                     ],
