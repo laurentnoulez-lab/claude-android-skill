@@ -218,7 +218,13 @@ Pour livrer une nouvelle version : mettre à jour le numéro aux cinq endroits (
   qu'un recouvrement dans le schéma du réseau. **Cela ne remplace pas le rendu réel** :
   le workflow `captures.yml` publie sur la branche `ui-captures` les dix onglets aux trois
   formats, et c'est là qu'on voit ce qu'un arbre de contrôles ne dit pas. À relire avant
-  toute livraison.
+  toute livraison. `tools/controle_captures.py`, que le workflow exécute ensuite, dit par
+  où commencer : il mesure dans chaque image le plus grand pavé d'une seule couleur, signe
+  d'un contrôle mal posé. Sur la 3.0.0 les captures saines plafonnent à 21 %, à une
+  exception près qui n'est pas un défaut — l'abaque des diamètres, un tableau à trois
+  colonnes sur une carte de tablette, atteint 51 %. Le journal de la console, publié à
+  côté des images, est à lire aussi : c'est lui qui a révélé que le regroupeur de
+  recalculs n'armait jamais son minuteur sous Pyodide.
 - La recherche des minima coûte deux dichotomies par ouvrage. Au-delà de six ouvrages, elle
   n'est plus automatique : l'utilisateur la demande (`EtatApplication.minima_disponibles`).
   Les rapports, eux, la calculent toujours.

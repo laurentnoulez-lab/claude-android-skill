@@ -8,6 +8,7 @@ on:
       - "app/src/bassin/ui/**"
       - "app/src/main.py"
       - "app/tools/captures_ui.py"
+      - "app/tools/controle_captures.py"
       - ".github/workflows/captures.yml"
 
 concurrency:
@@ -48,6 +49,12 @@ jobs:
       - name: Capturer les écrans
         working-directory: app
         run: python tools/captures_ui.py --racine build/web --sortie ../captures
+
+      # Signale les pavés pleins, par où un contrôle mal posé se trahit. Ne fait
+      # pas échouer le travail : c'est une aide à la relecture, pas un test.
+      - name: Signaler les aplats suspects
+        working-directory: app
+        run: python tools/controle_captures.py ../captures
 
       - uses: actions/upload-artifact@v4
         with:
