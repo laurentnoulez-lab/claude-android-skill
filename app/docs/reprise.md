@@ -135,14 +135,30 @@ régression, même si les tests passent encore.
     distance à l'exutoire. Les flèches des versants sont verticales, celles du réseau
     horizontales — elles ne peuvent pas se croiser. `test_ui.TestMiseEnPage` le vérifie.
 
-13. **Sur Android, le sélecteur de fichiers rend un URI SAF**, pas un chemin
+13. **Trois pièges de Flet, qu'aucun parcours de l'arbre de contrôles ne voit.** Ils ont
+    tous les trois été trouvés sur les captures d'écran du rendu réel, et sont désormais
+    tenus par des tests (`test_ui.TestMiseEnPage`) :
+
+    * un contrôle `expand` dans un `Row(wrap=True)` n'a pas de largeur définie — Flutter
+      le rend en un aplat gris qui mange tout l'écran ;
+    * une liste déroulante dont la valeur est la **chaîne vide** n'affiche rien, même si
+      une option porte cette valeur : donner une valeur propre à chaque choix ;
+    * un texte rendu dans une boîte de hauteur fixe occupe un peu plus que son corps :
+      réserver large, sinon la dernière ligne passe sous la bordure.
+
+    Et une règle de Python qui s'y ajoute : dans une expression conditionnelle, **la
+    branche non retenue n'est pas évaluée**. Un compteur appelé dans une seule branche
+    n'avance pas — c'est ainsi que le rapport PDF d'un bassin unique a numéroté deux fois
+    sa section 3.
+
+14. **Sur Android, le sélecteur de fichiers rend un URI SAF**, pas un chemin
     (`/document/primary:…`). Ne jamais y écrire avec `shutil`/`open` : vérifier avec
     `state.destination_utilisable` / `source_utilisable`.
 
-14. **Numéro de version cohérent** entre `bassin/__init__.py`, `pyproject.toml`, le script
+15. **Numéro de version cohérent** entre `bassin/__init__.py`, `pyproject.toml`, le script
     Inno Setup et les deux workflows — `tests/test_version.py` le vérifie.
 
-15. **Les fenêtres partagent un seul projet.** L'état applicatif vit au niveau du module
+16. **Les fenêtres partagent un seul projet.** L'état applicatif vit au niveau du module
     `main` (`etat_partage`), pas dans `main(page)` : une seconde fenêtre est une session
     Flet de plus dans le même processus, pas une seconde application. Une fenêtre qui se
     ferme se **désabonne** ; seule la première arrête l'application.
@@ -186,7 +202,7 @@ Windows) : ce sont les workflows GitHub Actions qui les produisent, sur le commi
 | `captures.yml` | copies d'écran des dix onglets sur la branche `ui-captures` |
 
 Pour livrer une nouvelle version : mettre à jour le numéro aux cinq endroits (cf. invariant
-14), pousser, puis vérifier que le `head_sha` des artefacts correspond bien au commit.
+15), pousser, puis vérifier que le `head_sha` des artefacts correspond bien au commit.
 
 ## 7. Conseils de reprise
 
@@ -199,7 +215,10 @@ Pour livrer une nouvelle version : mettre à jour le numéro aux cinq endroits (
   `formats.fr` s'en charge, un test vérifie l'absence de point décimal dans le texte écrit.
 - L'interface se teste sans serveur graphique (`tests/test_ui.py` construit chaque vue et
   parcourt l'arbre de contrôles Flet) : une erreur d'API Flet est détectée là, de même
-  qu'un recouvrement dans le schéma du réseau.
+  qu'un recouvrement dans le schéma du réseau. **Cela ne remplace pas le rendu réel** :
+  le workflow `captures.yml` publie sur la branche `ui-captures` les dix onglets aux trois
+  formats, et c'est là qu'on voit ce qu'un arbre de contrôles ne dit pas. À relire avant
+  toute livraison.
 - La recherche des minima coûte deux dichotomies par ouvrage. Au-delà de six ouvrages, elle
   n'est plus automatique : l'utilisateur la demande (`EtatApplication.minima_disponibles`).
   Les rapports, eux, la calculent toujours.
