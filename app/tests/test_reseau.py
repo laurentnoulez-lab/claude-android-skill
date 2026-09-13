@@ -294,11 +294,7 @@ class EquivalenceAvecLeBassinIsole(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.assertEqual(obtenu.volume_m3, attendu.volume_m3)
                 self.assertEqual(obtenu.duree_critique_min, attendu.duree_critique_min)
-                # Le temps de vidange passe, lui, de la formule fermée à
-                # l'intégration sur les paliers : mathématiquement la même
-                # chose, aux derniers bits près.
-                self.assertAlmostEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h,
-                                       places=9)
+                self.assertEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h)
                 self.assertEqual(obtenu.surface_infiltration_min_m2,
                                  attendu.surface_infiltration_min_m2)
                 self.assertEqual(obtenu.debit_ajutage_min_ls, attendu.debit_ajutage_min_ls)
@@ -340,7 +336,11 @@ class EquivalenceAvecLeBassinIsole(unittest.TestCase):
                 self.assertTrue(obtenu.amont_pris_en_compte)
                 self.assertEqual(obtenu.volume_m3, attendu.volume_m3)
                 self.assertEqual(obtenu.duree_critique_min, attendu.duree_critique_min)
-                self.assertEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h)
+                # Le temps de vidange passe, lui, de la formule fermée à
+                # l'intégration sur les paliers : mathématiquement la même chose,
+                # aux derniers bits de la représentation flottante près.
+                self.assertAlmostEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h,
+                                       places=9)
 
     def test_la_simulation_d_un_ouvrage_du_reseau_rend_le_calcul_isole(self):
         p = self._projet_isole(avec_amont=True)
