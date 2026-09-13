@@ -208,31 +208,55 @@ class VueReseau(Vue):
         couleur, fond = theme.COULEURS_STATUT.get(
             fiche.statut if fiche else "OK", (theme.GRIS, theme.GRIS_CLAIR))
         courant = ouvrage.id == etat.systeme.ouvrage_courant
+        # Sur téléphone, quatre commandes à droite du titre ne laissaient au nom
+        # qu'une colonne de quelques caractères : ils passent sous le titre.
         contenu: List[ft.Control] = [
-            ft.Row(
+            ft.ResponsiveRow(
                 [
-                    ft.Icon(ft.Icons.WATER_DAMAGE, color=couleur, size=20),
-                    ft.Column(
-                        [
-                            ft.Text(ouvrage.nom or "Bassin d'orage sans nom", size=15,
-                                    weight=ft.FontWeight.W_700, no_wrap=False),
-                            ft.Text(self._resume(ouvrage), size=11.5, color=theme.GRIS,
-                                    no_wrap=False),
-                        ],
-                        spacing=0, expand=True, tight=True,
+                    ft.Container(
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.WATER_DAMAGE, color=couleur, size=20),
+                                ft.Column(
+                                    [
+                                        ft.Text(ouvrage.nom or "Bassin d'orage sans nom",
+                                                size=15, weight=ft.FontWeight.W_700,
+                                                no_wrap=False),
+                                        ft.Text(self._resume(ouvrage), size=11.5,
+                                                color=theme.GRIS, no_wrap=False),
+                                    ],
+                                    spacing=0, expand=True, tight=True,
+                                ),
+                            ],
+                            spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        col={"xs": 12, "md": 7},
                     ),
-                    theme.etiquette("étudié" if courant else "étudier",
-                                    theme.BLEU if courant else theme.GRIS,
-                                    theme.BLEU_CLAIR if courant else theme.GRIS_CLAIR,
-                                    ft.Icons.VISIBILITY),
-                    ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip="Étudier cet ouvrage",
-                                  on_click=etudier),
-                    ft.IconButton(ft.Icons.EXPAND_LESS if ouvert else ft.Icons.EXPAND_MORE,
-                                  tooltip="Replier" if ouvert else "Déplier", on_click=basculer),
-                    ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Supprimer cet ouvrage",
-                                  on_click=supprimer),
+                    ft.Container(
+                        ft.Row(
+                            [
+                                theme.etiquette("étudié" if courant else "étudier",
+                                                theme.BLEU if courant else theme.GRIS,
+                                                theme.BLEU_CLAIR if courant else theme.GRIS_CLAIR,
+                                                ft.Icons.VISIBILITY),
+                                ft.IconButton(ft.Icons.OPEN_IN_NEW,
+                                              tooltip="Étudier cet ouvrage", on_click=etudier),
+                                ft.IconButton(
+                                    ft.Icons.EXPAND_LESS if ouvert else ft.Icons.EXPAND_MORE,
+                                    tooltip="Replier" if ouvert else "Déplier",
+                                    on_click=basculer),
+                                ft.IconButton(ft.Icons.DELETE_OUTLINE,
+                                              tooltip="Supprimer cet ouvrage",
+                                              on_click=supprimer),
+                            ],
+                            spacing=4, alignment=ft.MainAxisAlignment.END, wrap=True,
+                            run_spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        col={"xs": 12, "md": 5},
+                    ),
                 ],
-                spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=8, run_spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         ]
         if ouvert:

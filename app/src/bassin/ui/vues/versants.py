@@ -203,29 +203,52 @@ class VueVersants(Vue):
                         color=theme.BLEU, no_wrap=False)
         self._totaux[versant.id] = total
 
+        # Sur téléphone, les commandes passent sous le titre plutôt que de le
+        # réduire à une colonne de quelques caractères.
         contenu: List[ft.Control] = [
-            ft.Row(
+            ft.ResponsiveRow(
                 [
-                    ft.Icon(ft.Icons.LANDSCAPE, color=theme.BLEU, size=20),
-                    ft.Column(
-                        [
-                            ft.Text(versant.nom or "Bassin versant sans nom", size=15,
-                                    weight=ft.FontWeight.W_700, no_wrap=False),
-                            ft.Text(
-                                theme.fr(f"{versant.aire_totale_m2:.0f} m² · "
-                                         f"{versant.aire_ponderee_m2:.0f} m² actifs · vers "
-                                         + (raccorde.nom if raccorde else "aucun bassin")),
-                                size=11.5, color=theme.GRIS, no_wrap=False),
-                        ],
-                        spacing=0, expand=True, tight=True,
+                    ft.Container(
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.LANDSCAPE, color=theme.BLEU, size=20),
+                                ft.Column(
+                                    [
+                                        ft.Text(versant.nom or "Bassin versant sans nom",
+                                                size=15, weight=ft.FontWeight.W_700,
+                                                no_wrap=False),
+                                        ft.Text(
+                                            theme.fr(
+                                                f"{versant.aire_totale_m2:.0f} m² · "
+                                                f"{versant.aire_ponderee_m2:.0f} m² actifs · vers "
+                                                + (raccorde.nom if raccorde else "aucun bassin")),
+                                            size=11.5, color=theme.GRIS, no_wrap=False),
+                                    ],
+                                    spacing=0, expand=True, tight=True,
+                                ),
+                            ],
+                            spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        col={"xs": 12, "md": 9},
                     ),
-                    ft.IconButton(ft.Icons.EXPAND_LESS if ouvert else ft.Icons.EXPAND_MORE,
-                                  tooltip="Replier" if ouvert else "Déplier",
-                                  on_click=basculer),
-                    ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Supprimer ce bassin versant",
-                                  on_click=supprimer),
+                    ft.Container(
+                        ft.Row(
+                            [
+                                ft.IconButton(
+                                    ft.Icons.EXPAND_LESS if ouvert else ft.Icons.EXPAND_MORE,
+                                    tooltip="Replier" if ouvert else "Déplier",
+                                    on_click=basculer),
+                                ft.IconButton(ft.Icons.DELETE_OUTLINE,
+                                              tooltip="Supprimer ce bassin versant",
+                                              on_click=supprimer),
+                            ],
+                            spacing=4, alignment=ft.MainAxisAlignment.END,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        col={"xs": 12, "md": 3},
+                    ),
                 ],
-                spacing=8,
+                spacing=8, run_spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         ]
