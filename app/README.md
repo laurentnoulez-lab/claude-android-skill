@@ -120,9 +120,30 @@ Les binaires sont produits par GitHub Actions (`Actions` → workflow → *Run w
 
 | Workflow | Livrable |
 |---|---|
-| `Build APK Android` | `HydroBassin-3.0.0.apk` |
-| `Build Windows` | `HydroBassin-Setup-3.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
+| `Build APK Android` | `HydroBassinPlus-3.0.0.apk` |
+| `Build Windows` | `HydroBassinPlus-Setup-3.0.0.exe` — installeur Windows (raccourcis menu Démarrer et bureau, désinstallation, installation possible sans droits administrateur) |
 | `Captures d'interface` | copies d'écran de chaque onglet en formats téléphone, tablette et bureau (branche `ui-captures`) |
+
+### HydroBassin+ s'installe à côté de la 2.0.0
+
+Les deux versions sont deux programmes distincts, pas deux états du même : elles
+s'installent, se lancent et se désinstallent séparément, et chacune garde ses propres
+projets enregistrés.
+
+| | HydroBassin 2.0.0 | HydroBassin+ 3.0.0 |
+|---|---|---|
+| Nom affiché | HydroBassin | **HydroBassin+** |
+| Identifiant Android | `be.hydrobassin.hydrobassin` | `be.hydrobassin.hydrobassinplus` |
+| `AppId` Inno Setup | `7B5C1E44-…` | `F6730013-…` |
+| Dossier Windows | `…\HydroBassin` | `…\HydroBassinPlus` |
+
+C'est l'identifiant, et lui seul, qui décide : à identifiant égal, Android propose une mise
+à jour et remplace l'application précédente. Un test (`tests/test_version.py`) refuse que
+celui de la 2.0.0 réapparaisse.
+
+Pour passer un projet de l'une à l'autre : « Exporter le projet » dans la 2.0.0, puis
+« Importer un projet » dans HydroBassin+, qui relit les enregistrements des versions
+antérieures.
 
 En local (Flutter 3.29.x requis, installé automatiquement par flet si absent) :
 

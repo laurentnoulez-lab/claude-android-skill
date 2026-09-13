@@ -1,5 +1,5 @@
 [project]
-name = "hydrobassin"
+name = "hydrobassinplus"
 version = "3.0.0"
 description = "Dimensionnement de réseaux de bassins d'orage - méthode rationnelle, pluies statistiques du GTI (Région wallonne)"
 readme = "README.md"
@@ -14,8 +14,13 @@ dependencies = [
 dev = ["formulas>=1.2", "python-docx>=1.1"]
 
 [tool.flet]
+# L'identifiant d'application décide, sur Android, s'il s'agit d'un nouveau
+# programme ou d'une mise à jour du précédent. « be.hydrobassin.hydrobassin »
+# est celui de la 2.0.0 : HydroBassin+ prend le sien pour que les deux
+# s'installent côte à côte sur le même téléphone.
 org = "be.hydrobassin"
-product = "HydroBassin"
+bundle_id = "be.hydrobassin.hydrobassinplus"
+product = "HydroBassin+"
 company = "HydroBassin"
 copyright = "HydroBassin"
 build_number = 1

@@ -2,8 +2,14 @@
 ; Compilé par le workflow « Build Windows » :
 ;   iscc /DSourceDir=... /DExeName=... /DMaVersion=... /DOutputDir=... hydrobassin.iss
 
+; Nom affiche (menu Demarrer, Panneau de configuration) et nom de fichier.
+; Le « + » ne passe pas partout : les chemins et le nom de l'installeur
+; utilisent NomFichier, l'affichage utilise MonApp.
 #ifndef MonApp
-  #define MonApp "HydroBassin"
+  #define MonApp "HydroBassin+"
+#endif
+#ifndef NomFichier
+  #define NomFichier "HydroBassinPlus"
 #endif
 #ifndef MaVersion
   #define MaVersion "3.0.0"
@@ -19,19 +25,21 @@
 #endif
 
 [Setup]
-AppId={{7B5C1E44-2E4B-4C1E-9F2E-2A1D6C3B8E10}
+; GUID propre a HydroBassin+ : la 2.0.0 garde 7B5C1E44-..., si bien que les
+; deux versions s'installent et se desinstallent independamment.
+AppId={{F6730013-F45E-4180-AEFB-00F8DB4A0405}
 AppName={#MonApp}
 AppVersion={#MaVersion}
 AppVerName={#MonApp} {#MaVersion}
 AppPublisher=HydroBassin
 AppComments=Dimensionnement de bassins d'orage - methode rationnelle, pluies GTI
-DefaultDirName={autopf}\{#MonApp}
+DefaultDirName={autopf}\{#NomFichier}
 DefaultGroupName={#MonApp}
 DisableProgramGroupPage=yes
 UninstallDisplayName={#MonApp} {#MaVersion}
 UninstallDisplayIcon={app}\{#ExeName}
 OutputDir={#OutputDir}
-OutputBaseFilename={#MonApp}-Setup-{#MaVersion}
+OutputBaseFilename={#NomFichier}-Setup-{#MaVersion}
 SetupIconFile=..\..\src\assets\icon.ico
 Compression=lzma2/max
 SolidCompression=yes

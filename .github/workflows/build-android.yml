@@ -49,9 +49,10 @@ jobs:
         working-directory: app
         run: |
           flet build apk \
-            --project HydroBassin \
-            --product HydroBassin \
+            --project HydroBassinPlus \
+            --product "HydroBassin+" \
             --org be.hydrobassin \
+            --bundle-id be.hydrobassin.hydrobassinplus \
             --company HydroBassin \
             --copyright "HydroBassin" \
             --build-version 3.0.0 \
@@ -62,12 +63,12 @@ jobs:
         working-directory: app
         run: |
           mkdir -p ../livrables
-          find build -name "*.apk" -exec cp {} ../livrables/HydroBassin-3.0.0.apk \;
+          find build -name "*.apk" -exec cp {} ../livrables/HydroBassinPlus-3.0.0.apk \;
           ls -la ../livrables
 
       - uses: actions/upload-artifact@v4
         with:
-          name: HydroBassin-apk
+          name: HydroBassinPlus-apk
           path: livrables/*.apk
           if-no-files-found: error
 

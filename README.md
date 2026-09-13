@@ -14,6 +14,9 @@ livrée sous forme d'**APK Android** et d'**exécutable Windows**.
 * Méthode de calcul : [`app/docs/methode.md`](app/docs/methode.md)
 * Construction des binaires : onglet *Actions* → `Build APK Android` / `Build Windows`
 
+HydroBassin+ porte son propre identifiant d'application : il **s'installe à côté** de la
+2.0.0 au lieu de la remplacer, sur téléphone comme sur Windows.
+
 ## Overview
 
 This skill provides Claude with comprehensive knowledge of modern Android development patterns, including:

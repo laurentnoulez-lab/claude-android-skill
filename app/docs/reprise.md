@@ -196,13 +196,23 @@ Windows) : ce sont les workflows GitHub Actions qui les produisent, sur le commi
 
 | workflow | livrable |
 |---|---|
-| `build-android.yml` | `HydroBassin-<version>.apk` |
-| `build-windows.yml` | `HydroBassin-Setup-<version>.exe` (Inno Setup 6) |
+| `build-android.yml` | `HydroBassinPlus-<version>.apk` |
+| `build-windows.yml` | `HydroBassinPlus-Setup-<version>.exe` (Inno Setup 6) |
 | `tests.yml` | suite de tests |
 | `captures.yml` | copies d'écran des dix onglets sur la branche `ui-captures` |
 
 Pour livrer une nouvelle version : mettre à jour le numéro aux cinq endroits (cf. invariant
 15), pousser, puis vérifier que le `head_sha` des artefacts correspond bien au commit.
+
+**L'identité du paquet n'est pas le numéro de version.** HydroBassin+ s'installe à côté de
+la 2.0.0 parce qu'il porte un identifiant d'application distinct —
+`be.hydrobassin.hydrobassinplus` sur Android, un `AppId` Inno Setup propre sur Windows.
+Reprendre ceux de la 2.0.0 ferait d'une installation une mise à jour, qui écraserait
+l'application précédente et les projets qu'elle garde. Sur Android l'identifiant se
+construit de deux façons — `--org` + `--project`, ou `--bundle-id` — réglées toutes deux
+sur la même valeur, de sorte qu'aucune des deux voies ne puisse ramener l'ancienne.
+`tests/test_version.py` refuse que l'identifiant de la 2.0.0 réapparaisse, commentaires
+exceptés.
 
 ## 7. Conseils de reprise
 
