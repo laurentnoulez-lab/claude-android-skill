@@ -28,9 +28,10 @@ def _etiquettes_x(g: charts.Graphique, xmin: float, xmax: float, log: bool) -> L
             d *= 10
     else:
         valeurs = charts.graduations(xmin, xmax, 5)
+    libelles = (charts.etiquettes_de_temps(valeurs) if duree
+                else [charts.format_nombre(v) for v in valeurs])
     etiquettes = []
-    for v in valeurs:
-        texte = charts.format_duree_courte(v) if duree else charts.format_nombre(v)
+    for v, texte in zip(valeurs, libelles):
         etiquettes.append(
             ft.ChartAxisLabel(
                 value=math.log10(v) if log else v,

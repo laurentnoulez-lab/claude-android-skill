@@ -245,12 +245,28 @@ def _format_nombre(v: float) -> str:
     return f"{v:.2f}"
 
 
-def format_duree_courte(minutes: float) -> str:
+def format_duree_courte(minutes: float, decimale: bool = False) -> str:
     if minutes < 60:
         return f"{minutes:.0f}min"
+    chiffres = 1 if decimale else 0
     if minutes < 1440:
-        return f"{minutes / 60:.0f}h"
-    return f"{minutes / 1440:.0f}j"
+        return fr(f"{minutes / 60:.{chiffres}f}") + "h"
+    return fr(f"{minutes / 1440:.{chiffres}f}") + "j"
+
+
+def etiquettes_de_temps(valeurs: Sequence[float]) -> List[str]:
+    """Étiquette les graduations d'un axe de temps, sans jamais deux fois la même.
+
+    Les graduations d'un axe linéaire tombent rarement sur l'heure ou le jour
+    juste. Arrondies à l'entier, deux graduations voisines de la simulation d'un
+    réseau — dont l'horizon se compte en jours — portaient toutes deux « 1j ».
+    La décimale ne s'ajoute donc qu'en cas de confusion, pour ne pas alourdir
+    les axes qui s'en passent.
+    """
+    courtes = [format_duree_courte(v) for v in valeurs]
+    if len(set(courtes)) == len(courtes):
+        return courtes
+    return [format_duree_courte(v, decimale=True) for v in valeurs]
 
 
 @dataclass
@@ -320,10 +336,11 @@ def rendre_png(graphique: Graphique, largeur: int = 900, hauteur: int = 460, ech
     else:
         ticks_x = graduations(xmin, xmax, 6)
     duree_en_x = graphique.axe_x.lower().startswith("duree") or graphique.axe_x.lower().startswith("temps")
-    for v in ticks_x:
+    libelles_x = (etiquettes_de_temps(ticks_x) if duree_en_x
+                  else [format_nombre(v) for v in ticks_x])
+    for v, etiquette in zip(ticks_x, libelles_x):
         x = cadre.px(v)
         c.ligne(x, cadre.y0, x, cadre.y1, GRIS_CLAIR, 1)
-        etiquette = format_duree_courte(v) if duree_en_x else format_nombre(v)
         c.texte(int(x) - c.largeur_texte(etiquette, echelle_texte) // 2, cadre.y1 + 8, etiquette, GRIS, echelle_texte)
     for v in graduations(ymin, ymax, 5):
         y = cadre.py(v)

@@ -58,10 +58,11 @@ def dessiner_graphique(pdf: Pdf, graphique: charts.Graphique, hauteur: float = 1
             d *= 10
     else:
         ticks = charts.graduations(xmin, xmax, 6)
-    for v in ticks:
+    libelles = (charts.etiquettes_de_temps(ticks) if duree_en_x
+                else [charts.format_nombre(v) for v in ticks])
+    for v, lib in zip(ticks, libelles):
         x = cadre.px(v)
         pdf.ligne(x, y0, x, y1, GRIS_CLAIR, 0.4)
-        lib = charts.format_duree_courte(v) if duree_en_x else charts.format_nombre(v)
         pdf._texte_brut(x - largeur_texte(lib, 6.5) / 2, y1 + 9, lib, 6.5, GRIS)
     for v in charts.graduations(ymin, ymax, 5):
         y = cadre.py(v)

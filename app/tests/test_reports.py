@@ -392,6 +392,36 @@ class TestGraphiques(unittest.TestCase):
         self.assertEqual(charts.format_duree_courte(2880), "2j")
         self.assertEqual(charts.format_nombre(0), "0")
 
+    def test_deux_graduations_ne_portent_jamais_la_meme_etiquette(self):
+        """L'axe de temps d'une simulation de réseau se compte en jours."""
+        # Arrondies au jour, 1,2 j et 1,7 j s'écrivaient toutes deux « 1j ».
+        confuses = [0.0, 720.0, 1440.0, 2160.0, 2880.0]
+        etiquettes = charts.etiquettes_de_temps(confuses)
+        self.assertEqual(len(set(etiquettes)), len(confuses))
+        self.assertIn("1,5j", etiquettes)
+        # Un axe déjà lisible garde ses étiquettes entières.
+        claires = [0.0, 1440.0, 2880.0, 4320.0]
+        self.assertEqual(charts.etiquettes_de_temps(claires),
+                         ["0min", "1j", "2j", "3j"])
+
+    def test_les_trois_traceurs_partagent_cet_etiquetage(self):
+        """PNG, PDF et écran dessinent le même axe : un seul point de vérité.
+
+        Le fichier de l'écran est relu comme texte : l'importer tirerait Flet
+        dans les tests de rapports, qui s'en passent.
+        """
+        racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        fichiers = [
+            os.path.join(racine, "src", "bassin", "reports", "charts.py"),
+            os.path.join(racine, "src", "bassin", "reports", "pdf_report.py"),
+            os.path.join(racine, "src", "bassin", "ui", "graphiques.py"),
+        ]
+        for chemin in fichiers:
+            with self.subTest(fichier=os.path.basename(chemin)):
+                with open(chemin, encoding="utf-8") as fh:
+                    source = fh.read()
+                self.assertIn("etiquettes_de_temps", source)
+
     def test_png_valide(self):
         g = charts.Graphique(
             axe_x="Durée de pluie", axe_y="V",
