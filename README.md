@@ -2,6 +2,18 @@
 
 A production-ready skill that enables Claude Code to build Android applications following Google's official architecture guidance and best practices from the [NowInAndroid](https://github.com/android/nowinandroid) reference app.
 
+---
+
+## Application HydroBassin (dossier `app/`)
+
+Ce dépôt héberge également **HydroBassin**, une application de dimensionnement de bassins
+d'orage (méthode rationnelle, pluies statistiques du GTI — Région wallonne), livrée sous
+forme d'**APK Android** et d'**exécutable Windows**.
+
+* Documentation : [`app/README.md`](app/README.md)
+* Méthode de calcul : [`app/docs/methode.md`](app/docs/methode.md)
+* Construction des binaires : onglet *Actions* → `Build APK Android` / `Build Windows`
+
 ## Overview
 
 This skill provides Claude with comprehensive knowledge of modern Android development patterns, including:
