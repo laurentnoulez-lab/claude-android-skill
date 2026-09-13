@@ -120,6 +120,12 @@ class Projet:
     #: absolu qui est fixé et le spécifique n'est qu'un affichage.
     debit_ajutage_specifique_ls_ha: Optional[float] = None
     temps_vidange_max_h: float = TEMPS_VIDANGE_LIMITE_H
+    #: Surface des bassins versants situés en amont dans le réseau, comptée dans
+    #: la surface raccordée à cet ouvrage (débit de fuite admissible et ajutage
+    #: spécifique). Le panneau « bassin amont » historique passe, lui, par
+    #: ``amont.inclure_bv_dans_ajutage`` : les deux s'additionnent sans se
+    #: recouvrir, un projet n'utilisant jamais les deux mécanismes à la fois.
+    surface_amont_raccordee_m2: float = 0.0
 
     # Ouvrage a verifier
     bassin: Bassin = field(default_factory=Bassin)
@@ -138,6 +144,32 @@ class Projet:
     remarques: str = ""
 
     # ---- grandeurs derivees -------------------------------------------------
+    @property
+    def a_un_apport_amont(self) -> bool:
+        """Un ouvrage amont alimente-t-il celui-ci ?
+
+        Deux formes d'amont coexistent : le bassin amont unique décrit par
+        :class:`BassinAmont` (projets d'avant le réseau, et cas simple), et le
+        raccordement d'un réseau de bassins, qui fournit un hydrogramme déjà
+        calculé via :func:`bassin.core.reseau.brancher`. Les deux passent par le
+        même chemin de calcul en aval de ce prédicat : il n'y a qu'une règle de
+        dimensionnement, quelle que soit la provenance de l'apport.
+        """
+        return self.amont.actif or self._fournisseur_apport is not None
+
+    @property
+    def _fournisseur_apport(self):
+        """Hydrogramme amont fourni par le réseau, s'il y en a un.
+
+        Attribut hors dataclass : il n'est ni sérialisé ni comparé, c'est un
+        branchement de calcul et non une donnée du projet.
+        """
+        return self.__dict__.get("_apport_amont")
+
+    def brancher_apport(self, fournisseur) -> None:
+        """Branche (ou débranche avec ``None``) l'hydrogramme amont du réseau."""
+        self.__dict__["_apport_amont"] = fournisseur
+
     @property
     def aire_totale_m2(self) -> float:
         return sum(s.aire_m2 for s in self.surfaces)
@@ -158,7 +190,7 @@ class Projet:
         C'est cette surface qui sert au débit de fuite admissible et à la
         conversion de l'ajutage en l/(s·ha).
         """
-        aire = self.aire_totale_m2
+        aire = self.aire_totale_m2 + max(self.surface_amont_raccordee_m2, 0.0)
         if self.amont.actif and self.amont.inclure_bv_dans_ajutage:
             aire += max(self.amont.surface_bv_m2, 0.0)
         return aire

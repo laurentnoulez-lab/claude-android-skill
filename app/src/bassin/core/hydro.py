@@ -300,8 +300,8 @@ def volume_de_dimensionnement(
     elle aussi, pour ne pas pouvoir répondre autrement que le tableau.
     """
     v_sous = projet.bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
-    if projet.amont.actif:
-        # Un bassin amont déverse ici : son apport doit entrer dans le volume à
+    if projet.a_un_apport_amont:
+        # Un ouvrage amont déverse ici : son apport doit entrer dans le volume à
         # prévoir, sans quoi l'ouvrage dimensionné déborderait en simulation.
         return volume_a_maitriser_amont(projet, serie, debit_infiltration, debit_ajutage, v_sous)
     if scenario == SCENARIO_SEUIL:
@@ -329,7 +329,7 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     res.volume_sous_ajutage_m3 = v_sous if scenario == SCENARIO_SEUIL else 0.0
 
     res.debit_sortant_ls = q_inf + q_aj
-    res.amont_pris_en_compte = projet.amont.actif
+    res.amont_pris_en_compte = projet.a_un_apport_amont
     v, t, h = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
 
     res.volume_m3 = v
@@ -399,7 +399,7 @@ def temps_vidange_apres_pluie_h(projet: Projet, volume_m3: float, duree_min: flo
     peut même dépasser ce que le fond infiltre, et le niveau se maintient alors
     sur l'axe de l'ajutage au lieu de descendre : il faut intégrer.
     """
-    if not projet.amont.actif or duree_min <= 0:
+    if not projet.a_un_apport_amont or duree_min <= 0:
         return temps_vidange_h(volume_m3, debit_infiltration, debit_ajutage,
                                volume_sous_ajutage_m3)
     from . import simulation
@@ -581,7 +581,7 @@ def courbe_volume(projet: Projet, scenario: str, n_points: int = 160) -> List[Tu
         t = math.exp(lo + (hi - lo) * i / (n_points - 1))
         h = src.hauteur(t)
         v_in = h * s_pond / 1000.0
-        if projet.amont.actif:
+        if projet.a_un_apport_amont:
             # Même règle que le tableau des scénarios, sans quoi la courbe
             # passerait sous le volume de dimensionnement qu'elle annote.
             seuil = v_sous if scenario == SCENARIO_SEUIL else 0.0

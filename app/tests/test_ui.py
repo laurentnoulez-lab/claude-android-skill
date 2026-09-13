@@ -752,13 +752,17 @@ class TestSauvegardeDeProjet(unittest.TestCase):
     def _etat_garni(self):
         etat = EtatApplication()
         p = etat.projet
-        p.nom_projet, p.auteur, p.localisation = "Lotissement", "L. N.", "Amay"
-        p.remarques = "essai d'infiltration du 12/03"
-        p.commune_ins, p.commune_nom, p.periode_retour = "61003", "Amay", 50
+        # Identification, commune et récurrence appartiennent au système : les
+        # écrire sur l'étude d'un ouvrage serait perdu à la synchronisation.
+        s = etat.systeme
+        s.nom_projet, s.auteur, s.localisation = "Lotissement", "L. N.", "Amay"
+        s.remarques = "essai d'infiltration du 12/03"
+        s.commune_ins, s.commune_nom, s.periode_retour = "61003", "Amay", 50
         p.surfaces[7].aire_m2 = 12000.0
         p.surfaces[2].aire_m2 = 3000.0
         p.surface_reference_m2 = 30000.0
-        p.k_infiltration_ms, p.coef_securite_infiltration = 5e-6, 1.5
+        p.k_infiltration_ms = 5e-6
+        s.coef_securite_infiltration = 1.5
         p.surface_infiltration_m2 = 400.0
         p.fixer_ajutage_specifique(5.0)
         p.bassin = Bassin(volume_total_m3=900.0, volume_sous_ajutage_m3=80.0,
@@ -767,6 +771,7 @@ class TestSauvegardeDeProjet(unittest.TestCase):
                               debit_ajutage_ls=4.0, volume_temporisation_m3=250.0,
                               inclure_bv_dans_ajutage=True)
         etat.scenario_principal = SCENARIO_SEUIL
+        etat.invalider()
         return etat
 
     def test_aller_retour_par_fichier(self):

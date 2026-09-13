@@ -35,6 +35,23 @@ class Dossier:
     date: str
     duree_critique_min: float = 0.0
     hauteur_critique_mm: float = 0.0
+    #: Réseau complet, quand le projet en décrit un (importé tardivement pour
+    #: ne pas créer de dépendance circulaire entre le dossier et le réseau).
+    systeme: object = None
+    fiches: List = field(default_factory=list)
+    simulation_systeme: object = None
+
+    @property
+    def reseau_multiple(self) -> bool:
+        """Vrai quand le dossier décrit plus d'un ouvrage ou d'un bassin versant."""
+        if self.systeme is None:
+            return False
+        return len(self.systeme.ouvrages) > 1 or len(self.systeme.bassins_versants) > 1
+
+    @property
+    def ouvrage_courant(self):
+        """Ouvrage décrit en détail par le dossier, s'il vient d'un réseau."""
+        return self.systeme.courant if self.systeme is not None else None
 
     @property
     def resultat_principal(self) -> hydro.Resultat:
@@ -118,8 +135,14 @@ class Dossier:
 
 
 def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
-               avec_simulation: bool = True) -> Dossier:
-    """Calcule tout ce qui est nécessaire au rapport."""
+               avec_simulation: bool = True, systeme=None) -> Dossier:
+    """Calcule tout ce qui est nécessaire au rapport.
+
+    ``systeme`` décrit le réseau complet quand le projet en fait partie : le
+    rapport y ajoute alors la synthèse du système (schéma, tableau ouvrage par
+    ouvrage, simulation d'ensemble), sans rien retirer au dossier de l'ouvrage
+    détaillé.
+    """
     resultats = {s: hydro.dimensionner(projet, s) for s in ORDRE_SCENARIOS}
     bassin = projet.bassin
     sim = None
@@ -133,6 +156,14 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
     res_orifice = None
     if q_ajutage > 0 and projet.hauteur_charge_m > 0:
         res_orifice = orifice.dimensionner_orifice(q_ajutage, projet.hauteur_charge_m, projet.coef_debit_orifice)
+    fiches: List = []
+    sim_systeme = None
+    if systeme is not None and systeme.aire_ponderee_m2 > 0:
+        from ..core import reseau as _reseau
+
+        fiches = _reseau.dimensionner(systeme)
+        if avec_simulation:
+            sim_systeme = _reseau.simuler_evenement_critique(systeme)
     return Dossier(
         projet=projet,
         scenario_principal=scenario_principal,
@@ -143,6 +174,9 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
         date=_dt.date.today().strftime("%d/%m/%Y"),
         duree_critique_min=duree,
         hauteur_critique_mm=hauteur,
+        systeme=systeme,
+        fiches=fiches,
+        simulation_systeme=sim_systeme,
     )
 
 
