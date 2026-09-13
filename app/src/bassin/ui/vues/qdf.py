@@ -8,6 +8,7 @@ import flet as ft
 
 from ...core import rainfall
 from .. import theme
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
@@ -127,6 +128,7 @@ class VueTableQDF(Vue):
         )
 
         return [
+            barre_ouvrage(self),
             theme.section(
                 "Capacité d'absorption du bassin",
                 ft.Column([bandeau, bandeau_2, legende], spacing=12),

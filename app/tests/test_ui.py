@@ -18,7 +18,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import flet as ft  # noqa: E402
 
 from bassin.core import hydro, rainfall  # noqa: E402
-from bassin.core.model import Bassin, BassinAmont, SCENARIO_SEUIL  # noqa: E402
+from bassin.core.model import (  # noqa: E402
+    Bassin, BassinAmont, SurfaceIncidente, SCENARIO_SEUIL,
+)
 from bassin.reports import charts  # noqa: E402
 from bassin.ui import graphiques, theme  # noqa: E402
 from bassin.ui.state import EtatApplication  # noqa: E402
@@ -29,8 +31,12 @@ from bassin.ui.vues.pluies import VuePluies  # noqa: E402
 from bassin.ui.vues.projet import VueProjet  # noqa: E402
 from bassin.ui.vues.qdf import VueTableQDF  # noqa: E402
 from bassin.ui.vues.rapport import VueRapport  # noqa: E402
+from bassin.ui.vues.reseau import VueReseau  # noqa: E402
+from bassin.ui.vues.synthese import VueSynthese  # noqa: E402
+from bassin.ui.vues.versants import VueVersants  # noqa: E402
 
-VUES = (VueProjet, VueDimensionnement, VueBassin, VueTableQDF, VueAjutage, VuePluies, VueRapport)
+VUES = (VueProjet, VueVersants, VueReseau, VueDimensionnement, VueBassin, VueTableQDF,
+        VueAjutage, VueSynthese, VuePluies, VueRapport)
 
 
 class _Stockage:
@@ -219,7 +225,7 @@ class TestConstructionDesVues(unittest.TestCase):
 
     def test_vues_commune_sans_montana(self):
         etat = etat_complet()
-        etat.projet.commune_ins, etat.projet.commune_nom = "56011", "Binche"
+        etat.systeme.commune_ins, etat.systeme.commune_nom = "56011", "Binche"
         etat.invalider()
         for classe in VUES:
             with self.subTest(vue=classe.__name__):
@@ -652,15 +658,15 @@ class TestSauvegardeSousAndroid(unittest.TestCase):
         self.assertTrue(any("enregistré" in m for m in messages))
 
 
-class TestBassinAmontDansLeDimensionnement(unittest.TestCase):
-    """Le bassin amont se déclare et se voit depuis l'onglet Dimensionnement.
+class TestReseauDansLInterface(unittest.TestCase):
+    """Le réseau se construit et se lit depuis l'onglet « Réseau ».
 
-    Le moteur l'intégrait déjà au volume à mettre en œuvre, mais l'onglet n'en
-    disait rien et ne permettait pas de l'encoder : il fallait le deviner dans
-    l'onglet Bassin, et rien à l'écran ne signalait qu'il comptait.
+    Le bassin d'orage amont unique des versions 2.x est devenu un ouvrage comme
+    un autre : il s'ajoute, se nomme, se raccorde, et son apport se voit dans
+    l'onglet Dimensionnement de l'ouvrage qu'il alimente.
     """
 
-    def _etat(self, actif=True):
+    def _etat(self, avec_amont=True):
         etat = EtatApplication()
         p = etat.projet
         p.surfaces[7].aire_m2 = 20000.0
@@ -668,76 +674,245 @@ class TestBassinAmontDansLeDimensionnement(unittest.TestCase):
         p.fixer_ajutage_absolu(12.0)
         p.bassin = Bassin(volume_total_m3=1200.0, volume_sous_ajutage_m3=50.0,
                           surface_dispersion_m2=250.0, debit_ajutage_ls=12.0)
-        p.amont = BassinAmont(actif=actif, surface_bv_m2=10000.0, coef_ruissellement=0.9,
-                              debit_ajutage_ls=5.0, volume_temporisation_m3=300.0)
+        aval = etat.ouvrage
+        aval.nom = "Bassin aval"
+        if avec_amont:
+            amont = etat.ajouter_ouvrage("Bassin amont")
+            amont.aval_id = aval.id
+            amont.etude.fixer_ajutage_absolu(5.0)
+            amont.etude.bassin = Bassin(volume_total_m3=300.0, debit_ajutage_ls=5.0)
+            versant = etat.ajouter_versant("BV amont", amont.id)
+            versant.surfaces = [SurfaceIncidente("Imperméable", 0.9, 10000.0)]
+            etat.choisir_ouvrage(aval.id)
+        etat.invalider()
         return etat
 
-    def test_le_panneau_amont_est_dans_les_deux_onglets(self):
-        etat = self._etat()
-        dim = VueDimensionnement(PageFactice(), etat)
-        bas = VueBassin(PageFactice(), etat)
-        dim.afficher()
-        bas.afficher()
-        for vue, nom in ((dim, "Dimensionnement"), (bas, "Bassin")):
-            with self.subTest(vue=nom):
-                textes = _textes(vue.corps)
-                self.assertIn("Bassin d'orage amont", textes)
-                champs = [c.label for c in _champs_texte(vue.corps) if c.label]
-                self.assertTrue(any("bassin versant amont" in (l or "").lower() for l in champs),
-                                f"pas de champ de saisie de l'amont dans l'onglet {nom}")
-
-    def test_encoder_l_amont_depuis_le_dimensionnement_change_les_volumes(self):
-        """C'est tout l'objet de la 2.0 : le déclarer là où l'on dimensionne."""
-        etat = self._etat(actif=False)
-        vue = VueDimensionnement(PageFactice(), etat)
+    def test_ajouter_un_ouvrage_depuis_l_onglet_reseau(self):
+        etat = EtatApplication()
+        vue = VueReseau(PageFactice(), etat)
         vue.afficher()
-        sans = etat.resultat.volume_m3
+        self.assertEqual(len(etat.ouvrages), 1)
+        _bouton_nomme(self, vue, "Ajouter un bassin d'orage").on_click(None)
+        self.assertEqual(len(etat.ouvrages), 2)
 
-        etat.projet.amont.actif = True
-        etat.invalider()
-        vue.rafraichir()
-        champ = next(c for c in _champs_texte(vue.corps)
-                     if "bassin versant amont" in (c.label or "").lower())
-        champ.value = "40000"
-        champ.on_blur(_Saisie(champ))
+    def test_raccorder_un_ouvrage_a_un_autre(self):
+        etat = self._etat(avec_amont=False)
+        second = etat.ajouter_ouvrage("Second")
+        vue = VueReseau(PageFactice(), etat)
+        vue.afficher()
+        listes = [d for d in _rechercher(vue.corps, ft.Dropdown)
+                  if (d.label or "").startswith("Se déverse")]
+        self.assertTrue(listes, "aucun sélecteur de raccordement")
+        cible = etat.ouvrages[0]
+        listes[-1].on_change(_Evenement(_Controle(cible.id)))
+        self.assertEqual(second.aval_id, cible.id)
+        self.assertEqual([o.nom for o in etat.systeme.ordre_amont_aval()][-1], cible.nom)
 
-        self.assertAlmostEqual(etat.projet.amont.surface_bv_m2, 40000.0)
-        self.assertGreater(etat.resultat.volume_m3, sans,
-                           "le bassin amont encodé ici doit gonfler le volume à mettre en œuvre")
-        self.assertTrue(etat.resultat.amont_pris_en_compte)
+    def test_l_apport_amont_gonfle_le_volume_de_l_ouvrage_aval(self):
+        sans = self._etat(avec_amont=False)
+        avec = self._etat(avec_amont=True)
+        self.assertGreater(avec.resultat.volume_m3, sans.resultat.volume_m3)
+        self.assertTrue(avec.resultat.amont_pris_en_compte)
+        self.assertFalse(sans.resultat.amont_pris_en_compte)
 
-    def test_l_ecran_annonce_que_l_apport_est_compte(self):
+    def test_l_ecran_de_dimensionnement_annonce_que_l_apport_est_compte(self):
         etat = self._etat()
         vue = VueDimensionnement(PageFactice(), etat)
         vue.afficher()
         avis = [t for t in _textes(vue.zone) if "comprennent l'apport" in t]
         self.assertTrue(avis, "rien n'indique que les volumes comprennent l'apport amont")
-        self.assertIn("5,000 l/s", avis[0])
+        self.assertIn("Bassin amont", avis[0])
 
     def test_sans_amont_aucune_mention_parasite(self):
-        etat = self._etat(actif=False)
+        etat = self._etat(avec_amont=False)
         vue = VueDimensionnement(PageFactice(), etat)
         vue.afficher()
         self.assertFalse([t for t in _textes(vue.zone) if "comprennent l'apport" in t])
 
-    def test_les_deux_onglets_partagent_le_meme_amont(self):
-        """Un seul ouvrage amont, deux endroits pour le décrire."""
+    def test_la_barre_de_selection_apparait_des_qu_il_y_a_deux_ouvrages(self):
+        seul = self._etat(avec_amont=False)
+        vue = VueDimensionnement(PageFactice(), seul)
+        vue.afficher()
+        self.assertFalse([d for d in _rechercher(vue.corps, ft.Dropdown)
+                          if (d.label or "").startswith("Bassin d'orage étudié")])
+        plusieurs = self._etat()
+        vue = VueDimensionnement(PageFactice(), plusieurs)
+        vue.afficher()
+        selecteurs = [d for d in _rechercher(vue.corps, ft.Dropdown)
+                      if (d.label or "").startswith("Bassin d'orage étudié")]
+        self.assertTrue(selecteurs, "impossible de choisir l'ouvrage étudié")
+        amont = [o for o in plusieurs.ouvrages if o.nom == "Bassin amont"][0]
+        selecteurs[0].on_change(_Evenement(_Controle(amont.id)))
+        self.assertEqual(plusieurs.ouvrage.id, amont.id)
+
+    def test_diriger_la_surverse_vers_le_milieu_naturel_soulage_l_aval(self):
         etat = self._etat()
-        dim = VueDimensionnement(PageFactice(), etat)
-        bas = VueBassin(PageFactice(), etat)
-        dim.afficher()
-        bas.afficher()
-        champ = next(c for c in _champs_texte(dim.corps)
-                     if "ajutage amont" in (c.label or "").lower())
-        champ.value = "2,5"
-        champ.on_blur(_Saisie(champ))
-        self.assertAlmostEqual(etat.projet.amont.debit_ajutage_ls, 2.5)
-        bas.rafraichir()
-        valeurs = [c.value for c in _champs_texte(bas.corps)
-                   if "ajutage amont" in (c.label or "").lower()]
-        self.assertEqual(len(valeurs), 1)
-        self.assertAlmostEqual(float(valeurs[0].replace(",", ".")), 2.5,
-                               msg="l'onglet Bassin doit montrer ce qui a été encodé ailleurs")
+        amont = [o for o in etat.ouvrages if o.nom == "Bassin amont"][0]
+        amont.etude.bassin.volume_total_m3 = 10.0      # il surverse largement
+        etat.invalider()
+        avant = etat.resultat.volume_m3
+        vue = VueReseau(PageFactice(), etat)
+        vue._ouvert = amont.id
+        vue.afficher()
+        cases = [c for c in _rechercher(vue.corps, ft.Checkbox)]
+        self.assertTrue(cases, "la case de surverse est absente")
+        cases[0].on_change(_Evenement(_Controle(True)))
+        self.assertTrue(amont.surverse_vers_milieu_naturel)
+        self.assertLess(etat.resultat.volume_m3, avant)
+
+    def test_le_dimensionnement_en_cascade_remplit_les_volumes(self):
+        etat = self._etat()
+        for ouvrage in etat.ouvrages:
+            ouvrage.etude.bassin.volume_total_m3 = 0.0
+        etat.invalider()
+        vue = VueReseau(PageFactice(), etat)
+        vue.afficher()
+        _bouton_nomme(self, vue, "Dimensionner en cascade").on_click(None)
+        for ouvrage in etat.ouvrages:
+            self.assertGreater(ouvrage.etude.bassin.volume_total_m3, 0.0)
+        for fiche in etat.fiches:
+            self.assertTrue(fiche.suffisant, f"{fiche.nom} surverse encore")
+
+    def test_supprimer_un_ouvrage_reporte_ses_raccordements(self):
+        etat = self._etat()
+        amont = [o for o in etat.ouvrages if o.nom == "Bassin amont"][0]
+        aval = [o for o in etat.ouvrages if o.nom == "Bassin aval"][0]
+        versant = etat.systeme.versants_de(aval.id)[0]
+        self.assertTrue(etat.supprimer_ouvrage(aval.id))
+        self.assertEqual(len(etat.ouvrages), 1)
+        # L'amont prend la place de l'aval supprimé : il rejette à l'exutoire.
+        self.assertEqual(amont.aval_id, "")
+        # Le bassin versant de l'ouvrage supprimé n'a plus de destination : il
+        # est signalé, plutôt que rattaché au hasard ou oublié.
+        self.assertEqual(versant.bassin_id, "")
+        self.assertTrue(any(versant.nom in a for a in etat.systeme.anomalies()))
+        versant.bassin_id = amont.id
+        etat.invalider()
+        self.assertFalse(etat.systeme.anomalies())
+
+    def test_le_dernier_ouvrage_ne_se_supprime_pas(self):
+        etat = self._etat(avec_amont=False)
+        self.assertFalse(etat.supprimer_ouvrage(etat.ouvrage.id))
+        self.assertEqual(len(etat.ouvrages), 1)
+
+    def test_compter_les_bassins_versants_amont_dans_l_ajutage(self):
+        """5 l/(s·ha) encodés, 10 000 m² amont : l'ajutage aval passe à 7,5 l/s."""
+        etat = self._etat()
+        aval = etat.ouvrage
+        for surface in etat.systeme.versants_de(aval.id)[0].surfaces:
+            surface.aire_m2 = 0.0
+        etat.systeme.versants_de(aval.id)[0].surfaces[7].aire_m2 = 5000.0   # 0,5 ha
+        aval.etude.fixer_ajutage_specifique(5.0)
+        etat.invalider()
+        self.assertAlmostEqual(aval.etude.debit_ajutage_ls, 2.5, places=6)
+
+        vue = VueReseau(PageFactice(), etat)
+        vue._ouvert = aval.id
+        vue.afficher()
+        cases = [c for c in _rechercher(vue.corps, ft.Checkbox)]
+        self.assertTrue(cases, "la case du bassin versant amont est absente")
+        cases[-1].on_change(_Evenement(_Controle(True)))
+        self.assertTrue(aval.compter_bv_amont_dans_ajutage)
+        self.assertAlmostEqual(aval.etude.aire_raccordee_m2, 15000.0)
+        self.assertAlmostEqual(aval.etude.debit_ajutage_ls, 7.5, places=6)
+        self.assertAlmostEqual(aval.etude.bassin.debit_ajutage_ls, 7.5, places=6)
+
+    def test_un_ajutage_impose_ne_suit_pas_la_surface_amont(self):
+        etat = self._etat()
+        aval = etat.ouvrage
+        aval.etude.fixer_ajutage_absolu(2.5)
+        aval.compter_bv_amont_dans_ajutage = True
+        etat.invalider()
+        self.assertAlmostEqual(aval.etude.debit_ajutage_ls, 2.5, places=6)
+        self.assertGreater(aval.etude.debit_fuite_admissible_ls, 2.5)
+
+
+class TestSyntheseGraphique(unittest.TestCase):
+    """Le schéma doit montrer tout le monde, et rien ne doit s'y superposer."""
+
+    def _etat(self):
+        etat = EtatApplication()
+        p = etat.projet
+        p.surfaces[7].aire_m2 = 20000.0
+        p.surface_infiltration_m2 = 250.0
+        p.fixer_ajutage_absolu(12.0)
+        p.bassin = Bassin(volume_total_m3=1200.0, surface_dispersion_m2=250.0,
+                          debit_ajutage_ls=12.0)
+        etat.ouvrage.nom = "Bassin aval"
+        amont = etat.ajouter_ouvrage("Bassin amont")
+        amont.aval_id = etat.systeme.ouvrages[0].id
+        amont.etude.fixer_ajutage_absolu(5.0)
+        amont.etude.bassin = Bassin(volume_total_m3=300.0, debit_ajutage_ls=5.0)
+        versant = etat.ajouter_versant("BV amont", amont.id)
+        versant.surfaces = [SurfaceIncidente("Imperméable", 0.9, 10000.0)]
+        etat.choisir_ouvrage(etat.systeme.ouvrages[0].id)
+        etat.invalider()
+        return etat
+
+    def test_le_schema_nomme_chaque_ouvrage_et_chaque_bassin_versant(self):
+        etat = self._etat()
+        vue = VueSynthese(PageFactice(), etat)
+        vue.afficher()
+        textes = _textes(vue.corps)
+        for attendu in ("Bassin aval", "Bassin amont", "BV amont", "Exutoire"):
+            self.assertIn(attendu, textes, f"« {attendu} » absent du schéma")
+
+    def test_aucune_boite_du_schema_n_en_recouvre_une_autre(self):
+        """C'est la géométrie partagée avec le PDF : elle doit rester propre."""
+        from bassin.reports import schema as schema_module
+
+        etat = self._etat()
+        for i in range(3):                       # un réseau un peu touffu
+            ouvrage = etat.ajouter_ouvrage(f"Bassin {i}")
+            ouvrage.aval_id = etat.systeme.ouvrages[0].id
+            etat.ajouter_versant(f"BV {i}", ouvrage.id)
+            etat.ajouter_versant(f"BV bis {i}", ouvrage.id)
+        etat.invalider()
+        schema = schema_module.construire(etat.systeme, etat.fiches)
+        boites = schema.boites
+        self.assertGreaterEqual(len(boites), 10)
+        for i, a in enumerate(boites):
+            for b in boites[i + 1:]:
+                chevauche = not (a.droite <= b.x or b.droite <= a.x
+                                 or a.bas <= b.y or b.bas <= a.y)
+                self.assertFalse(chevauche,
+                                 f"« {a.titre} » recouvre « {b.titre} » dans le schéma")
+
+    def test_les_etiquettes_du_schema_tiennent_dans_leur_boite(self):
+        from bassin.reports import schema as schema_module
+
+        etat = self._etat()
+        etat.ouvrage.nom = "Bassin d'orage du lotissement des Trois Fontaines"
+        etat.invalider()
+        schema = schema_module.construire(etat.systeme, etat.fiches)
+        for boite in schema.boites:
+            for ligne in boite.lignes:
+                self.assertLessEqual(len(ligne), schema_module.CARACTERES_MAX,
+                                     f"ligne trop longue dans « {boite.titre} » : {ligne}")
+
+    def test_la_simulation_du_systeme_couvre_tous_les_ouvrages(self):
+        etat = self._etat()
+        vue = VueSynthese(PageFactice(), etat)
+        vue.afficher()
+        tableaux = _rechercher(vue.corps, ft.DataTable)
+        self.assertTrue(tableaux)
+        self.assertEqual(len(tableaux[0].rows), len(etat.ouvrages))
+
+    def test_le_schema_se_construit_sans_aucune_donnee(self):
+        vue = VueSynthese(PageFactice(), EtatApplication())
+        self.assertTrue(vue.construire())
+
+
+def _bouton_nomme(cas, vue, libelle):
+    boutons = (_rechercher(vue.corps, ft.FilledButton)
+               + _rechercher(vue.corps, ft.OutlinedButton)
+               + _rechercher(vue.corps, ft.ElevatedButton))
+    for bouton in boutons:
+        libelles = [getattr(bouton, "text", None)]
+        libelles += [t.value for t in _rechercher(bouton, ft.Text)]
+        if any(libelle in (t or "") for t in libelles):
+            return bouton
+    cas.fail(f"bouton « {libelle} » introuvable")
 
 
 class TestSauvegardeDeProjet(unittest.TestCase):
@@ -840,6 +1015,15 @@ class TestSauvegardeDeProjet(unittest.TestCase):
 class TestCoquilleApplication(unittest.TestCase):
     """Construction complète de l'application (barre, navigation, première vue)."""
 
+    def setUp(self):
+        # Les fenêtres d'un même processus partagent un unique projet : chaque
+        # essai doit repartir de zéro, sinon il hérite du précédent.
+        import main as application
+
+        application.reinitialiser_partage()
+
+    tearDown = setUp
+
     def test_demarrage(self):
         import main as application
 
@@ -877,8 +1061,9 @@ class TestCoquilleApplication(unittest.TestCase):
         application.main(page)
         tiroirs = [c for c in page.ouverts if isinstance(c, ft.NavigationDrawer)]
         rails = _rechercher(page.controls[0], ft.NavigationRail)
-        self.assertEqual(len(rails[0].destinations), 7)
+        self.assertEqual(len(rails[0].destinations), 10)
         rails[0].on_change(_Evenement(rails[0], 3))
+        self.assertTrue(tiroirs or rails)
 
     def test_un_calcul_en_erreur_n_empeche_pas_l_affichage(self):
         """Une erreur dans le résumé ne doit jamais laisser la page vide."""
@@ -915,9 +1100,10 @@ class TestCoquilleApplication(unittest.TestCase):
         """La surface active de la ligne doit suivre la saisie, sans reconstruction."""
         page = PageFactice()
         etat = etat_complet()
-        vue = VueProjet(page, etat)
+        vue = VueVersants(page, etat)
         vue.construire()
-        lignes = vue._ligne_surface(4, etat.projet.surfaces[4])  # terres battues, c = 0,5
+        versant = etat.versants[0]
+        lignes = vue._ligne_surface(versant, 4, versant.surfaces[4])  # terres battues, c = 0,5
         champs = _rechercher(lignes, ft.TextField)
         textes = [t for t in _rechercher(lignes, ft.Text) if "actifs" in (t.value or "")]
         self.assertTrue(champs and textes)
@@ -977,7 +1163,7 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(theme.nombre(1575.0, 1), "1575,0")
         self.assertEqual(theme.nombre(0.787, 3), "0,787")
         self.assertEqual(theme.fr("volume 66.3 m³"), "volume 66,3 m³")
-        vue = VueProjet(PageFactice(), etat_complet())
+        vue = VueVersants(PageFactice(), etat_complet())
         controles = vue.construire()
         textes = [t.value for c in controles for t in _rechercher(c, ft.Text) if t.value]
         self.assertTrue(any("m² actifs" in t for t in textes))
@@ -1020,12 +1206,10 @@ class TestCoquilleApplication(unittest.TestCase):
         import main as application
 
         page = PageFactice()
-        page.route = "/vue/3"
+        page.route = "/vue/5"
         application.main(page)
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)
-                  if t.value in {v.titre for v in
-                                 (VueProjet, VueDimensionnement, VueBassin, VueTableQDF,
-                                  VueAjutage, VuePluies, VueRapport)}]
+                  if t.value in {v.titre for v in VUES}]
         self.assertIn(VueTableQDF.titre, titres)
 
     def test_route_invalide_ouvre_le_projet(self):
@@ -1046,7 +1230,7 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertIn("Projet", titres)
         self.assertNotIn("Ajutage", titres)
 
-        page.route = "/vue/4"
+        page.route = "/vue/6"
         self.assertIsNotNone(page.on_route_change)
         page.on_route_change(None)
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
@@ -1060,10 +1244,10 @@ class TestCoquilleApplication(unittest.TestCase):
 
         faux_js = types.ModuleType("js")
         faux_js.window = types.SimpleNamespace(
-            location=types.SimpleNamespace(pathname="/vue/5", hash=""))
+            location=types.SimpleNamespace(pathname="/vue/8", hash=""))
         sys.modules["js"] = faux_js
         try:
-            self.assertEqual(application._adresse_navigateur(), "/vue/5")
+            self.assertEqual(application._adresse_navigateur(), "/vue/8")
             page = PageFactice()
             page.route = "/"  # ce que Flet transmet réellement dans la version web
             application.main(page)
@@ -1080,14 +1264,14 @@ class TestCoquilleApplication(unittest.TestCase):
         self.assertEqual(application._adresse_navigateur(), "")
 
     def test_raccourcis_clavier_ouvrent_les_sections(self):
-        """Ctrl+1 à Ctrl+7 ouvrent une section ; sans Ctrl, rien ne bouge."""
+        """Ctrl+1 à Ctrl+9 et Ctrl+0 ouvrent une section ; sans Ctrl, rien ne bouge."""
         import main as application
 
         page = PageFactice()
         application.main(page)
         self.assertIsNotNone(page.on_keyboard_event)
 
-        page.on_keyboard_event(_Touche("5", ctrl=True))
+        page.on_keyboard_event(_Touche("7", ctrl=True))
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
         self.assertIn("Ajutage", titres)
 
@@ -1095,9 +1279,10 @@ class TestCoquilleApplication(unittest.TestCase):
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
         self.assertIn("Ajutage", titres)  # inchangé : la touche seule ne navigue pas
 
-        page.on_keyboard_event(_Touche("9", ctrl=True))
+        # Ctrl+0 ouvre la dixième section, comme la touche 0 d'un navigateur.
+        page.on_keyboard_event(_Touche("0", ctrl=True))
         titres = [t.value for t in _rechercher(page.controls[0], ft.Text)]
-        self.assertIn("Ajutage", titres)  # hors des sept sections : ignoré
+        self.assertIn("Rapport", titres)
 
         page.on_keyboard_event(_Touche("a", ctrl=True))  # ne doit pas lever
 
@@ -1216,79 +1401,6 @@ class TestSimulationMultiple(unittest.TestCase):
         self._bouton(vue, "Simuler").on_click(None)
         textes = [t.value for t in _rechercher(vue.corps, ft.Text)]
         self.assertTrue(any("au moins une durée" in (t or "") for t in textes))
-
-    def test_le_panneau_amont_s_ouvre_et_se_ferme(self):
-        vue = self.vue()
-        interrupteurs = _rechercher(vue.corps, ft.Switch)
-        self.assertTrue(interrupteurs)
-        amont = interrupteurs[0]
-        self.assertFalse(self.etat.projet.amont.actif)
-        # Les champs du bassin amont n'apparaissent qu'une fois activé.
-        libelles = [c.label for c in _rechercher(vue.corps, ft.TextField)]
-        self.assertNotIn("Surface du bassin versant amont", libelles)
-
-        amont.on_change(_Evenement(_Controle(True)))
-        self.assertTrue(self.etat.projet.amont.actif)
-        libelles = [c.label for c in _rechercher(vue.corps, ft.TextField)]
-        self.assertIn("Surface du bassin versant amont", libelles)
-        self.assertIn("Volume de temporisation amont", libelles)
-
-    def test_le_volume_minimal_amont_est_propose(self):
-        p = self.etat.projet
-        p.amont.actif = True
-        p.amont.surface_bv_m2 = 8000.0
-        p.amont.coef_ruissellement = 0.8
-        p.amont.debit_ajutage_ls = 2.0
-        vue = self.vue()
-        self.assertAlmostEqual(p.amont.volume_temporisation_m3, 0.0)
-        self._bouton(vue, "Proposer le volume minimal").on_click(None)
-        attendu = hydro.volume_amont_minimal_m3(p)
-        self.assertGreater(attendu, 0)
-        self.assertAlmostEqual(p.amont.volume_temporisation_m3, attendu)
-
-    def _projet_une_demi_hectare(self):
-        p = self.etat.projet
-        for surface in p.surfaces:
-            surface.aire_m2 = 0.0
-        p.surfaces[7].aire_m2 = 5000.0          # 0,5 ha en aval, coefficient 1,0
-        p.amont.actif = True
-        p.amont.surface_bv_m2 = 10000.0
-        self.etat.invalider()
-        return p
-
-    def test_cocher_la_surface_amont_augmente_un_ajutage_specifique(self):
-        """5 l/(s·ha) encodés, 10 000 m² amont : l'ajutage aval passe à 7,5 l/s."""
-        p = self._projet_une_demi_hectare()
-        p.fixer_ajutage_specifique(5.0)
-        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=6)
-
-        vue = self.vue()
-        cases = _rechercher(vue.corps, ft.Checkbox)
-        self.assertTrue(cases, "la case du bassin versant amont est absente")
-        cases[0].on_change(_Evenement(_Controle(True)))
-
-        self.assertTrue(p.amont.inclure_bv_dans_ajutage)
-        self.assertAlmostEqual(p.aire_raccordee_m2, 15000.0)
-        self.assertAlmostEqual(p.debit_ajutage_ls, 7.5, places=6)
-        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 7.5, places=6)
-        self.assertAlmostEqual(p.debit_specifique_ajutage_ls_ha, 5.0, places=6)
-
-        cases = _rechercher(vue.corps, ft.Checkbox)
-        cases[0].on_change(_Evenement(_Controle(False)))
-        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=6)
-
-    def test_cocher_la_surface_amont_ne_touche_pas_un_ajutage_impose(self):
-        """2,5 l/s encodés : la valeur absolue tient, seul l'admissible augmente."""
-        p = self._projet_une_demi_hectare()
-        p.fixer_ajutage_absolu(2.5)
-
-        vue = self.vue()
-        cases = _rechercher(vue.corps, ft.Checkbox)
-        cases[0].on_change(_Evenement(_Controle(True)))
-
-        self.assertAlmostEqual(p.debit_ajutage_ls, 2.5, places=6)
-        self.assertAlmostEqual(p.bassin.debit_ajutage_ls, 2.5, places=6)
-        self.assertAlmostEqual(p.debit_fuite_admissible_ls, 7.5, places=6)
 
 
 class TestGenerationDesRapports(unittest.TestCase):

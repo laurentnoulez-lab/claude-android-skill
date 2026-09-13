@@ -16,7 +16,7 @@ from ...core.model import (
 )
 from ...reports.dossier import ORDRE_SCENARIOS
 from .. import graphiques, theme
-from ..composants import panneau_amont
+from ..composants import barre_ouvrage
 from .base import Vue
 
 DESCRIPTIONS = {
@@ -127,11 +127,6 @@ class VueDimensionnement(Vue):
                         ),
                         champs_k[0],
                         champs_k[1],
-                        theme.champ_nombre("Coefficient de sécurité sur K",
-                                           p.coef_securite_infiltration,
-                                           maj("coef_securite_infiltration"), "—", "GTI : 2",
-                                           on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
                         theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
                                            maj("surface_infiltration_m2"), "m²",
                                            "fond du dispositif", on_valide=self.maj_resultats,
@@ -144,11 +139,6 @@ class VueDimensionnement(Vue):
                             "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin",
                             on_valide=self.maj_resultats,
                             col={"xs": 12, "sm": 6, "md": 3}),
-                        theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
-                                           maj("temps_vidange_max_h"), "h",
-                                           "après la pluie · GTI : 48 h",
-                                           on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
                     ],
                     spacing=12,
                     run_spacing=12,
@@ -297,18 +287,19 @@ class VueDimensionnement(Vue):
 
         alertes = [theme.message(a, "alerte") for a in res.alertes]
         alertes += [theme.message(m, "info") for m in res.messages]
-        if res.amont_pris_en_compte:
+        amonts = self.etat.systeme.amonts_directs(self.etat.ouvrage.id)
+        if res.amont_pris_en_compte and amonts:
             # Sans le dire, l'utilisateur ne peut pas savoir que ces volumes
-            # comprennent l'apport d'un ouvrage déclaré plus bas.
-            amont = p.amont
-            res_amont = hydro.dimensionner_amont(p)
+            # comprennent l'apport d'ouvrages déclarés dans l'onglet Réseau.
+            noms = ", ".join(f"« {o.nom} »" for o in amonts)
+            restitue = sum(o.debit_sortant_ls() for o in amonts)
             alertes.insert(0, theme.message(
-                f"Ces volumes comprennent l'apport du bassin d'orage amont : "
-                f"{theme.nombre(amont.surface_bv_m2, 0)} m² de bassin versant à "
-                f"{theme.nombre(amont.coef_ruissellement, 2)}, restituant "
-                f"{theme.nombre(res_amont.debit_sortant_ls, 3)} l/s. Son apport varie dans le "
-                f"temps et se poursuit après l'averse : le volume est obtenu par intégration "
-                f"exacte, et non par la formule fermée.", "info"))
+                theme.fr(
+                    f"Ces volumes comprennent l'apport des bassins d'orage amont ({noms}) : "
+                    f"{self.etat.systeme.aire_ponderee_amont_m2(self.etat.ouvrage.id):.0f} m² "
+                    f"actifs en amont, restituant jusqu'à {restitue:.3f} l/s au fil de l'eau. "
+                    f"Cet apport varie dans le temps et se poursuit après l'averse : le volume "
+                    f"est obtenu par intégration exacte, et non par la formule fermée."), "info"))
 
         return [
             info_debits,
@@ -337,8 +328,9 @@ class VueDimensionnement(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            barre_ouvrage(self),
             theme.section(
-                "Sol, exutoire et contraintes",
+                "Sol et exutoire de cet ouvrage",
                 ft.Column(
                     [
                         self._formulaire(),
@@ -350,9 +342,6 @@ class VueDimensionnement(Vue):
                 ft.Icons.TERRAIN,
                 "Q_infiltration = 1000 × S × K / coefficient de sécurité",
             ),
-            theme.section(
-                "Bassin d'orage amont", panneau_amont(self), ft.Icons.MERGE,
-                "Son apport entre dans le volume à mettre en œuvre ci-dessous"),
             self.zone,
         ]
 

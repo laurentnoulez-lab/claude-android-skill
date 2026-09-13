@@ -9,7 +9,7 @@ import flet as ft
 from ...core import hydro, rainfall, simulation
 from ...reports import charts
 from .. import graphiques, theme
-from ..composants import panneau_amont
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
@@ -134,6 +134,15 @@ class VueBassin(Vue):
         )
 
         avis: List[ft.Control] = []
+        amonts = self.etat.systeme.amonts_directs(self.etat.ouvrage.id)
+        if amonts:
+            avis.append(theme.message(
+                theme.fr(
+                    "Apport des bassins d'orage amont ("
+                    + ", ".join(f"« {o.nom} »" for o in amonts)
+                    + f") : {sim.volume_amont_m3:.1f} m³, pointe "
+                      f"{sim.q_amont_max_ls:.2f} l/s. " + sim.commentaire_amont
+                      + " Les raccordements se règlent dans l'onglet « Réseau »."), "info"))
         if sim.debordement:
             avis.append(theme.message(
                 f"Le bassin déborde de {sim.volume_debordement_m3:.2f} m³ pour la pluie de projet "
@@ -166,8 +175,6 @@ class VueBassin(Vue):
                               ],
                               spacing=10),
                           ft.Icons.SHOW_CHART),
-            theme.section("Bassin d'orage amont", self._panneau_amont(), ft.Icons.MERGE,
-                          "Ouvrage situé en amont qui se déverse dans celui-ci"),
             theme.section("Simuler une ou plusieurs pluies", self._simulateur_manuel(), ft.Icons.TUNE,
                           "Cochez les durées à comparer, puis lancez la simulation"),
         ]
@@ -175,6 +182,7 @@ class VueBassin(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            barre_ouvrage(self),
             theme.section(
                 "Caractéristiques de l'ouvrage",
                 ft.Column(
@@ -229,10 +237,6 @@ class VueBassin(Vue):
         g.reperes.append(charts.Repere(sim.duree_pluie_min, "Fin de la pluie", charts.GRIS,
                                        vertical=True))
         return g
-
-    # ------------------------------------------------- bassin d'orage amont
-    def _panneau_amont(self) -> ft.Control:
-        return panneau_amont(self)
 
     # ----------------------------------------------------- simulation manuelle
     def _durees_choisies(self) -> List[float]:

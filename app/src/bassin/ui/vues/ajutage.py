@@ -9,6 +9,7 @@ import flet as ft
 from ...core import orifice
 from ...reports import charts
 from .. import graphiques, theme
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
@@ -157,6 +158,7 @@ class VueAjutage(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            barre_ouvrage(self),
             theme.section(
                 "Données de l'orifice",
                 ft.Column(

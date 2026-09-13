@@ -31,14 +31,18 @@ OUVRAGE = "ouvrage"
 EXUTOIRE = "exutoire"
 
 #: Géométrie nominale (unités arbitraires, mises à l'échelle au tracé).
-LARGEUR_BOITE = 150.0
-LARGEUR_VERSANT = 116.0
-HAUTEUR_LIGNE = 11.0
-HAUTEUR_TITRE = 16.0
+LARGEUR_BOITE = 172.0
+LARGEUR_VERSANT = 140.0
+HAUTEUR_LIGNE = 12.0
+HAUTEUR_TITRE = 19.0
 MARGE_BOITE = 8.0
-ESPACE_COLONNE = 62.0
-ESPACE_LIGNE = 14.0
-ESPACE_VERSANT = 6.0
+ESPACE_COLONNE = 66.0
+ESPACE_LIGNE = 16.0
+ESPACE_VERSANT = 8.0
+
+#: Au-delà, une ligne de boîte serait tronquée à l'affichage : mieux vaut la
+#: couper à la source que laisser un texte déborder sur son voisin.
+CARACTERES_MAX = 33
 
 
 @dataclass
@@ -175,6 +179,7 @@ def construire(systeme, fiches=None, simulation_systeme=None) -> Schema:
             fr(f"C moyen {bv.coefficient_moyen:.2f}"),
             fr(f"{bv.aire_ponderee_m2:,.0f} m² actifs".replace(",", " ")),
         ]
+        lignes = [_couper(ligne) for ligne in lignes]
         boite = Boite(cle=f"bv:{bv.id}", genre=VERSANT, titre=bv.nom, lignes=lignes,
                       largeur=LARGEUR_VERSANT, hauteur=_hauteur(len(lignes)),
                       statut="OK" if cible is not None else "DEBORDEMENT")
@@ -190,14 +195,12 @@ def _lignes_ouvrage(systeme, ouvrage, fiche, simulation_systeme) -> List[str]:
     """Les chiffres qui comptent pour cet ouvrage, en quelques lignes."""
     etude = ouvrage.etude
     bassin = etude.bassin
-    lignes = [
-        fr(f"Volume {bassin.volume_total_m3:.1f} m³"),
-    ]
+    lignes = [fr(f"Volume {bassin.volume_total_m3:.1f} m³")]
     if fiche is not None:
         lignes.append(fr(f"minimum {fiche.volume_minimal_m3:.1f} m³"))
         if fiche.resultat.duree_critique_min:
-            lignes.append(fr(f"pluie critique {fiche.resultat.duree_critique_hm} · "
-                             f"{fiche.resultat.hauteur_pluie_mm:.1f} mm"))
+            lignes.append(fr(f"pluie critique {fiche.resultat.duree_critique_hm}"))
+            lignes.append(fr(f"hauteur {fiche.resultat.hauteur_pluie_mm:.1f} mm"))
         lignes.append(fr(f"vidange {fiche.resultat.temps_vidange_hm}"))
     lignes.append(fr(f"Q ajutage {bassin.debit_ajutage_ls:.2f} l/s"))
     q_inf = ouvrage.debit_infiltration_ls()
@@ -209,7 +212,12 @@ def _lignes_ouvrage(systeme, ouvrage, fiche, simulation_systeme) -> List[str]:
         res = simulation_systeme.resultat(ouvrage.id)
         if res is not None and res.debordement:
             lignes.append(fr(f"déborde de {res.volume_debordement_m3:.1f} m³"))
-    return lignes
+    return [_couper(ligne) for ligne in lignes]
+
+
+def _couper(texte: str) -> str:
+    """Tronque une ligne trop longue plutôt que de la laisser déborder."""
+    return texte if len(texte) <= CARACTERES_MAX else texte[:CARACTERES_MAX - 1] + "…"
 
 
 def _placer(colonnes, versants_par_ouvrage, schema: Schema) -> List[Boite]:

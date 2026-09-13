@@ -12,6 +12,7 @@ import flet as ft
 from ...core.model import LIBELLES_SCENARIOS
 from ...reports import docx_report, pdf_report, xlsx_report
 from .. import theme
+from ..composants import barre_ouvrage
 from ..state import destination_utilisable, diagnostic_stockage, repertoire_documents
 from .base import Vue
 
@@ -43,9 +44,10 @@ class VueRapport(Vue):
     def _generer(self, formats: List[str]) -> None:
         etat = self.etat
         self.erreurs = []
-        if etat.projet.aire_ponderee_m2 <= 0:
+        if etat.systeme.aire_ponderee_m2 <= 0:
             self.erreurs.append("Aucune surface incidente encodée : encodez au moins une surface "
-                                "dans l'onglet « Projet » avant de générer un rapport.")
+                                "dans l'onglet « Bassins versants » avant de générer un "
+                                "rapport.")
             self.maj_resultats()
             return
 
@@ -172,10 +174,15 @@ class VueRapport(Vue):
                     ]
                 )
                 for k, v in [
-                    ("Projet", p.nom_projet or "—"),
-                    ("Commune", f"{p.commune_nom} (INS {p.commune_ins})"),
-                    ("Période de retour", f"{p.periode_retour} ans"),
-                    ("Surface active pondérée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
+                    ("Projet", etat.systeme.nom_projet or "—"),
+                    ("Commune", f"{etat.systeme.commune_nom} (INS {etat.systeme.commune_ins})"),
+                    ("Période de retour", f"{etat.systeme.periode_retour} ans"),
+                    ("Bassins versants", str(len(etat.systeme.bassins_versants))),
+                    ("Bassins d'orage", str(len(etat.systeme.ouvrages))),
+                    ("Surface active du système",
+                     theme.nombre(etat.systeme.aire_ponderee_m2, 1, "m²")),
+                    ("Ouvrage détaillé", etat.ouvrage.nom),
+                    ("Surface active raccordée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
                     ("Scénario retenu", LIBELLES_SCENARIOS[etat.scenario_principal]),
                     ("Volume de temporisation",
                      theme.nombre(res.volume_m3, 1, "m³") if res.dimensionnable
@@ -218,6 +225,7 @@ class VueRapport(Vue):
         )
 
         return [
+            barre_ouvrage(self),
             theme.section("Récapitulatif du dossier", recap, ft.Icons.FACT_CHECK),
             theme.section(
                 "Générer les livrables",
@@ -234,7 +242,7 @@ class VueRapport(Vue):
                     spacing=14,
                 ),
                 ft.Icons.SHARE,
-                "Le rapport reprend les données d'entrée, les quatre scénarios, la simulation, "
-                "la table QDF et l'ajutage.",
+                "Le rapport reprend les données d'entrée, la synthèse du réseau, les quatre "
+                "scénarios de l'ouvrage détaillé, la simulation, la table QDF et l'ajutage.",
             ),
         ]

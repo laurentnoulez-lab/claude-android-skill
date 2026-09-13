@@ -1,6 +1,12 @@
-"""HydroBassin — dimensionnement de bassins d'orage (méthode rationnelle, pluies GTI).
+"""HydroBassin+ — dimensionnement de réseaux de bassins d'orage.
 
-Point d'entrée de l'application Flet (Windows, Android, web).
+Méthode rationnelle, pluies statistiques du GTI (Région wallonne). Point
+d'entrée de l'application Flet (Windows, Android, web).
+
+Sur le bureau, l'application peut ouvrir une **seconde fenêtre** sur le même
+projet, comme la commande « Nouvelle fenêtre » d'un tableur. Les deux fenêtres
+partagent un unique état applicatif : c'est pourquoi il vit au niveau du module
+et non dans ``main``.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ import flet as ft  # noqa: E402
 from bassin import __app_name__, __version__  # noqa: E402
 from bassin.core import exemple, rainfall  # noqa: E402
 from bassin.core.model import LIBELLES_SCENARIOS  # noqa: E402
-from bassin.ui import theme  # noqa: E402
+from bassin.ui import fenetres, theme  # noqa: E402
 from bassin.ui.state import CLE_STOCKAGE, EtatApplication  # noqa: E402
 from bassin.ui.vues.ajutage import VueAjutage  # noqa: E402
 from bassin.ui.vues.bassin import VueBassin  # noqa: E402
@@ -25,9 +31,40 @@ from bassin.ui.vues.pluies import VuePluies  # noqa: E402
 from bassin.ui.vues.projet import VueProjet  # noqa: E402
 from bassin.ui.vues.qdf import VueTableQDF  # noqa: E402
 from bassin.ui.vues.rapport import VueRapport  # noqa: E402
+from bassin.ui.vues.reseau import VueReseau  # noqa: E402
+from bassin.ui.vues.synthese import VueSynthese  # noqa: E402
+from bassin.ui.vues.versants import VueVersants  # noqa: E402
 
 #: En dessous de cette largeur, la navigation passe dans un tiroir latéral.
 LARGEUR_COMPACTE = 840
+
+#: Projet partagé par toutes les fenêtres du même processus. Une seconde fenêtre
+#: ouvre une session Flet de plus, pas une seconde application : les deux doivent
+#: montrer et modifier le même projet.
+_PARTAGE = {"etat": None, "fenetres": 0}
+
+
+def etat_partage(charger=None) -> EtatApplication:
+    """État applicatif du processus, créé à la première fenêtre.
+
+    ``charger`` n'est appelé que pour la première fenêtre : les suivantes
+    reprennent le projet déjà en mémoire, sans relire le stockage.
+    """
+    if _PARTAGE["etat"] is None:
+        etat = EtatApplication()
+        if charger is not None:
+            try:
+                charger(etat)
+            except Exception:
+                pass
+        _PARTAGE["etat"] = etat
+    return _PARTAGE["etat"]
+
+
+def reinitialiser_partage() -> None:
+    """Repart d'un état neuf — utilisé par les tests."""
+    _PARTAGE["etat"] = None
+    _PARTAGE["fenetres"] = 0
 
 
 def trace(etape: str) -> None:
@@ -100,20 +137,27 @@ def main(page: ft.Page) -> None:
     sombre = bool(lire_stockage("hydrobassin.sombre") or False)
     theme.appliquer_theme(page, sombre)
 
-    etat = EtatApplication()
-    sauvegarde = lire_stockage(CLE_STOCKAGE)
-    if sauvegarde:
-        try:
+    def reprendre(etat: EtatApplication) -> None:
+        sauvegarde = lire_stockage(CLE_STOCKAGE)
+        if sauvegarde:
             etat.charger_json(sauvegarde)
-        except Exception:
-            pass
+
+    etat = etat_partage(reprendre)
+    _PARTAGE["fenetres"] += 1
+    numero = _PARTAGE["fenetres"]
+    secondaire = numero > 1
+    if secondaire:
+        page.title = f"{page.title} — fenêtre {numero}"
 
     vues = [
         VueProjet(page, etat),
+        VueVersants(page, etat),
+        VueReseau(page, etat),
         VueDimensionnement(page, etat),
         VueBassin(page, etat),
         VueTableQDF(page, etat),
         VueAjutage(page, etat),
+        VueSynthese(page, etat),
         VuePluies(page, etat),
         VueRapport(page, etat),
     ]
@@ -135,10 +179,13 @@ def main(page: ft.Page) -> None:
         volume = "…"
         if calculer or etat.resultats_disponibles:
             volume = f"{etat.resultat.volume_affiche} m³"
+        systeme = etat.systeme
+        ouvrages = len(systeme.ouvrages)
+        detail = (f"{ouvrages} bassins · " if ouvrages > 1 else "")
         resume.value = (
-            f"{etat.projet.commune_nom} · T = {etat.projet.periode_retour} ans · "
-            f"{etat.projet.aire_ponderee_m2:.0f} m² actifs · "
-            f"{LIBELLES_SCENARIOS[etat.scenario_principal]} : {volume}"
+            f"{systeme.commune_nom} · T = {systeme.periode_retour} ans · "
+            f"{systeme.aire_ponderee_m2:.0f} m² actifs · {detail}"
+            f"{etat.ouvrage.nom} : {volume}"
         )
 
     def entete_apres_saisie() -> None:
@@ -218,16 +265,14 @@ def main(page: ft.Page) -> None:
         page.update()
 
     def charger_exemple(_=None) -> None:
-        """Remplit l'application avec un projet complet, pour la découvrir."""
-        etat.projet = exemple.projet_demonstration()
+        """Remplit l'application avec un réseau complet, pour la découvrir."""
+        etat.systeme = exemple.systeme_demonstration()
         etat.invalider()
         afficher(index["courant"])
 
     def reinitialiser(_=None) -> None:
         def confirmer(_=None) -> None:
-            neuf = EtatApplication()
-            etat.projet = neuf.projet
-            etat.scenario_principal = neuf.scenario_principal
+            etat.systeme = EtatApplication().systeme
             etat.invalider()
             page.close(dialogue)
             afficher(0)
@@ -258,6 +303,8 @@ def main(page: ft.Page) -> None:
             f"Python {sys.version.split()[0]} · Flet {getattr(ft, '__version__', '?')}",
             f"Pluies GTI : {nb_communes} communes ({origine})",
             f"Dossier des rapports : {repertoire_documents()}",
+            f"Fenêtres : {_PARTAGE['fenetres']} ouverte(s) · seconde fenêtre "
+            + ("disponible" if fenetres.disponible(page) else "indisponible ici"),
         ]
         lignes += [f"  {'écriture possible' if ok else 'inaccessible'} — {c}"
                    for c, ok in diagnostic_stockage()]
@@ -269,7 +316,40 @@ def main(page: ft.Page) -> None:
         )
         page.open(fenetre)
 
+    def nouvelle_fenetre(_=None) -> None:
+        """Seconde fenêtre sur le même projet, comme dans un tableur."""
+        raison = fenetres.ouvrir(page)
+        if raison:
+            page.open(ft.SnackBar(content=ft.Text(raison), behavior=ft.SnackBarBehavior.FLOATING,
+                                  duration=5000))
+            return
+        page.open(ft.SnackBar(
+            content=ft.Text("Nouvelle fenêtre ouverte sur le même projet : ce que vous "
+                            "modifiez d'un côté se recalcule de l'autre."),
+            behavior=ft.SnackBarBehavior.FLOATING, duration=4000))
+
+    def fermer_cette_fenetre(_=None) -> None:
+        """Referme une fenêtre supplémentaire sans arrêter l'application."""
+        try:
+            page.window.destroy()
+        except Exception:
+            try:
+                page.window.close()
+            except Exception:
+                pass
+
     bouton_menu = ft.IconButton(ft.Icons.MENU, tooltip="Sections", on_click=ouvrir_menu, visible=False)
+    actions_fenetre = []
+    if secondaire:
+        actions_fenetre.append(ft.IconButton(
+            ft.Icons.CLOSE_FULLSCREEN,
+            tooltip="Fermer cette fenêtre (l'application reste ouverte)",
+            on_click=fermer_cette_fenetre))
+    elif fenetres.disponible(page):
+        actions_fenetre.append(ft.IconButton(
+            ft.Icons.OPEN_IN_NEW,
+            tooltip="Nouvelle fenêtre sur le même projet (Ctrl+N)",
+            on_click=nouvelle_fenetre))
     barre = ft.Container(
         content=ft.Row(
             [
@@ -281,6 +361,7 @@ def main(page: ft.Page) -> None:
                     border_radius=10,
                 ),
                 ft.Column([titre_page, resume], spacing=0, expand=True, tight=True),
+                *actions_fenetre,
                 ft.IconButton(ft.Icons.INFO_OUTLINE, tooltip="Diagnostic", on_click=diagnostic),
                 ft.IconButton(ft.Icons.LIGHTBULB_OUTLINE, tooltip="Charger un exemple (Ctrl+E)",
                               on_click=charger_exemple),
@@ -355,6 +436,22 @@ def main(page: ft.Page) -> None:
         page.update()
 
     etat.abonner(entete_apres_saisie)
+
+    def sur_fermeture(_=None) -> None:
+        """Désabonne cette fenêtre : l'état partagé survit, ses rappels non."""
+        etat.desabonner(entete_apres_saisie)
+        for vue in vues:
+            etat.desabonner(vue._sur_modification)
+            vue.masquer()
+        _PARTAGE["fenetres"] = max(_PARTAGE["fenetres"] - 1, 0)
+
+    # Selon la plateforme, Flet prévient d'une fermeture par l'un ou l'autre
+    # de ces rappels : les deux sont branchés, le désabonnement est idempotent.
+    for attribut in ("on_close", "on_disconnect"):
+        try:
+            setattr(page, attribut, sur_fermeture)
+        except Exception:
+            pass
     page.on_resized = adapter
     # Sur téléphone, le contenu passait sous la barre d'état et sous la barre de
     # navigation du système : SafeArea réserve ces zones.
@@ -386,14 +483,19 @@ def main(page: ft.Page) -> None:
     page.on_route_change = sur_changement_de_route
 
     def sur_touche(e) -> None:
-        """Ctrl+1 à Ctrl+7 ouvrent une section, comme les onglets d'un navigateur."""
+        """Ctrl+1 à Ctrl+9 et Ctrl+0 ouvrent une section, comme dans un navigateur."""
         if not getattr(e, "ctrl", False):
             return
         touche = str(getattr(e, "key", ""))
-        if touche.isdigit() and 1 <= int(touche) <= len(vues):
-            afficher(int(touche) - 1)
+        if touche.isdigit():
+            # Ctrl+0 ouvre la dixième section, comme la touche 0 d'un navigateur.
+            rang = 10 if touche == "0" else int(touche)
+            if 1 <= rang <= len(vues):
+                afficher(rang - 1)
         elif touche.upper() == "E":
             charger_exemple()
+        elif touche.upper() == "N" and not secondaire and fenetres.disponible(page):
+            nouvelle_fenetre()
 
     page.on_keyboard_event = sur_touche
 
