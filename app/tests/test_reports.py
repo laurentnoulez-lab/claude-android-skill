@@ -582,3 +582,37 @@ class TestRapportDeReseau(unittest.TestCase):
         fautifs = [t for t in texte.split("\n")
                    if re.search(r"\d\.\d", t) and not titre.match(t.strip())]
         self.assertEqual(fautifs, [])
+
+
+class TestLargeurDesTableauxWord(unittest.TestCase):
+    """Un tableau plus large que la page déborde dans la marge, ou pire.
+
+    La page est un A4 avec 2 cm de marge de chaque côté : il reste 17 cm. Rien
+    ne le signale à la génération — le tableau se contente de sortir du cadre à
+    l'impression.
+    """
+
+    LARGEUR_UTILE_CM = 17.0
+
+    def test_aucun_tableau_ne_deborde_de_la_page(self):
+        from bassin.core import exemple
+        from bassin.reports.docx_writer import TWIP_PAR_CM
+
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_largeurs_")
+        try:
+            systeme = exemple.systeme_demonstration()
+            dossier = mod_dossier.construire(systeme.courant.etude,
+                                             systeme.courant.scenario, systeme=systeme)
+            chemin = docx_report.ecrire(dossier, os.path.join(repertoire, "largeurs.docx"))
+            with zipfile.ZipFile(chemin) as z:
+                document = z.read("word/document.xml").decode("utf-8")
+        finally:
+            shutil.rmtree(repertoire, ignore_errors=True)
+        grilles = re.findall(r"<w:tblGrid>(.*?)</w:tblGrid>", document, re.S)
+        self.assertGreater(len(grilles), 6)
+        for i, grille in enumerate(grilles):
+            twips = [int(v) for v in re.findall(r'<w:gridCol w:w="(\d+)"/>', grille)]
+            largeur = sum(twips) / TWIP_PAR_CM
+            with self.subTest(tableau=i):
+                self.assertLessEqual(largeur, self.LARGEUR_UTILE_CM,
+                                     f"tableau {i} large de {largeur:.1f} cm")

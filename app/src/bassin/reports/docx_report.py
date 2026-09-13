@@ -357,7 +357,7 @@ def _section_reseau(doc: DocxBuilder, dossier: Dossier, numero: int) -> None:
     doc.titre2(f"{numero}.2 Bassins versants")
     doc.tableau(_cellules(synthese_versants(dossier),
                           {len(systeme.bassins_versants) + 1: BLEU}),
-                largeurs=[4.2, 4.2, 2.4, 2.0, 2.6, 2.6])
+                largeurs=[3.7, 3.7, 2.1, 1.8, 2.4, 2.3])
 
     doc.titre2(f"{numero}.3 Dimensionnement de chaque bassin d'orage")
     doc.paragraphe("Chaque ouvrage est dimensionné sur ses propres bassins versants et sur ce "
@@ -367,7 +367,7 @@ def _section_reseau(doc: DocxBuilder, dossier: Dossier, numero: int) -> None:
     fonds = {i: ROUGE for i, fiche in enumerate(dossier.fiches, start=1)
              if not fiche.suffisant and fiche.volume_encode_m3 > 0}
     doc.tableau(_cellules(synthese_reseau(dossier), fonds),
-                largeurs=[3.0, 2.4, 2.2, 1.7, 1.7, 1.6, 1.6, 1.5, 1.4, 1.5, 1.4], taille=15)
+                largeurs=[2.6, 2.0, 1.8, 1.4, 1.4, 1.3, 1.3, 1.2, 1.2, 1.2, 1.1], taille=13)
 
     sim = dossier.simulation_systeme
     if sim is not None:
@@ -381,7 +381,7 @@ def _section_reseau(doc: DocxBuilder, dossier: Dossier, numero: int) -> None:
         fonds = {i: couleurs[res.statut]
                  for i, (_o, res) in enumerate(sim.resultats, start=1)}
         doc.tableau(_cellules(synthese_simulation_systeme(dossier), fonds),
-                    largeurs=[4.6, 2.2, 2.2, 2.2, 2.4, 2.4, 2.0, 2.0])
+                    largeurs=[4.0, 1.8, 1.8, 1.9, 2.0, 2.0, 1.6, 1.3])
         doc.encadre(
             f"Volume stocké : {sim.volume_stocke_m3:.1f} m³   |   "
             f"Débordement total : {sim.volume_debordement_m3:.2f} m³   |   "

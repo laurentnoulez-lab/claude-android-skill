@@ -561,6 +561,11 @@ def _tableau(ws, ligne: int, lignes: Sequence[Sequence[str]],
             # exploitable, pas seulement lisible.
             c = ws.cell(row=ligne + i, column=1 + j, value=_nombre_ou_texte(valeur))
             c.border = _BORDURE
+            if j <= 1:
+                # Les deux premières colonnes portent des noms d'ouvrage, qui
+                # peuvent être longs : ils se replient plutôt que d'être coupés
+                # par la cellule voisine.
+                c.alignment = Alignment(vertical="center", wrap_text=True)
             if i in fonds:
                 c.fill = PatternFill("solid", fgColor=fonds[i])
     return ligne + len(lignes) + 1
@@ -583,8 +588,8 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier) -> None:
     """
     systeme = dossier.systeme
     ws = wb.create_sheet("Réseau")
-    _largeurs(ws, {"A": 34, "B": 26, "C": 22, "D": 16, "E": 16, "F": 16, "G": 16, "H": 16,
-                   "I": 16, "J": 16, "K": 16})
+    _largeurs(ws, {"A": 40, "B": 28, "C": 24, "D": 16, "E": 16, "F": 16, "G": 16, "H": 16,
+                   "I": 16, "J": 18, "K": 18})
     _titre(ws, "A1", "SYNTHÈSE DU RÉSEAU", 16)
     ws["A2"] = (f"{systeme.commune_nom} · pluie de projet T = {systeme.periode_retour} ans · "
                 f"vidange maximale admise {systeme.temps_vidange_max_h:.0f} h")
