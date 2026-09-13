@@ -81,15 +81,13 @@ jobs:
           fi
           badging=$("$aapt" dump badging livrables/HydroBassinPlus-3.0.0.apk)
           echo "$badging" | head -3
+          # Exiger l'identifiant attendu suffit : un paquet n'en a qu'un, donc
+          # celui de la 2.0.0 est exclu du même coup. Le nommer ici n'ajouterait
+          # rien et le ferait réapparaître dans les réglages.
           attendu="be.hydrobassin.hydrobassinplus"
-          ancien="be.hydrobassin.hydrobassin"
           if ! echo "$badging" | grep -qF "package: name='$attendu'"; then
             echo "::error::identifiant inattendu — HydroBassin+ doit s'installer à côté de la 2.0.0, pas la remplacer."
             echo "$badging" | grep "^package:" || true
-            exit 1
-          fi
-          if echo "$badging" | grep -qF "package: name='$ancien'"; then
-            echo "::error::l'identifiant de la 2.0.0 est revenu : installer écraserait l'application précédente."
             exit 1
           fi
           if ! echo "$badging" | grep -qF "application-label:'HydroBassin+'"; then
