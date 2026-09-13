@@ -30,6 +30,11 @@ EXTENSION_PROJET = "json"
 
 #: Champs communs à tout le système : les modifier sur une étude d'ouvrage
 #: n'aurait aucun effet, la synchronisation les réécrirait aussitôt.
+#: Au-delà, la recherche des minima de chaque ouvrage (deux dichotomies par
+#: bassin, chacune rebalayant les durées) devient trop lente pour se refaire à
+#: chaque frappe : elle n'est alors calculée que sur demande.
+SEUIL_MINIMA_AUTOMATIQUES = 6
+
 CHAMPS_GLOBAUX = frozenset({
     "commune_ins", "commune_nom", "periode_retour", "source_pluie",
     "coef_securite_infiltration", "temps_vidange_max_h",
@@ -127,7 +132,11 @@ class EtatApplication:
         self._simulation: Optional[simulation.ResultatSimulation] = None
         self._table: Optional[simulation.TableAcceptation] = None
         self._fiches: Optional[List[reseau.FicheOuvrage]] = None
+        self._fiches_minima: Optional[List[reseau.FicheOuvrage]] = None
         self._simulation_systeme: Optional[reseau.SimulationSysteme] = None
+        #: L'utilisateur a demandé les minima sur un réseau où ils ne sont pas
+        #: calculés d'office.
+        self.minima_demandes = False
 
     # -- abonnements -------------------------------------------------------
     def abonner(self, rappel: Callable[[], None]) -> None:
@@ -144,6 +153,7 @@ class EtatApplication:
         self._simulation = None
         self._table = None
         self._fiches = None
+        self._fiches_minima = None
         self._simulation_systeme = None
         self.systeme.synchroniser()
         for rappel in list(self._abonnes):
@@ -246,10 +256,27 @@ class EtatApplication:
 
     # -- réseau ------------------------------------------------------------
     @property
+    def minima_disponibles(self) -> bool:
+        """Les minima par ouvrage sont-ils calculés dans les fiches du réseau ?"""
+        return (len(self.systeme.ouvrages) <= SEUIL_MINIMA_AUTOMATIQUES
+                or self.minima_demandes)
+
+    @property
     def fiches(self) -> List[reseau.FicheOuvrage]:
-        """Dimensionnement de chaque ouvrage du réseau, mis en cache."""
+        """Dimensionnement de chaque ouvrage du réseau, mis en cache.
+
+        Les minima — surface d'infiltration et ajutage — coûtent deux
+        dichotomies par ouvrage, chacune rebalayant les durées de pluie. Sur un
+        grand réseau cela se compte en secondes : ils ne sont alors calculés que
+        si l'utilisateur les demande. Le volume minimal, lui, est toujours là :
+        c'est le résultat principal.
+        """
+        if self.minima_disponibles:
+            if self._fiches_minima is None:
+                self._fiches_minima = reseau.dimensionner(self.systeme, avec_minima=True)
+            return self._fiches_minima
         if self._fiches is None:
-            self._fiches = reseau.dimensionner(self.systeme)
+            self._fiches = reseau.dimensionner(self.systeme, avec_minima=False)
         return self._fiches
 
     def fiche(self, identifiant: str) -> Optional[reseau.FicheOuvrage]:

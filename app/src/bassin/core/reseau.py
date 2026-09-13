@@ -393,8 +393,22 @@ class Systeme:
         return o.etude if o is not None else self.courant.etude
 
     # ---- sérialisation ---------------------------------------------------
+    #: Champs de l'étude d'un ouvrage que :meth:`synchroniser` recalcule : les
+    #: enregistrer reviendrait à écrire deux fois la même donnée, et à laisser
+    #: croire qu'on peut la corriger là.
+    DERIVES = ("commune_ins", "commune_nom", "periode_retour", "source_pluie",
+               "coef_securite_infiltration", "temps_vidange_max_h", "nom_projet",
+               "auteur", "localisation", "remarques", "surfaces",
+               "surface_reference_m2", "surface_amont_raccordee_m2")
+
     def to_dict(self) -> Dict:
-        return asdict(self)
+        self.synchroniser()
+        donnees = asdict(self)
+        for ouvrage in donnees.get("ouvrages", []):
+            etude = ouvrage.get("etude", {})
+            for champ in self.DERIVES:
+                etude.pop(champ, None)
+        return donnees
 
     @classmethod
     def from_dict(cls, data: Dict) -> "Systeme":

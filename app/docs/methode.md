@@ -143,7 +143,77 @@ Aux durées tabulées, Montana s'écarte des mesures QDF de −0,2 % en médiane
 comparaisons, communes wallonnes) : les deux sources sont cohérentes, mais un écart
 local de quelques pour cent suffit à décaler le volume retenu.
 
-## Bassin d'orage amont
+## Réseau de bassins d'orage
+
+Un projet décrit un **système** : plusieurs bassins versants nommés, plusieurs bassins
+d'orage nommés, et leurs raccordements.
+
+```
+bassin versant ──┐
+bassin versant ──┴─► bassin d'orage A ─► bassin d'orage B ─► exutoire
+                                │
+                                └─ surverse : vers l'aval, ou vers le milieu naturel
+```
+
+### Règles de raccordement
+
+* Un **bassin versant** se raccorde à **un seul** bassin d'orage ; un bassin d'orage en
+  reçoit autant qu'on veut, et sa surface active est la somme des leurs.
+* Un **bassin d'orage** se déverse dans un autre bassin d'orage, ou à l'**exutoire**.
+* Sa **surverse** part vers le bassin aval quand il y en a un, sauf si l'utilisateur a
+  déclaré qu'elle rejoint le **milieu naturel** : elle quitte alors le réseau, et le bassin
+  aval ne reçoit plus que l'ajutage.
+* Les collecteurs sont supposés véhiculer tout le débit et les **temps de parcours sont
+  négligés** — l'hypothèse déjà retenue pour le bassin amont unique des versions
+  précédentes.
+* Ce qu'un ouvrage **infiltre** est perdu pour l'aval.
+* Un raccordement circulaire est **coupé** et signalé : l'application reste calculable
+  plutôt que de tourner en rond.
+
+### Une seule règle de dimensionnement, pour tous les ouvrages
+
+Chaque ouvrage est décrit par un projet complet, dont l'**apport amont** est branché sur
+l'hydrogramme que lui restituent les ouvrages situés au-dessus. Tout le reste —
+`hydro.volume_de_dimensionnement`, le tableau des scénarios, la courbe volume = f(durée), le
+temps de vidange, les minima, la table QDF, la simulation — est exactement le code du bassin
+isolé. Un réseau réduit à un ouvrage rend donc, **au dernier bit**, ce que rendait la version
+précédente ; un réseau à deux ouvrages, ce que rendait le panneau « bassin d'orage amont ».
+
+L'hydrogramme restitué par un ouvrage se calcule par la même intégration exacte que le reste :
+entre deux seuils les débits sont constants, l'intervalle est découpé aux instants où
+l'ajutage démarre ou s'arrête, où l'ouvrage se remplit ou se vide. Deux apports simultanés
+s'additionnent palier par palier.
+
+Chaque description d'ouvrage — surface active, débits, volumes, amonts — forme une clé
+immuable : deux ouvrages décrits par les mêmes nombres ont le même hydrogramme de sortie,
+qui n'est donc calculé qu'une fois. C'est ce qui rend le balayage des durées abordable sur
+un réseau de plusieurs bassins.
+
+### Dimensionner en cascade
+
+L'ordre compte. Tant qu'un ouvrage amont surverse, l'ouvrage aval doit encaisser un
+trop-plein **non laminé** : le volume à prévoir en aval s'en trouve nettement gonflé. Le
+dimensionnement en cascade calcule donc de l'amont vers l'aval, chaque ouvrage étant fixé
+avant qu'on ne s'occupe du suivant.
+
+Les volumes proposés valent pour les capacités **encodées** des ouvrages amont, pas pour des
+ouvrages supposés parfaits : c'est ce qui permet de voir, et de chiffrer, le coût d'un amont
+sous-dimensionné.
+
+### Durée critique du système
+
+Chaque ouvrage a la sienne : un petit bassin versant imperméable culmine en quelques
+minutes, un grand ensemble tamponné en plusieurs heures. Pour juger du système dans son
+ensemble, la simulation retient la durée qui met le plus de volume en jeu — le débordement
+départageant d'abord, le volume stocké ensuite. Le tableau du réseau, lui, donne à chaque
+ouvrage sa propre durée critique.
+
+## Bassin d'orage amont (versions antérieures)
+
+Le panneau « bassin d'orage amont » des versions 2.x reste opérant pour un ouvrage qui n'a
+pas d'amont dans le réseau, et les projets enregistrés à l'époque se rechargent — leur
+bassin amont devient un ouvrage du réseau. Le reste de cette section décrit ce mécanisme,
+dont le routage du réseau est la généralisation directe.
 
 Un bassin d'orage situé en amont peut se déverser dans l'ouvrage étudié. Il reçoit la
 même pluie de projet sur son propre bassin versant (`S_amont × C_amont`), la tamponne
@@ -184,12 +254,13 @@ rationnelle sur son bassin versant.
 
 ### Le bassin amont se déclare depuis le dimensionnement
 
-Depuis la version 2.0, le panneau du bassin d'orage amont est présent dans l'onglet
+Depuis la version 2.0, le panneau du bassin d'orage amont était présent dans l'onglet
 **Dimensionnement** comme dans l'onglet **Bassin** — c'est le même ouvrage des deux côtés, si
-bien que l'encoder d'un onglet le montre aussitôt dans l'autre. Le tableau des scénarios
-annonce explicitement que ses volumes comprennent cet apport, et rappelle le débit restitué :
-auparavant le calcul en tenait compte, mais rien à l'écran ne le disait et l'ouvrage ne se
-déclarait que dans l'onglet de simulation.
+bien que l'encoder d'un onglet le montrait aussitôt dans l'autre. Le tableau des scénarios
+annonce explicitement que ses volumes comprennent cet apport, et rappelle le débit restitué.
+
+Depuis la version 3.0, cet ouvrage se déclare dans l'onglet **Réseau**, comme n'importe quel
+autre bassin d'orage : un amont n'est plus un cas particulier.
 
 ### Un bassin amont sans volume de temporisation ne lamine rien
 

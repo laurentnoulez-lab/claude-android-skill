@@ -4,11 +4,11 @@ A production-ready skill that enables Claude Code to build Android applications 
 
 ---
 
-## Application HydroBassin (dossier `app/`)
+## Application HydroBassin+ (dossier `app/`)
 
-Ce dépôt héberge également **HydroBassin**, une application de dimensionnement de bassins
-d'orage (méthode rationnelle, pluies statistiques du GTI — Région wallonne), livrée sous
-forme d'**APK Android** et d'**exécutable Windows**.
+Ce dépôt héberge également **HydroBassin+**, une application de dimensionnement de **réseaux
+de bassins d'orage** (méthode rationnelle, pluies statistiques du GTI — Région wallonne),
+livrée sous forme d'**APK Android** et d'**exécutable Windows**.
 
 * Documentation : [`app/README.md`](app/README.md)
 * Méthode de calcul : [`app/docs/methode.md`](app/docs/methode.md)

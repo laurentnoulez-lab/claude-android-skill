@@ -169,13 +169,15 @@ class VueReseau(Vue):
                             "—" if res.surface_infiltration_min_m2 is None
                             else theme.nombre(res.surface_infiltration_min_m2, 1),
                             "Surface d'infiltration minimale", "m²", theme.VERT, ft.Icons.GRASS,
-                            f"pour vidanger en {systeme.temps_vidange_max_h:.0f} h"),
+                            f"pour vidanger en {systeme.temps_vidange_max_h:.0f} h"
+                            if etat.minima_disponibles else "à calculer ci-dessus"),
                             col={"xs": 12, "sm": 6, "md": 3}),
                         ft.Container(theme.tuile(
                             "—" if res.debit_ajutage_min_ls is None
                             else theme.nombre(res.debit_ajutage_min_ls, 3),
                             "Débit d'ajutage minimal", "l/s", theme.ORANGE, ft.Icons.TUNE,
-                            f"pour vidanger en {systeme.temps_vidange_max_h:.0f} h"),
+                            f"pour vidanger en {systeme.temps_vidange_max_h:.0f} h"
+                            if etat.minima_disponibles else "à calculer ci-dessus"),
                             col={"xs": 12, "sm": 6, "md": 3}),
                         ft.Container(theme.tuile(
                             res.temps_vidange_hm, "Vidange après la pluie", "",
@@ -315,6 +317,11 @@ class VueReseau(Vue):
         self.rafraichir()
         self.notifier(f"« {ouvrage.nom} » ajouté. Raccordez-lui un bassin versant.", "succes")
 
+    def _basculer_minima(self, e: ft.ControlEvent) -> None:
+        """Les minima par ouvrage coûtent cher : ils se demandent explicitement."""
+        self.etat.minima_demandes = bool(e.control.value)
+        self.rafraichir()
+
     def _dimensionner(self, _=None) -> None:
         retenus = self.etat.dimensionner_le_reseau()
         self.rafraichir()
@@ -351,6 +358,18 @@ class VueReseau(Vue):
                 "Ces ouvrages surversent pour la pluie de projet : "
                 + ", ".join(f"« {f.nom} »" for f in insuffisants)
                 + ". Le dimensionnement en cascade propose un volume pour chacun.", "erreur"))
+        if not self.etat.minima_disponibles:
+            blocs.append(ft.Row(
+                [
+                    ft.Switch(value=self.etat.minima_demandes,
+                              on_change=self._basculer_minima),
+                    ft.Text("Calculer aussi la surface d'infiltration minimale et l'ajutage "
+                            "minimal de chaque ouvrage — deux dichotomies par bassin, le "
+                            "recalcul devient nettement plus long sur un réseau de cette "
+                            f"taille ({len(systeme.ouvrages)} ouvrages).",
+                            size=12.5, expand=True, no_wrap=False),
+                ],
+                spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER))
         blocs.append(self._tableau())
         return blocs
 
