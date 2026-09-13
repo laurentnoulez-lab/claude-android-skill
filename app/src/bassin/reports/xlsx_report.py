@@ -445,8 +445,9 @@ def _feuille_bassin(wb: Workbook, dossier: Dossier) -> None:
     for i in range(len(rainfall.RETURN_PERIODS)):
         ws.column_dimensions[get_column_letter(2 + i)].width = 11
     _titre(ws, "A1", "Bassin encodé - pluies absorbées sans débordement", 14)
-    ws["A2"] = ("Volume requis par la pluie (méthode rationnelle) compare à la capacité du bassin. "
-                "Vert = absorbe, orange = limite (>95 %), rouge = débordement.")
+    ws["A2"] = (f"{dossier.titre_table_volumes}. Volume requis par la pluie (méthode rationnelle) "
+                "comparé à la capacité du bassin. Vert = absorbé, orange = limite (>95 %), "
+                "rouge = débordement.")
     ws["A2"].font = Font(italic=True, color="475569")
 
     projet = dossier.projet

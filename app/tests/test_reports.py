@@ -155,6 +155,62 @@ class TestExcel(BaseRapport):
         self.assertAlmostEqual(valeur("AJUTAGE", "B10"), self.dossier.orifice.diametre_mm, places=6)
 
 
+class TestSourceDesPluiesNommee(unittest.TestCase):
+
+    """Un tableau doit nommer la source dont il sort, pas celle qu'il pourrait avoir.
+
+    Les valeurs Montana et les tables QDF diffèrent jusqu'à 5 % (Liège, 6 h,
+    T = 25 ans). Un tableau de valeurs Montana intitulé « Tables QDF », collé
+    dans une note de calcul, est indéfendable.
+    """
+
+    def _dossier(self, source):
+        p = projet_complet()
+        p.source_pluie = source
+        return mod_dossier.construire(p)
+
+    def test_les_deux_sources_donnent_bien_des_valeurs_differentes(self):
+        """Sans quoi la confusion de titre serait sans conséquence."""
+        m = rainfall.table_qdf_mm("62063", rainfall.SOURCE_MONTANA)
+        q = rainfall.table_qdf_mm("62063", rainfall.SOURCE_QDF)
+        j = rainfall.RETURN_PERIODS.index(25)
+        ecarts = [abs(m[i][j] - q[i][j]) / q[i][j]
+                  for i in range(len(m)) if m[i][j] and q[i][j]]
+        self.assertGreater(max(ecarts), 0.04, "les deux sources devraient diverger d'au moins 4 %")
+
+    def test_l_intitule_suit_la_source_active(self):
+        montana = rainfall.SourcePluie("62063", 25, rainfall.SOURCE_MONTANA)
+        qdf = rainfall.SourcePluie("62063", 25, rainfall.SOURCE_QDF)
+        self.assertIn("Montana", montana.titre_tableau_hauteurs)
+        self.assertNotIn("QDF", montana.titre_tableau_hauteurs)
+        self.assertIn("QDF", qdf.titre_tableau_hauteurs)
+        self.assertIn("Montana", montana.titre_tableau_volumes)
+        self.assertIn("QDF", qdf.titre_tableau_volumes)
+
+    def test_aucun_livrable_ne_titre_qdf_des_valeurs_montana(self):
+        """Le défaut se lisait dans les trois formats à la fois."""
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_source_")
+        try:
+            dossier = self._dossier(rainfall.SOURCE_MONTANA)
+            self.assertIn("Montana", dossier.titre_table_volumes)
+            self.assertNotIn("QDF", dossier.titre_table_volumes)
+
+            chemin = docx_report.ecrire(dossier, os.path.join(repertoire, "source.docx"))
+            with zipfile.ZipFile(chemin) as z:
+                document = z.read("word/document.xml").decode("utf-8")
+            textes = " ".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", document, re.S))
+            self.assertIn("Montana", textes)
+            self.assertNotIn("(table QDF)", textes,
+                             "le titre annonce une table QDF alors que la source est Montana")
+
+            chemin = xlsx_report.ecrire(dossier, os.path.join(repertoire, "source.xlsx"))
+            import openpyxl
+            ws = openpyxl.load_workbook(chemin)["Bassin - table QDF"]
+            self.assertIn("Montana", str(ws["A2"].value))
+        finally:
+            shutil.rmtree(repertoire, ignore_errors=True)
+
+
 class TestGrilleDureesDuClasseur(unittest.TestCase):
 
     """Une seule durée critique doit circuler dans tout le dossier.

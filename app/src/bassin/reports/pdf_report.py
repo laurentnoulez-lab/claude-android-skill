@@ -472,9 +472,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     if dossier.table:
         table = dossier.table
         pdf.nouvelle_page()
-        pdf.titre1(f"{suivant()}. Pluies absorbées sans débordement (table QDF)")
-        pdf.texte("Volume requis [m³] par pluie. Vert : absorbe par l'ouvrage - orange : limite "
-                  "(plus de 95 % de la capacité) - rouge : débordement.", 8.5, couleur=GRIS)
+        pdf.titre1(f"{suivant()}. Pluies absorbées sans débordement")
+        pdf.texte(f"{dossier.titre_table_volumes}. Volume requis [m³] par pluie. Vert : absorbe "
+                  "par l'ouvrage - orange : limite (plus de 95 % de la capacité) - rouge : "
+                  "débordement.", 8.5, couleur=GRIS)
         entete = ["Durée"] + [f"{rp} ans" for rp in table.periodes_retour]
         lignes = [entete]
         fonds = {}

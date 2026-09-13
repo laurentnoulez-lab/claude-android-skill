@@ -63,9 +63,22 @@ class Dossier:
 
     @property
     def libelle_source(self) -> str:
+        return self.source_pluie.libelle_source
+
+    @property
+    def source_pluie(self) -> rainfall.SourcePluie:
         return rainfall.SourcePluie(
-            self.projet.commune_ins, self.projet.periode_retour, self.projet.source_pluie
-        ).libelle_source
+            self.projet.commune_ins, self.projet.periode_retour, self.projet.source_pluie)
+
+    @property
+    def titre_table_volumes(self) -> str:
+        """Intitulé du tableau des volumes requis, source nommée.
+
+        Le même tableau se remplit depuis Montana ou depuis les tables QDF, et
+        les deux diffèrent jusqu'à 5 %. Un lecteur du dossier doit voir laquelle
+        a servi sans avoir à retrouver l'onglet d'où il vient.
+        """
+        return self.source_pluie.titre_tableau_volumes
 
     # ---- graphiques ----------------------------------------------------
     def graphique_dimensionnement(self) -> charts.Graphique:

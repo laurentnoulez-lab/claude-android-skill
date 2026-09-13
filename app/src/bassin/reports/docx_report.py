@@ -247,10 +247,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     if dossier.table:
         table = dossier.table
         doc.saut_de_page()
-        doc.titre1(f"{suivant()}. Pluies absorbées sans débordement (table QDF)")
+        doc.titre1(f"{suivant()}. Pluies absorbées sans débordement")
         doc.paragraphe(
-            "Volume requis [m³] par pluie ; fond vert : absorbe par l'ouvrage, orange : limite "
-            "(plus de 95 % de la capacité), rouge : débordement."
+            f"{dossier.titre_table_volumes}. Volume requis [m³] par pluie ; fond vert : absorbé "
+            "par l'ouvrage, orange : limite (plus de 95 % de la capacité), rouge : débordement."
         )
         entete = ["Durée"] + [f"{rp} a" for rp in table.periodes_retour]
         lignes = [entete]

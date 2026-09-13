@@ -290,6 +290,25 @@ class SourcePluie:
     def libelle_source(self) -> str:
         return "Montana (formule continue)" if self.source == SOURCE_MONTANA else "QDF (valeurs tabulées)"
 
+    @property
+    def titre_tableau_hauteurs(self) -> str:
+        """Intitulé d'un tableau de hauteurs, qui doit nommer sa vraie source.
+
+        Un tableau de valeurs issues de Montana présenté sous le titre « Tables
+        QDF » est indéfendable dans une note de calcul : à 6 h et T = 25 ans,
+        l'écart atteint 5 % sur Liège. Les deux sources ne sont pas
+        interchangeables et le titre doit dire laquelle a servi.
+        """
+        if self.source == SOURCE_MONTANA:
+            return "Hauteurs de pluie — formule de Montana"
+        return "Tables QDF (IRM) — valeurs tabulées"
+
+    @property
+    def titre_tableau_volumes(self) -> str:
+        """Idem pour le tableau des volumes requis par l'ouvrage."""
+        origine = "Montana" if self.source == SOURCE_MONTANA else "tables QDF"
+        return f"Volumes requis — source : {origine}"
+
 
 def table_qdf_mm(ins: str, source: str = SOURCE_QDF) -> List[List[Optional[float]]]:
     """Tableau QDF en mm : lignes = durées normalisées, colonnes = périodes de retour."""

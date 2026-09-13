@@ -25,6 +25,7 @@ class VueTableQDF(Vue):
         table = self.etat.table_acceptation
         assert table is not None
         p = self.etat.projet
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
         mode = getattr(self, "_mode", "volume")
 
         def changer_mode(e: ft.ControlEvent) -> None:
@@ -137,7 +138,7 @@ class VueTableQDF(Vue):
                 f"{self.etat.projet.commune_nom}",
             ),
             theme.section(
-                "Table QDF de l'ouvrage",
+                f"{src.titre_tableau_volumes} — ouvrage encodé",
                 ft.Column([selecteur, ft.Container(tableau, padding=ft.padding.only(top=8))], spacing=10),
                 ft.Icons.GRID_ON,
                 "Lignes : durée de pluie · Colonnes : période de retour",
