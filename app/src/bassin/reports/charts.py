@@ -254,6 +254,17 @@ def format_duree_courte(minutes: float, decimale: bool = False) -> str:
     return fr(f"{minutes / 1440:.{chiffres}f}") + "j"
 
 
+def axe_est_temporel(axe_x: str) -> bool:
+    """Dit si l'abscisse porte un temps, et s'étiquette donc en min, h ou j.
+
+    L'accent compte. Faute de le prévoir, le rendu PNG — celui qu'emporte le
+    rapport Word — graduait « Durée de pluie » en minutes brutes et superposait
+    « 10000 » et « 20000 », là où le PDF écrivait « 17h » et « 1j » sur le même
+    graphique. Les trois traceurs posent désormais la question ici.
+    """
+    return axe_x.lower().startswith(("duree", "durée", "temps"))
+
+
 def etiquettes_de_temps(valeurs: Sequence[float]) -> List[str]:
     """Étiquette les graduations d'un axe de temps, sans jamais deux fois la même.
 
@@ -335,7 +346,7 @@ def rendre_png(graphique: Graphique, largeur: int = 900, hauteur: int = 460, ech
             d *= 10
     else:
         ticks_x = graduations(xmin, xmax, 6)
-    duree_en_x = graphique.axe_x.lower().startswith("duree") or graphique.axe_x.lower().startswith("temps")
+    duree_en_x = axe_est_temporel(graphique.axe_x)
     libelles_x = (etiquettes_de_temps(ticks_x) if duree_en_x
                   else [format_nombre(v) for v in ticks_x])
     for v, etiquette in zip(ticks_x, libelles_x):

@@ -404,6 +404,33 @@ class TestGraphiques(unittest.TestCase):
         self.assertEqual(charts.etiquettes_de_temps(claires),
                          ["0min", "1j", "2j", "3j"])
 
+    def test_un_axe_de_temps_se_reconnait_malgre_l_accent(self):
+        """« Durée de pluie » porte un temps autant que « Temps [min] ».
+
+        Le rendu PNG, celui qu'emporte le rapport Word, testait « duree » sans
+        accent : il graduait donc cet axe en minutes brutes et superposait
+        « 10000 » et « 20000 », là où le PDF écrivait « 17h » et « 1j » sur le
+        même graphique.
+        """
+        for axe in ("Durée de pluie", "Duree de pluie", "Temps [min]", "temps"):
+            with self.subTest(axe=axe):
+                self.assertTrue(charts.axe_est_temporel(axe))
+        for axe in ("Charge [m]", "Volume [m³]", ""):
+            with self.subTest(axe=axe):
+                self.assertFalse(charts.axe_est_temporel(axe))
+
+    def test_le_png_gradue_la_duree_de_pluie_comme_le_pdf(self):
+        """Les deux rapports montrent le même graphique : mêmes graduations."""
+        g = charts.Graphique(
+            axe_x="Durée de pluie", axe_y="Volume [m³]", x_log=True,
+            series=[charts.Serie("V", [(10, 20), (600, 110), (43200, 5)], charts.BLEU)],
+        )
+        ticks = [10.0, 600.0, 43200.0]
+        self.assertEqual(charts.etiquettes_de_temps(ticks), ["10min", "10h", "30j"])
+        # Le PNG se contente d'exister ; ce qui compte est la voie prise.
+        self.assertTrue(charts.axe_est_temporel(g.axe_x))
+        self.assertTrue(charts.rendre_png(g, 600, 300).startswith(b"\x89PNG"))
+
     def test_les_trois_traceurs_partagent_cet_etiquetage(self):
         """PNG, PDF et écran dessinent le même axe : un seul point de vérité.
 

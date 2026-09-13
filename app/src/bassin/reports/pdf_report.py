@@ -47,7 +47,7 @@ def dessiner_graphique(pdf: Pdf, graphique: charts.Graphique, hauteur: float = 1
     xmin, xmax, ymin, ymax = charts.bornes(graphique)
     cadre = charts.Cadre(int(x0), int(y0), int(x1), int(y1), xmin, xmax, ymin, ymax, graphique.x_log)
 
-    duree_en_x = graphique.axe_x.lower().startswith(("duree", "durée", "temps"))
+    duree_en_x = charts.axe_est_temporel(graphique.axe_x)
     if graphique.x_log:
         ticks: List[float] = []
         d = 10 ** math.floor(math.log10(max(xmin, 1e-9)))

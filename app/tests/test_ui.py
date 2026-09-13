@@ -271,7 +271,8 @@ class TestConstructionDesVues(unittest.TestCase):
 
     def test_les_info_bulles_des_courbes_sont_francaises(self):
         """Flet affiche sinon la valeur brute, avec un point décimal."""
-        self.assertEqual(graphiques._bulle("Volume stocké", 1234.5), "Volume stocké : 1234,50")
+        self.assertEqual(graphiques._bulle("Volume stocké", 500.0, 1234.5, "Temps [min]"),
+                         "Volume stocké : 1234,50 — Temps : 8 h 20")
         vue = VueBassin(self.page, self.etat)
         vue.afficher()
         bulles = [p.tooltip for serie in _rechercher(vue.corps, ft.LineChart)
@@ -279,6 +280,34 @@ class TestConstructionDesVues(unittest.TestCase):
         self.assertTrue(bulles)
         for bulle in bulles:
             self.assertIsNone(re.search(r"\d\.\d", bulle), f"« {bulle} » garde un point décimal")
+
+    def test_les_info_bulles_donnent_aussi_l_abscisse(self):
+        """Lire une valeur sur une courbe suppose de savoir à quel instant.
+
+        Un pic de remplissage ne s'interprète pas sans l'heure où il tombe.
+        L'abscisse se lit dans l'unité de l'axe — min, h ou j pour un temps,
+        l'unité du libellé sinon — et jamais en minutes brutes.
+        """
+        cas = [
+            ("Temps [min]", 500.0, "Temps : 8 h 20"),
+            ("Temps [min]", 45.0, "Temps : 45 min"),
+            ("Durée de pluie", 2880.0, "Durée de pluie : 2 j"),
+            ("Charge [m]", 1.0, "Charge : 1,0 m"),
+        ]
+        for axe, x, attendu in cas:
+            with self.subTest(axe=axe):
+                self.assertIn(attendu, graphiques._bulle("Débit", x, 3.0, axe))
+
+        # Et sur un vrai graphique de l'application, pas seulement en théorie.
+        vue = VueBassin(self.page, self.etat)
+        vue.afficher()
+        bulles = [p.tooltip for serie in _rechercher(vue.corps, ft.LineChart)
+                  for d in serie.data_series for p in d.data_points if p.tooltip]
+        self.assertTrue(bulles)
+        for bulle in bulles:
+            self.assertIn(" — ", bulle, f"« {bulle} » ne donne pas son abscisse")
+            self.assertNotRegex(bulle.split(" — ")[1], r":\s*\d+(,\d+)?$",
+                                f"« {bulle} » donne son abscisse sans unité")
 
     def test_le_seuil_de_l_ajutage_s_encode_au_dimensionnement(self):
         """Le scénario à orifice surélevé exige un seuil : il doit être saisissable ici."""
