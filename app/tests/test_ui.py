@@ -903,6 +903,31 @@ class TestSyntheseGraphique(unittest.TestCase):
         self.assertTrue(vue.construire())
 
 
+class TestRafraichisseurSansFils(unittest.TestCase):
+    """Sous Pyodide, `thread.start()` refuse : l'écran ne doit pas rester périmé."""
+
+    def test_un_minuteur_impossible_recalcule_tout_de_suite(self):
+        from bassin.ui.rafraichissement import Rafraichisseur
+
+        class _MinuteurRefuse:
+            def __init__(self, delai, action):
+                self.action = action
+
+            def start(self):
+                raise RuntimeError("can't start new thread")
+
+            def cancel(self):
+                pass
+
+        appels = []
+        r = Rafraichisseur(lambda: appels.append(1), minuteur=_MinuteurRefuse)
+        r.demander()
+        self.assertEqual(appels, [1], "le recalcul doit se faire à défaut de minuteur")
+        self.assertFalse(r.en_attente)
+        r.demander()
+        self.assertEqual(appels, [1, 1])
+
+
 class TestMiseEnPage(unittest.TestCase):
     """Aucune étiquette ne doit en recouvrir une autre, ni déborder de sa boîte.
 
