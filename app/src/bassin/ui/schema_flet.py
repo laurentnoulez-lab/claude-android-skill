@@ -86,26 +86,17 @@ def _segments(fleche: schema_module.Fleche, echelle: float) -> List[ft.Control]:
             opacity=0.55 if fleche.pointille else 0.85,
             border_radius=1,
         ))
-    # Pointe de flèche à l'arrivée, et libellé posé sur le coude vertical.
+    # Pointe de flèche à l'arrivée. Ce que transporte le raccordement se lit en
+    # info-bulle : posé sur le schéma, le libellé finissait par chevaucher une
+    # boîte dès que le couloir entre deux colonnes était étroit. La légende sous
+    # le schéma dit déjà l'essentiel, et le rapport PDF fait de même.
     if fleche.points:
         x, y = fleche.points[-1]
         controles.append(ft.Container(
             content=ft.Icon(ft.Icons.PLAY_ARROW, size=max(9.0, 11 * echelle), color=couleur),
             left=x * echelle - 6 * echelle,
             top=y * echelle - 6 * echelle,
-        ))
-    if fleche.libelle and len(fleche.points) >= 3:
-        x = fleche.points[1][0]
-        y = (fleche.points[1][1] + fleche.points[2][1]) / 2.0
-        largeur = 86 * echelle
-        controles.append(ft.Container(
-            content=ft.Text(fleche.libelle, size=max(7.0, 8 * echelle), color=theme.GRIS,
-                            max_lines=2, no_wrap=False,
-                            overflow=ft.TextOverflow.ELLIPSIS,
-                            text_align=ft.TextAlign.CENTER),
-            left=x * echelle - largeur / 2,
-            top=y * echelle - 20 * echelle,
-            width=largeur,
+            tooltip=fleche.libelle or None,
         ))
     return controles
 
