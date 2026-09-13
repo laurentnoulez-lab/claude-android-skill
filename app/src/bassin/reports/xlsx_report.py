@@ -73,18 +73,34 @@ def _largeurs(ws, largeurs: Dict[str, int]) -> None:
 
 
 def _grille_durees(dossier: Dossier) -> List[float]:
-    """Durées balayées par le classeur, calquées sur celles de l'application.
+    """Durées balayées par le classeur, **sous-ensemble** de celles de l'application.
 
     Avec les tables QDF, seules les 19 durées normalisées ont un sens : ajouter
     une grille logarithmique ferait retenir au classeur une durée critique
     interpolée, différente de celle affichée par l'application.
+
+    Avec Montana, le classeur ne peut pas balayer les 17 280 durées de
+    l'application sans devenir illisible ; il en échantillonne une centaine.
+    Mais un échantillon *libre* tombe parfois plus près de l'optimum continu que
+    le meilleur multiple de 5 : le `MAX()` du classeur retenait alors une durée
+    critique — 199,1 min contre 195 — que l'application n'avait jamais affichée,
+    et deux durées différentes circulaient dans un même dossier. Chaque durée
+    échantillonnée est donc ramenée sur la grille de l'application. Le maximum du
+    classeur est dès lors pris sur un sous-ensemble de celui de l'application :
+    il ne peut plus le dépasser, et comme les durées critiques y figurent, les
+    deux coïncident exactement.
     """
     durees = set(float(d) for d in rainfall.QDF_DURATIONS_MIN)
     src = rainfall.SourcePluie(dossier.projet.commune_ins, dossier.projet.periode_retour,
                                dossier.projet.source_pluie)
     if not src.durees_tabulees:
+        grille = src.durees_de_balayage()
+        pas = grille[1] - grille[0] if len(grille) > 1 else 5.0
+        origine = grille[0]
         for i in range(101):
-            durees.add(round(10 * (8640 ** (i / 100.0)), 1))
+            brute = 10 * (8640 ** (i / 100.0))
+            rangs = round((brute - origine) / pas)
+            durees.add(origine + rangs * pas)
         for r in dossier.resultats.values():
             if r.duree_critique_min:
                 durees.add(float(r.duree_critique_min))

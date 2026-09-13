@@ -155,6 +155,64 @@ class TestExcel(BaseRapport):
         self.assertAlmostEqual(valeur("AJUTAGE", "B10"), self.dossier.orifice.diametre_mm, places=6)
 
 
+class TestGrilleDureesDuClasseur(unittest.TestCase):
+
+    """Une seule durée critique doit circuler dans tout le dossier.
+
+    Le classeur ne peut pas balayer les 17 280 durées de l'application sans
+    devenir illisible : il en échantillonne une centaine. Un échantillon libre
+    tombe parfois plus près de l'optimum continu que le meilleur multiple de 5,
+    et le `MAX()` du classeur retenait alors une durée critique que
+    l'application n'avait jamais affichée — deux valeurs dans un même dossier,
+    indéfendables devant un pouvoir adjudicateur.
+    """
+
+    @staticmethod
+    def _volume(src, t, s_ponderee, q_sortie):
+        """V(t) tel que l'écrit la feuille « Pluie de projet »."""
+        return max(src.hauteur(t) * s_ponderee / 1000.0 - q_sortie * t * 60.0 / 1000.0, 0.0)
+
+    def test_la_grille_du_classeur_est_incluse_dans_celle_du_moteur(self):
+        """C'est l'inclusion qui garantit l'accord, pas un réglage heureux."""
+        p = projet_complet()
+        p.source_pluie = "montana"
+        dossier = mod_dossier.construire(p)
+        grille_classeur = xlsx_report._grille_durees(dossier)
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
+        grille_moteur = set(src.durees_de_balayage())
+        hors = [d for d in grille_classeur if d not in grille_moteur]
+        self.assertEqual(hors, [], "le classeur balaie des durées que le moteur ignore")
+        self.assertGreater(len(grille_classeur), 80, "grille trop pauvre pour tracer une courbe")
+
+    def test_le_classeur_retient_la_meme_duree_critique_que_le_moteur(self):
+        """Sur de vraies affaires : le défaut ne se manifestait qu'une fois sur six.
+
+        La grille est demandée à `_grille_durees`, pas recalculée ici : un test
+        qui refait le calcul de la production ne vérifie que lui-même.
+        """
+        desaccords = []
+        for ins, commune in (("62063", "Liège"), ("63013", "Bütgenbach")):
+            for periode in (2, 25, 100):
+                for ajutage in (0.5, 2.0, 5.0, 10.0):
+                    p = projet_complet()
+                    p.commune_ins, p.commune_nom = ins, commune
+                    p.periode_retour = periode
+                    p.source_pluie = "montana"
+                    p.debit_ajutage_ls = ajutage
+                    p.surface_infiltration_m2 = 0.0
+                    dossier = mod_dossier.construire(p)
+                    resultat = dossier.resultats[mod_dossier.ORDRE_SCENARIOS[0]]
+                    src = rainfall.SourcePluie(ins, periode, "montana")
+                    q_sortie = resultat.debit_sortant_ls
+                    retenue = max(xlsx_report._grille_durees(dossier),
+                                  key=lambda t: self._volume(src, t, p.aire_ponderee_m2, q_sortie))
+                    if abs(retenue - resultat.duree_critique_min) > 1e-9:
+                        desaccords.append(
+                            f"{commune} T={periode} ajutage={ajutage} : "
+                            f"classeur {retenue} min, application {resultat.duree_critique_min} min")
+        self.assertEqual(desaccords, [], "\n".join([""] + desaccords))
+
+
 class TestExcelQDF(unittest.TestCase):
     """Avec les tables QDF, le classeur doit balayer les mêmes durées que l'application."""
 
