@@ -24,7 +24,9 @@ from ..core.model import (
     SCENARIO_SEUIL,
     SCENARIO_TEMPORISATION,
 )
-from .dossier import Dossier, ORDRE_SCENARIOS
+from . import schema as mod_schema
+from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau,
+                      synthese_simulation_systeme, synthese_versants)
 
 BLEU = "1D4ED8"
 BLEU_PALE = "DBEAFE"
@@ -99,7 +101,8 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     ws = wb.active
     ws.title = "Projet"
     _largeurs(ws, {"A": 46, "B": 16, "C": 16, "D": 18, "E": 30})
-    _titre(ws, "A1", "DIMENSIONNEMENT D'UN BASSIN D'ORAGE", 16)
+    _titre(ws, "A1", "DIMENSIONNEMENT D'UN RÉSEAU DE BASSINS D'ORAGE"
+           if dossier.reseau_multiple else "DIMENSIONNEMENT D'UN BASSIN D'ORAGE", 16)
     ws["A2"] = "Méthode rationnelle - pluies statistiques du GTI (Région wallonne)"
     ws["A2"].font = Font(italic=True, color="475569")
 
@@ -111,6 +114,9 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     _label(ws, 9, "Code INS", projet.commune_ins)
     _label(ws, 10, "Période de retour", projet.periode_retour, "ans")
     _label(ws, 11, "Source des pluies", dossier.libelle_source)
+    if dossier.reseau_multiple:
+        _label(ws, 12, "Ouvrage détaillé par ce classeur", dossier.ouvrage_courant.nom,
+               gras=True, fond=BLEU_PALE)
 
     _titre(ws, "A13", "1. Surfaces incidentes", 12)
     _entete(ws, 14, ["Type d'occupation du sol", "Coeff. ruiss. [-]", "Surface [m²]",
@@ -216,6 +222,8 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     for nom, ref in noms.items():
         wb.defined_names.add(DefinedName(nom, attr_text=ref))
 
+    if dossier.reseau_multiple:
+        _feuille_reseau(wb, dossier)
     _feuille_pluie(wb, dossier)
     _feuille_scenarios(wb, dossier)
     _feuille_bassin(wb, dossier)
@@ -540,6 +548,91 @@ def _feuille_statistiques(wb: Workbook, dossier: Dossier) -> None:
                 c.border = _BORDURE
                 if rainfall.RETURN_PERIODS[j] == projet.periode_retour:
                     c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+
+
+def _tableau(ws, ligne: int, lignes: Sequence[Sequence[str]],
+             fonds: Optional[Dict[int, str]] = None) -> int:
+    """Écrit un tableau (entête + lignes) et renvoie la première ligne libre."""
+    _entete(ws, ligne, list(lignes[0]))
+    fonds = fonds or {}
+    for i, valeurs in enumerate(lignes[1:], start=1):
+        for j, valeur in enumerate(valeurs):
+            # Les nombres sont écrits comme nombres : le classeur doit rester
+            # exploitable, pas seulement lisible.
+            c = ws.cell(row=ligne + i, column=1 + j, value=_nombre_ou_texte(valeur))
+            c.border = _BORDURE
+            if i in fonds:
+                c.fill = PatternFill("solid", fgColor=fonds[i])
+    return ligne + len(lignes) + 1
+
+
+def _nombre_ou_texte(valeur: str):
+    try:
+        return float(valeur)
+    except (TypeError, ValueError):
+        return valeur
+
+
+def _feuille_reseau(wb: Workbook, dossier: Dossier) -> None:
+    """Feuille « Réseau » : raccordements, bassins versants, ouvrages, simulation.
+
+    Les formules vives des autres feuilles ne peuvent pas reproduire le réseau :
+    une cellule ne sait pas intégrer pas à pas l'hydrogramme d'un ouvrage amont.
+    Cette feuille rapporte donc les résultats calculés par l'application, et le
+    dit explicitement.
+    """
+    systeme = dossier.systeme
+    ws = wb.create_sheet("Réseau")
+    _largeurs(ws, {"A": 34, "B": 26, "C": 22, "D": 16, "E": 16, "F": 16, "G": 16, "H": 16,
+                   "I": 16, "J": 16, "K": 16})
+    _titre(ws, "A1", "SYNTHÈSE DU RÉSEAU", 16)
+    ws["A2"] = (f"{systeme.commune_nom} · pluie de projet T = {systeme.periode_retour} ans · "
+                f"vidange maximale admise {systeme.temps_vidange_max_h:.0f} h")
+    ws["A2"].font = Font(italic=True, color="475569")
+    ws["A3"] = ("Valeurs calculées par l'application : l'apport d'un ouvrage amont s'intègre pas "
+                "à pas et aucune formule de cellule ne sait le reproduire.")
+    ws["A3"].font = Font(italic=True, color="B45309")
+
+    ligne = 5
+    _titre(ws, f"A{ligne}", "1. Raccordements", 12)
+    ligne += 1
+    for texte in mod_schema.arbre_texte(systeme, dossier.fiches):
+        ws.cell(row=ligne, column=1, value=texte)
+        ligne += 1
+    ligne += 1
+
+    _titre(ws, f"A{ligne}", "2. Bassins versants", 12)
+    ligne = _tableau(ws, ligne + 1, synthese_versants(dossier),
+                     {len(systeme.bassins_versants) + 1: BLEU_PALE})
+
+    _titre(ws, f"A{ligne}", "3. Dimensionnement de chaque bassin d'orage", 12)
+    fonds = {i: ROUGE_PALE for i, fiche in enumerate(dossier.fiches, start=1)
+             if not fiche.suffisant and fiche.volume_encode_m3 > 0}
+    ligne = _tableau(ws, ligne + 1, synthese_reseau(dossier), fonds)
+
+    sim = dossier.simulation_systeme
+    if sim is not None:
+        _titre(ws, f"A{ligne}", "4. Simulation du système complet", 12)
+        ligne += 1
+        ws.cell(row=ligne, column=1,
+                value=(f"Averse la plus défavorable : {sim.hauteur_mm:.1f} mm en "
+                       f"{sim.duree_min:.0f} min, T = {sim.periode_retour} ans"))
+        ligne += 1
+        couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
+        fonds = {i: couleurs[res.statut] for i, (_o, res) in enumerate(sim.resultats, start=1)}
+        ligne = _tableau(ws, ligne, synthese_simulation_systeme(dossier), fonds)
+        _label(ws, ligne, "Volume stocké par le réseau", sim.volume_stocke_m3, "m³", "0.0")
+        _label(ws, ligne + 1, "Débordement total", sim.volume_debordement_m3, "m³", "0.00",
+               fond=ROUGE_PALE if sim.ouvrages_en_debordement else VERT_PALE)
+        _label(ws, ligne + 2, "Vidange la plus longue", sim.temps_vidange_max_h, "h", "0.0")
+        ligne += 4
+
+    anomalies = systeme.anomalies()
+    if anomalies:
+        _titre(ws, f"A{ligne}", "Anomalies du réseau", 12)
+        for i, anomalie in enumerate(anomalies, start=1):
+            c = ws.cell(row=ligne + i, column=1, value=anomalie)
+            c.font = Font(color="B45309")
 
 
 def ecrire(dossier: Dossier, chemin: str) -> str:

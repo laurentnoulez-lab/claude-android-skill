@@ -410,3 +410,175 @@ class TestGraphiques(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestRapportDeReseau(unittest.TestCase):
+    """Les trois formats documentent le réseau, et disent la même chose."""
+
+    @classmethod
+    def setUpClass(cls):
+        from bassin.core import exemple
+
+        cls.systeme = exemple.systeme_demonstration()
+        cls.dossier = mod_dossier.construire(
+            cls.systeme.courant.etude, cls.systeme.courant.scenario, systeme=cls.systeme)
+        cls.repertoire = tempfile.mkdtemp(prefix="hydrobassin_reseau_")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repertoire, ignore_errors=True)
+
+    def chemin(self, nom: str) -> str:
+        return os.path.join(self.repertoire, nom)
+
+    def _texte_pdf(self, chemin: str) -> str:
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        morceaux = re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))
+        octal = re.compile(r"\\(\d{3})")
+        return "\n".join(octal.sub(lambda m: chr(int(m.group(1), 8)), t[1:-1])
+                         for t in morceaux)
+
+    # -- le dossier ----------------------------------------------------
+    def test_le_dossier_porte_le_reseau(self):
+        d = self.dossier
+        self.assertTrue(d.reseau_multiple)
+        self.assertEqual(len(d.fiches), 2)
+        self.assertIsNotNone(d.simulation_systeme)
+        self.assertEqual(d.ouvrage_courant.id, self.systeme.ouvrage_courant)
+
+    def test_un_projet_a_un_seul_ouvrage_n_a_pas_de_section_reseau(self):
+        simple = mod_dossier.construire(projet_complet())
+        self.assertFalse(simple.reseau_multiple)
+        texte = self._texte_pdf(pdf_report.ecrire(simple, self.chemin("simple.pdf")))
+        self.assertNotIn("Synthèse du réseau", texte)
+        # Et la numérotation d'origine est conservée.
+        self.assertIn("2. Pluie de projet", texte)
+
+    def test_les_tableaux_de_synthese(self):
+        versants = mod_dossier.synthese_versants(self.dossier)
+        self.assertEqual(len(versants), len(self.systeme.bassins_versants) + 2)  # entête + total
+        self.assertEqual(versants[-1][0], "TOTAL")
+        reseau = mod_dossier.synthese_reseau(self.dossier)
+        self.assertEqual(len(reseau), len(self.systeme.ouvrages) + 1)
+        simulation = mod_dossier.synthese_simulation_systeme(self.dossier)
+        self.assertEqual(len(simulation), len(self.systeme.ouvrages) + 1)
+
+    # -- PDF -----------------------------------------------------------
+    def test_le_pdf_contient_la_synthese_et_le_schema(self):
+        chemin = pdf_report.ecrire(self.dossier, self.chemin("reseau.pdf"))
+        texte = self._texte_pdf(chemin)
+        self.assertIn("Synthèse du réseau", texte)
+        for ouvrage in self.systeme.ouvrages:
+            self.assertIn(ouvrage.nom, texte)
+        for versant in self.systeme.bassins_versants:
+            self.assertIn(versant.nom, texte)
+        self.assertIn("Exutoire", texte)
+        self.assertIn("Simulation du système complet", texte)
+
+    def test_le_schema_du_pdf_est_celui_de_l_ecran(self):
+        """Même géométrie des deux côtés : une seule description du schéma."""
+        from bassin.reports import schema as mod_schema
+
+        schema = mod_schema.construire(self.systeme, self.dossier.fiches)
+        pdf = Pdf()
+        self.assertTrue(pdf_report.dessiner_schema(pdf, schema))
+        self.assertGreater(len(schema.boites), len(self.systeme.ouvrages))
+        self.assertTrue(all(b.hauteur > 0 for b in schema.boites))
+
+    def test_un_reseau_trop_grand_bascule_sur_l_arbre(self):
+        """Plutôt un arbre lisible qu'un schéma illisible."""
+        from bassin.core import reseau as coeur
+        from bassin.reports import schema as mod_schema
+
+        systeme = coeur.systeme_neuf()
+        precedent = systeme.ouvrages[0]
+        for i in range(14):
+            ouvrage = coeur.ouvrage_neuf(systeme, f"Bassin {i}")
+            ouvrage.aval_id = precedent.id
+            systeme.ouvrages.append(ouvrage)
+            precedent = ouvrage
+        systeme.synchroniser()
+        schema = mod_schema.construire(systeme)
+        pdf = Pdf()
+        self.assertFalse(pdf_report.dessiner_schema(pdf, schema))
+        lignes = mod_schema.arbre_texte(systeme)
+        self.assertGreaterEqual(len(lignes), 15)
+
+    # -- Word ----------------------------------------------------------
+    def test_le_word_decrit_le_reseau(self):
+        chemin = docx_report.ecrire(self.dossier, self.chemin("reseau.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        ET.fromstring(document)
+        self.assertIn("Synth", document)
+        self.assertIn("Raccordements", document)
+        for ouvrage in self.systeme.ouvrages:
+            self.assertIn(ouvrage.nom.replace("'", "'"), document)
+        self.assertIn("Simulation du syst", document)
+
+    # -- Excel ---------------------------------------------------------
+    def test_le_classeur_a_une_feuille_reseau(self):
+        import openpyxl
+
+        chemin = xlsx_report.ecrire(self.dossier, self.chemin("reseau.xlsx"))
+        classeur = openpyxl.load_workbook(chemin)
+        self.assertIn("Réseau", classeur.sheetnames)
+        feuille = classeur["Réseau"]
+        textes = [c.value for ligne in feuille.iter_rows()
+                  for c in ligne if isinstance(c.value, str)]
+        for ouvrage in self.systeme.ouvrages:
+            self.assertTrue(any(ouvrage.nom in t for t in textes), ouvrage.nom)
+        # Le classeur dit pourquoi ces valeurs ne sont pas des formules vives.
+        self.assertTrue(any("aucune formule de cellule" in t for t in textes))
+
+    def test_le_classeur_ecrit_des_nombres_exploitables(self):
+        """Un tableau de synthèse doit rester calculable, pas seulement lisible."""
+        import openpyxl
+
+        chemin = xlsx_report.ecrire(self.dossier, self.chemin("reseau_nombres.xlsx"))
+        feuille = openpyxl.load_workbook(chemin)["Réseau"]
+        ligne = next(l for l in feuille.iter_rows()
+                     if isinstance(l[0].value, str)
+                     and l[0].value == self.systeme.ouvrages[0].nom
+                     and isinstance(l[5].value, (int, float)))
+        fiche = [f for f in self.dossier.fiches
+                 if f.ouvrage.id == self.systeme.ouvrages[0].id][0]
+        self.assertAlmostEqual(ligne[5].value, round(fiche.volume_minimal_m3, 1), places=6)
+
+    # -- cohérence entre formats ---------------------------------------
+    def test_les_trois_formats_annoncent_les_memes_volumes(self):
+        import openpyxl
+
+        attendus = [f"{f.volume_minimal_m3:.1f}".replace(".", ",") for f in self.dossier.fiches]
+        texte_pdf = self._texte_pdf(pdf_report.ecrire(self.dossier, self.chemin("coherence.pdf")))
+        for attendu in attendus:
+            self.assertIn(attendu, texte_pdf, f"volume {attendu} absent du PDF")
+
+        chemin = docx_report.ecrire(self.dossier, self.chemin("coherence.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        for attendu in attendus:
+            self.assertIn(attendu, document, f"volume {attendu} absent du Word")
+
+        feuille = openpyxl.load_workbook(
+            xlsx_report.ecrire(self.dossier, self.chemin("coherence.xlsx")))["Réseau"]
+        nombres = [c.value for ligne in feuille.iter_rows()
+                   for c in ligne if isinstance(c.value, (int, float))]
+        for fiche in self.dossier.fiches:
+            self.assertTrue(
+                any(abs(n - round(fiche.volume_minimal_m3, 1)) < 1e-6 for n in nombres),
+                f"volume de « {fiche.nom} » absent du classeur")
+
+    def test_virgule_decimale_dans_la_section_reseau(self):
+        titre = re.compile(r"^\d+(?:\.\d+)* ")
+        texte = self._texte_pdf(pdf_report.ecrire(self.dossier, self.chemin("virgule.pdf")))
+        fautifs = [t for t in texte.split("\n")
+                   if re.search(r"\d\.\d", t) and not titre.match(t.strip())]
+        self.assertEqual(fautifs, [])

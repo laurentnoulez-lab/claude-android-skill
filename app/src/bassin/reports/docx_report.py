@@ -6,9 +6,10 @@ from typing import List, Sequence
 
 from ..core import hydro, rainfall
 from ..core.model import LIBELLES_SCENARIOS
-from . import charts
+from . import charts, schema as mod_schema
 from .docx_writer import Cellule, DocxBuilder
-from .dossier import Dossier, ORDRE_SCENARIOS, synthese_scenarios
+from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau, synthese_scenarios,
+                      synthese_simulation_systeme, synthese_versants)
 
 VERT = "DCFCE7"
 ORANGE = "FEF3C7"
@@ -23,7 +24,8 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     doc = DocxBuilder(titre=f"Bassin d'orage - {p.commune_nom}", auteur=p.auteur)
 
     doc.titre_principal(
-        "Dimensionnement d'un bassin d'orage",
+        "Dimensionnement d'un réseau de bassins d'orage" if dossier.reseau_multiple
+        else "Dimensionnement d'un bassin d'orage",
         "Méthode rationnelle - pluies statistiques du GTI (Région wallonne)",
     )
     doc.tableau(
@@ -32,7 +34,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
             ["Localisation", p.localisation or "-", "Période de retour", f"{p.periode_retour} ans"],
             ["Auteur", p.auteur or "-", "Source des pluies", dossier.libelle_source],
             ["Date", dossier.date, "Scénario retenu", LIBELLES_SCENARIOS[dossier.scenario_principal]],
-        ],
+        ] + ([["Ouvrage détaillé", dossier.ouvrage_courant.nom, "Composition du projet",
+               f"{len(dossier.systeme.bassins_versants)} bassins versants, "
+               f"{len(dossier.systeme.ouvrages)} bassins d'orage"]]
+             if dossier.reseau_multiple else []),
         largeurs=[3.2, 5.0, 3.4, 4.4],
         entete=False,
         taille=18,
@@ -45,9 +50,21 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         fond=BLEU if res.conforme else ROUGE,
     )
 
+    # Les sections se numérotent au fil de l'écriture : la synthèse du réseau
+    # n'apparaît que pour un projet à plusieurs ouvrages.
+    rang = {"n": 1}
+
+    def suivant() -> int:
+        rang["n"] += 1
+        return rang["n"]
+
+    def numero() -> int:
+        return rang["n"]
+
     # 1. Donnees d'entree
     doc.titre1("1. Données d'entrée")
-    doc.titre2("1.1 Surfaces incidentes")
+    doc.titre2("1.1 Surfaces raccordées à « " + dossier.ouvrage_courant.nom + " »"
+               if dossier.reseau_multiple else "1.1 Surfaces incidentes")
     lignes: List[Sequence] = [["Type d'occupation du sol", "Coeff. [-]", "Surface [m²]", "Surface pondérée [m²]"]]
     for s in p.surfaces_non_vides():
         lignes.append([s.libelle, f"{s.coefficient:.2f}", f"{s.aire_m2:.0f}", f"{s.aire_ponderee_m2:.1f}"])
@@ -111,7 +128,10 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 f"{p.debit_fuite_admissible_ls:.3f} l/s.", puce=True)
 
     # 2. Pluie de projet
-    doc.titre1("2. Pluie de projet")
+    if dossier.reseau_multiple:
+        _section_reseau(doc, dossier, suivant())
+
+    doc.titre1(f"{suivant()}. Pluie de projet")
     if rainfall.a_donnees_montana(p.commune_ins) and p.source_pluie == rainfall.SOURCE_MONTANA:
         a1, b1, a2, b2, a3, b3 = rainfall.montana_coeffs(p.commune_ins, p.periode_retour)
         doc.paragraphe("Formule de Montana : i [mm/h] = a x t[min] ^ (-b)")
@@ -138,7 +158,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     )
 
     # 3. Scenarios
-    doc.titre1("3. Comparaison des scénarios")
+    doc.titre1(f"{suivant()}. Comparaison des scénarios")
     doc.paragraphe(
         "Méthode rationnelle : V(t) = h(t) x S_pondérée / 1000 - Q_sortie x t x 60 / 1000. "
         "Le volume retenu est le maximum sur l'ensemble des durées de pluie."
@@ -156,7 +176,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                       + charts.legende_texte(dossier.graphique_dimensionnement()))
 
     if res.alertes or res.messages:
-        doc.titre2("3.1 Observations")
+        doc.titre2(f"{numero()}.1 Observations")
         for a in res.alertes:
             doc.paragraphe(a, puce=True, couleur="B45309")
         for m in res.messages:
@@ -167,7 +187,8 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         sim = dossier.simulation
         b = p.bassin
         doc.saut_de_page()
-        doc.titre1("4. Vérification de l'ouvrage")
+        doc.titre1(f"{suivant()}. Vérification de l'ouvrage"
+                   + (f" — {dossier.ouvrage_courant.nom}" if dossier.reseau_multiple else ""))
         doc.tableau(
             [
                 ["Caractéristique", "Valeur", "Unité"],
@@ -183,7 +204,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         )
         amont = p.amont
         if amont.actif:
-            doc.titre2("4.1 Apport du bassin d'orage amont")
+            doc.titre2(f"{numero()}.1 Apport du bassin d'orage amont")
             doc.tableau(
                 [
                     ["Grandeur", "Valeur", "Unité"],
@@ -196,7 +217,8 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 largeurs=[9.0, 4.0, 3.0],
             )
             doc.paragraphe(sim.commentaire_amont, puce=True)
-        doc.titre2("4.2 Événement critique simule" if p.amont.actif else "4.1 Événement critique simule")
+        doc.titre2(f"{numero()}." + ("2" if p.amont.actif else "1")
+                   + " Événement critique simulé")
         doc.tableau(
             [
                 ["Grandeur", "Valeur"],
@@ -225,7 +247,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     if dossier.table:
         table = dossier.table
         doc.saut_de_page()
-        doc.titre1("5. Pluies absorbées sans débordement (table QDF)")
+        doc.titre1(f"{suivant()}. Pluies absorbées sans débordement (table QDF)")
         doc.paragraphe(
             "Volume requis [m³] par pluie ; fond vert : absorbe par l'ouvrage, orange : limite "
             "(plus de 95 % de la capacité), rouge : débordement."
@@ -250,7 +272,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     # 6. Ajutage
     if dossier.orifice:
         o = dossier.orifice
-        doc.titre1("6. Dimensionnement de l'ajutage")
+        doc.titre1(f"{suivant()}. Dimensionnement de l'ajutage")
         doc.paragraphe("Orifice en paroi mince - formule de Torricelli : Q = Cd x A x racine(2 g h).")
         doc.tableau(
             [
@@ -274,7 +296,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                       legende="Loi de débit de l'orifice - " + charts.legende_texte(go))
 
     # 7. Conclusion
-    doc.titre1("7. Conclusion")
+    doc.titre1(f"{suivant()}. Conclusion")
     doc.paragraphe(
         f"Pour la commune de {p.commune_nom}, une période de retour de {p.periode_retour} ans et une surface "
         f"active de {p.aire_ponderee_m2:.0f} m², le scénario « {LIBELLES_SCENARIOS[dossier.scenario_principal]} » "
@@ -298,3 +320,72 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     doc.paragraphe("")
     doc.paragraphe("Signature :")
     return doc.enregistrer(chemin)
+
+
+def _cellules(lignes, fonds=None):
+    """Entête en gras, lignes signalées teintées."""
+    fonds = fonds or {}
+    sortie = [[Cellule(v, gras=True) for v in lignes[0]]]
+    for i, ligne in enumerate(lignes[1:], start=1):
+        fond = fonds.get(i)
+        sortie.append([Cellule(v, fond=fond) if fond else v for v in ligne])
+    return sortie
+
+
+def _section_reseau(doc: DocxBuilder, dossier: Dossier, numero: int) -> None:
+    """Synthèse du réseau : arbre, bassins versants, ouvrages, simulation.
+
+    Le schéma se rend ici en **arbre indenté** plutôt qu'en dessin : la police
+    5x7 du rasteur embarqué ne sait pas écrire les noms des ouvrages, et un
+    schéma sans étiquette ne dirait rien. Le rapport PDF, lui, le trace au
+    vecteur avec la vraie typographie.
+    """
+    systeme = dossier.systeme
+    doc.saut_de_page()
+    doc.titre1(f"{numero}. Synthèse du réseau")
+    schema = mod_schema.construire(systeme, dossier.fiches, dossier.simulation_systeme)
+    doc.paragraphe(schema.sous_titre, gras=True)
+    doc.titre2(f"{numero}.1 Raccordements")
+    doc.paragraphe("Un bassin versant se raccorde à un seul bassin d'orage ; un bassin d'orage "
+                   "se déverse dans un autre bassin ou à l'exutoire. Les collecteurs sont "
+                   "supposés véhiculer tout le débit et les temps de parcours sont négligés.")
+    for ligne in mod_schema.arbre_texte(systeme, dossier.fiches):
+        doc.paragraphe(ligne, taille=17)
+    for note in schema.notes:
+        doc.paragraphe(note, puce=True)
+
+    doc.titre2(f"{numero}.2 Bassins versants")
+    doc.tableau(_cellules(synthese_versants(dossier),
+                          {len(systeme.bassins_versants) + 1: BLEU}),
+                largeurs=[4.2, 4.2, 2.4, 2.0, 2.6, 2.6])
+
+    doc.titre2(f"{numero}.3 Dimensionnement de chaque bassin d'orage")
+    doc.paragraphe("Chaque ouvrage est dimensionné sur ses propres bassins versants et sur ce "
+                   "que lui restituent les ouvrages amont, tels qu'ils sont encodés. Un ouvrage "
+                   "amont sous-dimensionné surverse : son trop-plein arrive sans laminage et "
+                   "gonfle le volume à prévoir en aval.")
+    fonds = {i: ROUGE for i, fiche in enumerate(dossier.fiches, start=1)
+             if not fiche.suffisant and fiche.volume_encode_m3 > 0}
+    doc.tableau(_cellules(synthese_reseau(dossier), fonds),
+                largeurs=[3.0, 2.4, 2.2, 1.7, 1.7, 1.6, 1.6, 1.5, 1.4, 1.5, 1.4], taille=15)
+
+    sim = dossier.simulation_systeme
+    if sim is not None:
+        doc.titre2(f"{numero}.4 Simulation du système complet")
+        doc.paragraphe(
+            f"Averse la plus défavorable pour l'ensemble du réseau : {sim.hauteur_mm:.1f} mm "
+            f"en {sim.duree_min:.0f} min, T = {sim.periode_retour} ans. Chaque ouvrage a sa "
+            f"propre durée critique ; celle retenue ici est celle qui met le plus de volume "
+            f"en jeu.")
+        couleurs = {"OK": VERT, "LIMITE": ORANGE, "DEBORDEMENT": ROUGE}
+        fonds = {i: couleurs[res.statut]
+                 for i, (_o, res) in enumerate(sim.resultats, start=1)}
+        doc.tableau(_cellules(synthese_simulation_systeme(dossier), fonds),
+                    largeurs=[4.6, 2.2, 2.2, 2.2, 2.4, 2.4, 2.0, 2.0])
+        doc.encadre(
+            f"Volume stocké : {sim.volume_stocke_m3:.1f} m³   |   "
+            f"Débordement total : {sim.volume_debordement_m3:.2f} m³   |   "
+            f"Vidange la plus longue : {sim.temps_vidange_max_h:.1f} h",
+            fond=ROUGE if sim.ouvrages_en_debordement else VERT)
+    for anomalie in systeme.anomalies():
+        doc.paragraphe(anomalie, puce=True)

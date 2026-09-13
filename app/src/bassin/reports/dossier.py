@@ -203,3 +203,76 @@ def synthese_scenarios(dossier: Dossier) -> List[List[str]]:
             "-" if r.debit_ajutage_min_ls is None else f"{r.debit_ajutage_min_ls:.2f}",
         ])
     return lignes
+
+
+def synthese_versants(dossier: Dossier) -> List[List[str]]:
+    """Tableau des bassins versants du projet (entête + lignes)."""
+    lignes = [["Bassin versant", "Raccordé à", "Surface [m²]", "C moyen",
+               "Surface active [m²]", "Surface de référence [m²]"]]
+    systeme = dossier.systeme
+    if systeme is None:
+        return lignes
+    for bv in systeme.bassins_versants:
+        cible = systeme.ouvrage(bv.bassin_id)
+        lignes.append([
+            bv.nom,
+            cible.nom if cible is not None else "non raccordé",
+            f"{bv.aire_totale_m2:.0f}",
+            f"{bv.coefficient_moyen:.3f}",
+            f"{bv.aire_ponderee_m2:.1f}",
+            f"{bv.surface_reference_m2:.0f}",
+        ])
+    lignes.append(["TOTAL", "", f"{systeme.aire_totale_m2:.0f}",
+                   f"{systeme.coefficient_moyen:.3f}", f"{systeme.aire_ponderee_m2:.1f}", ""])
+    return lignes
+
+
+def synthese_reseau(dossier: Dossier) -> List[List[str]]:
+    """Tableau du dimensionnement ouvrage par ouvrage (entête + lignes)."""
+    lignes = [["Bassin d'orage", "Se déverse vers", "Surverse", "S active propre [m²]",
+               "S active amont [m²]", "V minimal [m³]", "V encodé [m³]", "Pluie critique",
+               "Vidange", "S infiltration min [m²]", "Q ajutage min [l/s]"]]
+    systeme = dossier.systeme
+    if systeme is None:
+        return lignes
+    for fiche in dossier.fiches:
+        o = fiche.ouvrage
+        aval = systeme.aval(o.id)
+        res = fiche.resultat
+        lignes.append([
+            o.nom,
+            aval.nom if aval is not None else "exutoire",
+            ("milieu naturel" if o.surverse_vers_milieu_naturel or aval is None
+             else f"vers {aval.nom}"),
+            f"{fiche.aire_ponderee_propre_m2:.0f}",
+            f"{fiche.aire_ponderee_amont_m2:.0f}",
+            f"{fiche.volume_minimal_m3:.1f}",
+            f"{fiche.volume_encode_m3:.1f}",
+            res.duree_critique_hm,
+            res.temps_vidange_hm if res.temps_vidange_h != float("inf") else "-",
+            "-" if res.surface_infiltration_min_m2 is None
+            else f"{res.surface_infiltration_min_m2:.1f}",
+            "-" if res.debit_ajutage_min_ls is None else f"{res.debit_ajutage_min_ls:.3f}",
+        ])
+    return lignes
+
+
+def synthese_simulation_systeme(dossier: Dossier) -> List[List[str]]:
+    """Tableau de la simulation d'ensemble (entête + lignes)."""
+    lignes = [["Bassin d'orage", "Pointe [m³]", "Capacité [m³]", "Remplissage [%]",
+               "Débordement [m³]", "Apport amont [m³]", "Vidange", "Statut"]]
+    sim = dossier.simulation_systeme
+    if sim is None:
+        return lignes
+    for ouvrage, res in sim.resultats:
+        lignes.append([
+            ouvrage.nom,
+            f"{res.volume_max_m3:.1f}",
+            f"{res.volume_capacite_m3:.1f}",
+            f"{res.taux_remplissage * 100:.0f}",
+            f"{res.volume_debordement_m3:.2f}",
+            f"{res.volume_amont_m3:.1f}",
+            res.temps_vidange_h_texte,
+            res.statut,
+        ])
+    return lignes
