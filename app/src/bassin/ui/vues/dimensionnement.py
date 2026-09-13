@@ -45,6 +45,25 @@ SOLS = (
 
 MM_H = 3.6e6  # 1 m/s = 3 600 000 mm/h
 
+#: Au-delà, la fiche GTI affiche « /!\ Valeur à vérifier » ('Infiltration seule'!E30).
+K_A_VERIFIER_MS = 1e-4
+
+#: Sentinelle du sélecteur : un K saisi à la main ne correspond à aucun sol listé.
+SOL_PERSONNALISE = "__personnalise__"
+
+
+def _sol_de(k_ms: float) -> str:
+    """Clé du sol correspondant à K, ou la sentinelle « valeur personnalisée ».
+
+    Le sélecteur affichait un sol dont le K n'était plus celui du projet : le
+    dossier aurait annoncé une nature de sol incompatible avec la perméabilité
+    utilisée. Quand K ne correspond à aucun sol listé, il faut le dire.
+    """
+    for cle, _, valeur in SOLS:
+        if abs(valeur - k_ms) < valeur * 0.01:
+            return cle
+    return SOL_PERSONNALISE
+
 
 class VueDimensionnement(Vue):
     titre = "Dimensionnement"
@@ -62,8 +81,15 @@ class VueDimensionnement(Vue):
             return _f
 
         def maj_k(v: float) -> None:
+            # Redessiner, et pas seulement recalculer : le libellé « Nature du
+            # sol » et l'avertissement sur K dépendent de la valeur saisie. Sans
+            # cela le sélecteur restait sur le sol précédent, et le dossier
+            # aurait annoncé une nature de sol incompatible avec le K utilisé.
+            ancien = p.k_infiltration_ms
             p.k_infiltration_ms = max(v, 0.0)
             self.etat.invalider()
+            if _sol_de(ancien) != _sol_de(p.k_infiltration_ms):
+                self.rafraichir()
 
         def maj_seuil(v: float) -> None:
             """Volume situé sous l'axe de l'ajutage (scénario à orifice surélevé)."""
@@ -81,6 +107,8 @@ class VueDimensionnement(Vue):
             self.etat.invalider()
 
         def choisir_sol(e: ft.ControlEvent) -> None:
+            if e.control.value == SOL_PERSONNALISE:
+                return  # entrée d'état, pas un choix : K se saisit dans son champ
             for cle, _, valeur in SOLS:
                 if cle == e.control.value:
                     p.k_infiltration_ms = valeur
@@ -114,15 +142,32 @@ class VueDimensionnement(Vue):
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
+        # L'alerte sur K figure déjà dans les résultats, mais un dossier se
+        # remplit champ par champ : elle doit se lire là où la valeur se tape.
+        avis: List[ft.Control] = []
+        if p.k_infiltration_ms > K_A_VERIFIER_MS:
+            avis.append(theme.message(
+                f"K = {p.k_infiltration_ms:.0e} m/s dépasse "
+                f"{K_A_VERIFIER_MS:.0e} m/s : valeur à vérifier, à justifier par un essai in "
+                "situ (le GTI signale ce seuil).", "alerte"))
+        elif p.k_infiltration_ms <= 0 and p.surface_infiltration_m2 > 0:
+            avis.append(theme.message(
+                "K nul : la surface d'infiltration encodée n'infiltre rien. Encodez la "
+                "perméabilité du fond, ou ramenez la surface d'infiltration à zéro.", "alerte"))
+
+        sol = _sol_de(p.k_infiltration_ms)
+        options = [(c, t) for c, t, _ in SOLS]
+        if sol == SOL_PERSONNALISE:
+            options.append((SOL_PERSONNALISE, "Valeur personnalisée (essai in situ)"))
+
         return ft.Column(
-            [
+            avis
+            + [
                 ft.ResponsiveRow(
                     [
                         theme.selecteur(
                             "Nature du sol (valeur indicative)",
-                            next((c for c, _, v in SOLS
-                                  if abs(v - p.k_infiltration_ms) < v * 0.01), None),
-                            [(c, t) for c, t, _ in SOLS], choisir_sol,
+                            sol, options, choisir_sol,
                             col={"xs": 12, "md": 6},
                         ),
                         champs_k[0],

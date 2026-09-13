@@ -352,6 +352,60 @@ class TestConstructionDesVues(unittest.TestCase):
         self.assertGreater(self.etat.resultats[SCENARIO_SEUIL].volume_m3,
                            self.etat.resultats[SCENARIO_MIXTE].volume_m3)
 
+    def test_un_K_invraisemblable_est_signale_la_ou_il_se_tape(self):
+        """Le GTI marque « valeur à vérifier » au-delà de 1e-4 m/s.
+
+        L'alerte existait dans les résultats, mais un dossier se remplit champ
+        par champ : elle doit se lire à côté de la valeur saisie.
+        """
+        def textes_du_formulaire():
+            vue = VueDimensionnement(self.page, self.etat)
+            vue.afficher()
+            return [c.value for c in _rechercher(vue.corps, ft.Text)]
+
+        self.etat.projet.k_infiltration_ms = 1e-5
+        self.etat.invalider()
+        self.assertFalse(any("à vérifier" in (t or "") for t in textes_du_formulaire()),
+                         "un K courant ne doit pas déclencher d'avertissement")
+
+        self.etat.projet.k_infiltration_ms = 5e-4
+        self.etat.invalider()
+        self.assertTrue(any("à vérifier" in (t or "") and "essai in situ" in (t or "")
+                            for t in textes_du_formulaire()),
+                        "K = 5e-4 m/s passe sans avertissement au point de saisie")
+
+    def test_un_K_sans_sol_correspondant_ne_garde_pas_l_ancien_libelle(self):
+        """Le dossier annoncerait une nature de sol incompatible avec le K utilisé."""
+        from bassin.ui.vues.dimensionnement import SOL_PERSONNALISE, _sol_de
+
+        self.assertEqual(_sol_de(1e-5), "1e-5")
+        self.assertEqual(_sol_de(5e-4), SOL_PERSONNALISE)
+
+        self.etat.projet.k_infiltration_ms = 5e-4
+        self.etat.invalider()
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        listes = [d for d in _rechercher(vue.corps, ft.Dropdown)
+                  if d.label and "Nature du sol" in d.label]
+        self.assertEqual(len(listes), 1)
+        liste = listes[0]
+        self.assertEqual(liste.value, SOL_PERSONNALISE)
+        libelles = {o.key: o.text for o in liste.options}
+        self.assertIn(SOL_PERSONNALISE, libelles)
+        self.assertIn("personnalisée", libelles[SOL_PERSONNALISE])
+        # Et surtout : plus aucune liste déroulante sans valeur affichable.
+        self.assertTrue(liste.value)
+
+    def test_un_K_nul_sous_une_surface_d_infiltration_est_signale(self):
+        self.etat.projet.k_infiltration_ms = 0.0
+        self.etat.projet.surface_infiltration_m2 = 200.0
+        self.etat.invalider()
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        textes = [c.value for c in _rechercher(vue.corps, ft.Text)]
+        self.assertTrue(any("K nul" in (t or "") for t in textes),
+                        "une surface d'infiltration qui n'infiltre rien passe sans un mot")
+
     def test_graphique_flet(self):
         vue = VueDimensionnement(self.page, self.etat)
         self.assertGreater(parcourir(graphiques.construire(vue._graphique_volume(), 260)), 3)
