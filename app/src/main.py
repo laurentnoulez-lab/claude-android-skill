@@ -182,7 +182,9 @@ def main(page: ft.Page) -> None:
         systeme = etat.systeme
         ouvrages = len(systeme.ouvrages)
         detail = (f"{ouvrages} bassins · " if ouvrages > 1 else "")
-        resume.value = (
+        # Virgule décimale, ici comme partout ailleurs : le volume s'y affichait
+        # avec un point, seul endroit de l'application à le faire.
+        resume.value = theme.fr(
             f"{systeme.commune_nom} · T = {systeme.periode_retour} ans · "
             f"{systeme.aire_ponderee_m2:.0f} m² actifs · {detail}"
             f"{etat.ouvrage.nom} : {volume}"

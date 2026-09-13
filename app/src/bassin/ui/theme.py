@@ -73,9 +73,14 @@ def tuile(valeur: str, libelle: str, unite: str = "", couleur: str = BLEU,
         ft.Row(
             [
                 ft.Icon(icone, color=couleur, size=18) if icone else ft.Container(width=0),
-                ft.Text(libelle.upper(), size=11, weight=ft.FontWeight.W_600, color=GRIS),
+                # Sur tablette la tuile n'a guère plus de 190 px : un libellé un
+                # peu long y était coupé net. Il se replie sur deux lignes.
+                ft.Text(libelle.upper(), size=11, weight=ft.FontWeight.W_600, color=GRIS,
+                        expand=True, no_wrap=False, max_lines=2,
+                        overflow=ft.TextOverflow.ELLIPSIS),
             ],
             spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.START,
         ),
         ft.Row(
             [

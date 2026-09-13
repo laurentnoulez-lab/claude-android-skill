@@ -21,6 +21,9 @@ from .base import Vue
 #: Zooms proposés pour le schéma.
 ECHELLES = ((0.8, "Réduit"), (1.0, "Normal"), (1.3, "Agrandi"))
 
+#: Une liste déroulante Flet dont la valeur est la chaîne vide n'affiche rien.
+DUREE_AUTOMATIQUE = "__critique__"
+
 
 class VueSynthese(Vue):
     titre = "Synthèse"
@@ -113,8 +116,9 @@ class VueSynthese(Vue):
         )
         duree = ft.Dropdown(
             label="Durée de pluie",
-            value=str(self._duree) if self._duree else "",
-            options=[ft.dropdown.Option("", "La plus défavorable pour le système")]
+            value=str(self._duree) if self._duree else DUREE_AUTOMATIQUE,
+            options=[ft.dropdown.Option(DUREE_AUTOMATIQUE,
+                                        "La plus défavorable pour le système")]
                     + [ft.dropdown.Option(str(float(d)), libelle)
                        for d, libelle in zip(rainfall.QDF_DURATIONS_MIN,
                                              rainfall.QDF_DURATION_LABELS)],
@@ -123,7 +127,8 @@ class VueSynthese(Vue):
 
         def lancer(_=None) -> None:
             self._recurrence = int(recurrence.value)
-            self._duree = float(duree.value) if duree.value else None
+            self._duree = (None if duree.value in (DUREE_AUTOMATIQUE, "", None)
+                           else float(duree.value))
             try:
                 if self._duree is None:
                     resultat = coeur.simuler_evenement_critique(systeme, self._recurrence)

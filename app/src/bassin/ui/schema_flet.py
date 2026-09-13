@@ -97,12 +97,15 @@ def _segments(fleche: schema_module.Fleche, echelle: float) -> List[ft.Control]:
     if fleche.libelle and len(fleche.points) >= 3:
         x = fleche.points[1][0]
         y = (fleche.points[1][1] + fleche.points[2][1]) / 2.0
+        largeur = 86 * echelle
         controles.append(ft.Container(
             content=ft.Text(fleche.libelle, size=max(7.0, 8 * echelle), color=theme.GRIS,
-                            max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-            left=x * echelle - 28 * echelle,
-            top=y * echelle - 16 * echelle,
-            width=60 * echelle,
+                            max_lines=2, no_wrap=False,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            text_align=ft.TextAlign.CENTER),
+            left=x * echelle - largeur / 2,
+            top=y * echelle - 20 * echelle,
+            width=largeur,
         ))
     return controles
 

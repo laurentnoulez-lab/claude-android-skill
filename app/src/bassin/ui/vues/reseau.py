@@ -17,6 +17,11 @@ from .. import theme
 from .base import Vue
 
 
+#: Une liste déroulante Flet dont la valeur est la chaîne vide n'affiche rien :
+#: l'exutoire a donc besoin d'une valeur à lui, distincte de « non renseigné ».
+EXUTOIRE_LISTE = "__exutoire__"
+
+
 class VueReseau(Vue):
     titre = "Réseau"
     icone = ft.Icons.ACCOUNT_TREE
@@ -43,7 +48,7 @@ class VueReseau(Vue):
             ouvrage.note = e.control.value
 
         def maj_aval(e: ft.ControlEvent) -> None:
-            ouvrage.aval_id = e.control.value or ""
+            ouvrage.aval_id = "" if e.control.value == EXUTOIRE_LISTE else (e.control.value or "")
             etat.invalider()
             self.rafraichir()
 
@@ -99,7 +104,7 @@ class VueReseau(Vue):
         # Un ouvrage ne peut pas se déverser dans lui-même ni dans ce qu'il alimente :
         # les choix qui créeraient une boucle ne sont tout simplement pas proposés.
         interdits = {ouvrage.id} | {a.id for a in systeme.amonts_transitifs(ouvrage.id)}
-        options = [ft.dropdown.Option("", "Exutoire (milieu naturel)")]
+        options = [ft.dropdown.Option(EXUTOIRE_LISTE, "Exutoire (milieu naturel)")]
         options += [ft.dropdown.Option(o.id, o.nom) for o in systeme.ouvrages
                     if o.id not in interdits]
 
@@ -111,7 +116,8 @@ class VueReseau(Vue):
                     col={"xs": 12, "md": 4},
                 ),
                 ft.Container(
-                    ft.Dropdown(label="Se déverse vers", value=ouvrage.aval_id or "",
+                    ft.Dropdown(label="Se déverse vers",
+                                value=ouvrage.aval_id or EXUTOIRE_LISTE,
                                 options=options, on_change=maj_aval, dense=True,
                                 border_radius=10),
                     col={"xs": 12, "md": 4},

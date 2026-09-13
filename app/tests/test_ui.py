@@ -974,6 +974,50 @@ class TestMiseEnPage(unittest.TestCase):
                 self.assertTrue(texte.max_lines or texte.overflow,
                                 f"texte non borné dans le schéma : {texte.value!r}")
 
+    def test_aucune_liste_deroulante_ne_reste_vide(self):
+        """Une valeur de liste égale à la chaîne vide n'affiche rien dans Flet.
+
+        Le champ paraît alors non renseigné alors qu'il l'est : « Se déverse
+        vers l'exutoire » s'affichait comme une case vide.
+        """
+        etat = self._etat_touffu()
+        for classe in VUES:
+            vue = classe(PageFactice(), etat)
+            for controle in vue.construire():
+                for liste in _rechercher(controle, ft.Dropdown):
+                    if not liste.options:
+                        continue
+                    cles = [o.key for o in liste.options]
+                    with self.subTest(vue=classe.__name__, liste=liste.label):
+                        self.assertNotIn("", cles,
+                                         "une option de valeur vide n'affiche pas son libellé")
+                        self.assertIn(liste.value, cles,
+                                      f"la valeur {liste.value!r} n'est pas dans les options")
+
+    def test_le_resume_de_l_entete_affiche_une_virgule(self):
+        import main as application
+
+        application.reinitialiser_partage()
+        try:
+            # Le projet est garni avant l'ouverture : l'entête calcule alors le
+            # volume dès le premier affichage, au lieu d'annoncer « … ».
+            etat = application.etat_partage()
+            etat.projet.surfaces[7].aire_m2 = 12000.0
+            etat.projet.surface_infiltration_m2 = 200.0
+            etat.projet.fixer_ajutage_absolu(5.0)
+            etat.invalider()
+            page = PageFactice()
+            application.main(page)
+            resumes = [t.value for t in _rechercher(page.controls[0], ft.Text)
+                       if t.value and "m² actifs" in t.value]
+            self.assertTrue(resumes)
+            self.assertRegex(resumes[0], r"\d,\d",
+                             f"aucune virgule décimale dans l'entête : {resumes[0]}")
+            self.assertNotRegex(resumes[0], r"\d\.\d",
+                                f"point décimal dans l'entête : {resumes[0]}")
+        finally:
+            application.reinitialiser_partage()
+
     def test_aucun_texte_long_ne_pousse_ses_voisins_hors_du_rang(self):
         """Un Text long sans repli ni expand chasse ses voisins hors de l'écran."""
         etat = self._etat_touffu()

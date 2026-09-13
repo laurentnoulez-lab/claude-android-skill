@@ -41,9 +41,12 @@ EXUTOIRE = "exutoire"
 #: Géométrie nominale (unités arbitraires, mises à l'échelle au tracé).
 LARGEUR_BOITE = 172.0
 LARGEUR_VERSANT = 140.0
-HAUTEUR_LIGNE = 12.0
-HAUTEUR_TITRE = 19.0
-MARGE_BOITE = 8.0
+#: Hauteur réservée par ligne et pour le titre. Généreuse à dessein : la boîte
+#: a une hauteur fixe, et Flet rend ses textes un peu plus haut que leur corps
+#: — la dernière ligne passait sous la bordure du bas.
+HAUTEUR_LIGNE = 13.5
+HAUTEUR_TITRE = 22.0
+MARGE_BOITE = 9.0
 ESPACE_COLONNE = 66.0
 ESPACE_LIGNE = 20.0
 ESPACE_VERSANT = 8.0
