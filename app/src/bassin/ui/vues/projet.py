@@ -8,7 +8,6 @@ son propre raccordement. Ce qui reste ici est ce qui vaut pour tout le système.
 from __future__ import annotations
 
 import os
-import shutil
 from typing import List, Optional
 
 import flet as ft
@@ -101,7 +100,60 @@ class VueProjet(Vue):
             return False
 
     def _exporter(self, _=None) -> None:
-        """Écrit le projet dans un fichier, puis propose de le ranger ailleurs."""
+        """Demande la destination, puis n'écrit qu'elle.
+
+        L'ordre compte. Écrire d'abord dans un dossier interne, annoncer
+        « enregistré », puis seulement ouvrir le sélecteur, revenait à annoncer
+        un succès avant l'arbitrage de l'utilisateur : qui annulait la boîte de
+        dialogue avait pourtant un fichier sur le disque, dans un dossier qu'il
+        n'avait pas choisi et où les exports s'accumulaient.
+
+        Android fait exception : son sélecteur ne rend qu'un URI du Storage
+        Access Framework, que Python ne sait pas ouvrir. Là, écrire dans le
+        dossier de l'application est le seul chemin possible, et c'est annoncé
+        comme tel.
+        """
+        if self._sur_mobile():
+            self._exporter_dans_le_dossier_interne()
+            return
+        if self._selecteur_export is None:
+            self._selecteur_export = ft.FilePicker(on_result=self._destination_choisie)
+            self.page.overlay.append(self._selecteur_export)
+            self.page.update()
+        try:
+            self._selecteur_export.save_file(
+                dialog_title="Enregistrer le projet",
+                file_name=os.path.basename(self.etat.nom_fichier_projet()),
+                allowed_extensions=[EXTENSION_PROJET],
+            )
+        except Exception:
+            # Pas de sélecteur sur cette plateforme : le dossier interne reste
+            # la seule destination possible, et on le dit.
+            self._exporter_dans_le_dossier_interne()
+
+    def _destination_choisie(self, e: ft.FilePickerResultEvent) -> None:
+        """Suite du sélecteur : rien n'a encore été écrit à ce stade."""
+        cible = getattr(e, "path", None)
+        if not cible:
+            return  # annulation : aucun fichier, aucun message de succès
+        if not cible.lower().endswith("." + EXTENSION_PROJET):
+            cible = f"{cible}.{EXTENSION_PROJET}"
+        if not destination_utilisable(cible):
+            self.notifier("Cet emplacement n'est pas accessible en écriture directe ; "
+                          "le projet est enregistré dans le dossier de l'application.", "alerte")
+            self._exporter_dans_le_dossier_interne()
+            return
+        try:
+            chemin = self.etat.exporter_vers(cible)
+        except Exception as exc:
+            self.notifier(f"Enregistrement impossible : {type(exc).__name__} — {exc}", "erreur")
+            return
+        self._dernier_export = chemin
+        self.rafraichir()
+        self.notifier(f"Projet enregistré dans {chemin}", "succes")
+
+    def _exporter_dans_le_dossier_interne(self) -> None:
+        """Dernier recours : le dossier de l'application, annoncé sans détour."""
         try:
             chemin = self.etat.exporter_vers(
                 os.path.join(repertoire_documents(),
@@ -111,55 +163,7 @@ class VueProjet(Vue):
             return
         self._dernier_export = chemin
         self.rafraichir()
-        if self._sur_mobile():
-            # Le sélecteur d'Android ne rend qu'un URI de document, inutilisable
-            # depuis Python : le fichier est déjà au bon endroit, dans un dossier
-            # que n'importe quel gestionnaire de fichiers sait ouvrir.
-            self.notifier(f"Projet enregistré : {chemin}", "succes")
-            return
-        self.notifier(f"Projet enregistré dans {chemin}", "succes")
-        self._enregistrer_sous(chemin)
-
-    def _enregistrer_sous(self, chemin: str) -> None:
-        """Sélecteur du système, pour choisir soi-même la destination."""
-        if self._selecteur_export is None:
-            def _resultat(e: ft.FilePickerResultEvent) -> None:
-                cible = getattr(e, "path", None)
-                source = getattr(self._selecteur_export, "data", None)
-                if not cible or not source:
-                    return
-                if not cible.lower().endswith("." + EXTENSION_PROJET):
-                    cible = f"{cible}.{EXTENSION_PROJET}"
-                if not destination_utilisable(cible):
-                    # Ce n'est pas un chemin de fichier mais un URI du système :
-                    # inutile d'alarmer, le projet est déjà enregistré.
-                    self.notifier(
-                        f"Cet emplacement n'est pas accessible en écriture directe. "
-                        f"Le projet reste enregistré dans {source}.", "alerte")
-                    return
-                try:
-                    shutil.copyfile(source, cible)
-                    self._dernier_export = cible
-                    self.rafraichir()
-                    self.notifier(f"Projet copié vers {cible}", "succes")
-                except Exception as exc:
-                    self.notifier(f"Copie impossible : {exc}", "erreur")
-
-            self._selecteur_export = ft.FilePicker(on_result=_resultat)
-            self.page.overlay.append(self._selecteur_export)
-            self.page.update()
-        self._selecteur_export.data = chemin
-        try:
-            self._selecteur_export.save_file(
-                dialog_title="Enregistrer le projet",
-                file_name=os.path.basename(chemin),
-                allowed_extensions=[EXTENSION_PROJET],
-            )
-        except Exception:
-            # Sur certaines plateformes le sélecteur n'existe pas : le fichier
-            # est déjà écrit, il suffit de dire où.
-            self.notifier(f"Le sélecteur de fichiers n'est pas disponible ici. "
-                          f"Le projet reste dans {os.path.dirname(chemin)}.", "alerte")
+        self.notifier(f"Projet enregistré : {chemin}", "succes")
 
     def _importer(self, _=None) -> None:
         if self._selecteur_import is None:

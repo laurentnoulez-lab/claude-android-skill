@@ -136,6 +136,10 @@ class EtatApplication:
         #: L'utilisateur a demandé les minima sur un réseau où ils ne sont pas
         #: calculés d'office.
         self.minima_demandes = False
+        #: Dossier choisi pour les livrables. Vide : celui de l'application.
+        #: Réglage de session, hors du projet enregistré — il décrit le poste,
+        #: pas l'étude, et n'aurait aucun sens chez un confrère.
+        self.dossier_livrables = ""
 
     # -- abonnements -------------------------------------------------------
     def abonner(self, rappel: Callable[[], None]) -> None:

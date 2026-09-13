@@ -4,6 +4,7 @@ Ils instancient chaque vue et parcourent l'arbre de contrôles Flet : toute
 erreur d'API (paramètre inconnu, icône ou couleur inexistante) est détectée.
 """
 
+import contextlib
 import os
 import re
 import sys
@@ -658,6 +659,23 @@ class _FichierChoisi:
         self.path = path
 
 
+@contextlib.contextmanager
+def _dossier_interne(chemin):
+    """Détourne le dossier de repli des exports vers un répertoire de test.
+
+    Sans cela, les cas de repli écriraient dans les Documents de la personne qui
+    lance la suite.
+    """
+    from bassin.ui.vues import projet as vue_projet
+
+    origine = vue_projet.repertoire_documents
+    vue_projet.repertoire_documents = lambda: chemin
+    try:
+        yield
+    finally:
+        vue_projet.repertoire_documents = origine
+
+
 class TestSauvegardeSousAndroid(unittest.TestCase):
     """Le sélecteur d'Android rend un URI de document, pas un chemin de fichier.
 
@@ -696,27 +714,48 @@ class TestSauvegardeSousAndroid(unittest.TestCase):
         return page, vue
 
     def test_l_export_ne_crie_pas_a_l_echec_sur_un_uri(self):
+        """Un URI n'est pas écrivable : on se replie, on le dit, on n'alarme pas."""
         page, vue = self._vue()
-        source = vue.etat.exporter_vers(os.path.join(self.repertoire, "source.json"))
-        vue._enregistrer_sous(source)          # installe le sélecteur
-        vue._selecteur_export.data = source
-        vue._selecteur_export.on_result(_ResultatSelecteur(path=self.URI_ANDROID))
+        with _dossier_interne(self.repertoire):
+            vue._destination_choisie(_ResultatSelecteur(path=self.URI_ANDROID))
 
         messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
         self.assertTrue(messages)
-        dernier = messages[-1]
-        self.assertNotIn("Copie impossible", dernier)
-        self.assertIn(source, dernier, "le message doit dire où le projet se trouve réellement")
+        self.assertFalse(any("Copie impossible" in m for m in messages))
+        self.assertTrue(any("dossier de l'application" in m for m in messages),
+                        "le message doit dire où le projet a été rangé")
+        self.assertTrue(vue._dernier_export and os.path.exists(vue._dernier_export),
+                        "le projet doit exister malgré tout : l'URI n'est pas une destination")
 
-    def test_l_export_copie_vraiment_vers_un_chemin_reel(self):
+    def test_l_export_ecrit_vraiment_vers_un_chemin_reel(self):
+        """Écriture directe à la destination choisie, sans fichier intermédiaire."""
         page, vue = self._vue()
-        source = vue.etat.exporter_vers(os.path.join(self.repertoire, "source.json"))
         cible = os.path.join(self.repertoire, "ailleurs.json")
-        vue._enregistrer_sous(source)
-        vue._selecteur_export.data = source
-        vue._selecteur_export.on_result(_ResultatSelecteur(path=cible))
+        vue._destination_choisie(_ResultatSelecteur(path=cible))
         self.assertTrue(os.path.exists(cible))
         EtatApplication().importer_fichier(cible)      # relisible
+        self.assertEqual(os.listdir(self.repertoire), ["ailleurs.json"],
+                         "aucun fichier intermédiaire ne doit traîner")
+
+    def test_annuler_le_selecteur_n_ecrit_rien_et_n_annonce_rien(self):
+        """Le défaut A4 : « enregistré » s'affichait avant l'arbitrage.
+
+        Qui annulait la boîte de dialogue avait pourtant un fichier sur le
+        disque, dans un dossier qu'il n'avait pas choisi.
+        """
+        page, vue = self._vue()
+        with _dossier_interne(self.repertoire):
+            vue._destination_choisie(_ResultatSelecteur(path=None))
+        self.assertEqual(os.listdir(self.repertoire), [],
+                         "une annulation ne doit laisser aucun fichier")
+        messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
+        self.assertFalse(any("enregistré" in m.lower() for m in messages),
+                         "une annulation ne doit annoncer aucun succès")
+
+    def test_l_extension_est_ajoutee_si_l_utilisateur_l_omet(self):
+        page, vue = self._vue()
+        vue._destination_choisie(_ResultatSelecteur(path=os.path.join(self.repertoire, "sans")))
+        self.assertTrue(os.path.exists(os.path.join(self.repertoire, "sans.json")))
 
     def test_l_import_d_un_uri_est_refuse_avec_un_conseil(self):
         page, vue = self._vue()

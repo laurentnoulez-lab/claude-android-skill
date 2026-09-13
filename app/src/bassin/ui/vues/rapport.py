@@ -39,6 +39,7 @@ class VueRapport(Vue):
         self.produits: List[str] = []
         self.erreurs: List[str] = []
         self.selecteur_fichier: Optional[ft.FilePicker] = None
+        self.selecteur_dossier: Optional[ft.FilePicker] = None
 
     # ------------------------------------------------------------ génération
     def _generer(self, formats: List[str]) -> None:
@@ -58,7 +59,7 @@ class VueRapport(Vue):
             self.maj_resultats()
             return
 
-        destination = repertoire_documents()
+        destination = self.destination()
         produits: List[str] = []
         for fmt in formats:
             chemin = os.path.join(destination, os.path.basename(etat.nom_fichier(fmt)))
@@ -80,6 +81,42 @@ class VueRapport(Vue):
             self.notifier(f"{len(produits)} fichier(s) écrit(s) dans {destination}", "succes")
         elif self.erreurs:
             self.notifier("La génération a échoué — voir le détail dans la page.", "erreur")
+
+    # ------------------------------------------------------------ destination
+    def destination(self) -> str:
+        """Dossier où sont écrits les livrables.
+
+        Trois fichiers sont produits d'un coup : une boîte « Enregistrer sous »
+        par fichier serait pénible. Le dossier se choisit donc une fois, et il
+        s'affiche — l'utilisateur ne découvrait jusqu'ici sa destination que
+        dans le message de succès.
+        """
+        choisi = getattr(self.etat, "dossier_livrables", "")
+        if choisi and os.path.isdir(choisi):
+            return choisi
+        return repertoire_documents()
+
+    def _choisir_destination(self, _=None) -> None:
+        if self.selecteur_dossier is None:
+            def _resultat(e: ft.FilePickerResultEvent) -> None:
+                chemin = getattr(e, "path", None)
+                if not chemin:
+                    return                      # annulation : rien ne change
+                if not destination_utilisable(os.path.join(chemin, "test")):
+                    self.notifier("Ce dossier n'est pas accessible en écriture directe.", "alerte")
+                    return
+                self.etat.dossier_livrables = chemin
+                self.notifier(f"Les livrables seront écrits dans {chemin}", "succes")
+                self.rafraichir()
+
+            self.selecteur_dossier = ft.FilePicker(on_result=_resultat)
+            self.page.overlay.append(self.selecteur_dossier)
+            self.page.update()
+        try:
+            self.selecteur_dossier.get_directory_path(dialog_title="Dossier des livrables")
+        except Exception:
+            self.notifier("Le sélecteur de dossiers n'est pas disponible ici ; "
+                          f"les livrables restent écrits dans {self.destination()}.", "alerte")
 
     def _enregistrer_sous(self, chemin: str) -> None:
         """Propose de copier un rapport ailleurs (sélecteur du système)."""
@@ -125,6 +162,22 @@ class VueRapport(Vue):
             lignes = [f"{'accessible' if ok else 'inaccessible'} — {chemin}"
                       for chemin, ok in diagnostic_stockage()]
             blocs.append(theme.message("Répertoires testés :\n" + "\n".join(lignes), "info"))
+
+        blocs.append(ft.Row(
+            [
+                ft.Icon(ft.Icons.FOLDER_OUTLINED, size=18, color=theme.GRIS),
+                ft.Column(
+                    [
+                        ft.Text("Dossier des livrables", size=11, color=theme.GRIS),
+                        ft.Text(self.destination(), size=12, selectable=True, no_wrap=False),
+                    ],
+                    spacing=0, expand=True,
+                ),
+                theme.bouton_secondaire("Changer…", ft.Icons.DRIVE_FOLDER_UPLOAD,
+                                        self._choisir_destination),
+            ],
+            spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ))
 
         if self.produits:
             blocs.append(ft.Text("Fichiers générés", size=13, weight=ft.FontWeight.W_700))
