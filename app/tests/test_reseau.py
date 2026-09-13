@@ -294,7 +294,11 @@ class EquivalenceAvecLeBassinIsole(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 self.assertEqual(obtenu.volume_m3, attendu.volume_m3)
                 self.assertEqual(obtenu.duree_critique_min, attendu.duree_critique_min)
-                self.assertEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h)
+                # Le temps de vidange passe, lui, de la formule fermée à
+                # l'intégration sur les paliers : mathématiquement la même
+                # chose, aux derniers bits près.
+                self.assertAlmostEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h,
+                                       places=9)
                 self.assertEqual(obtenu.surface_infiltration_min_m2,
                                  attendu.surface_infiltration_min_m2)
                 self.assertEqual(obtenu.debit_ajutage_min_ls, attendu.debit_ajutage_min_ls)
@@ -308,6 +312,35 @@ class EquivalenceAvecLeBassinIsole(unittest.TestCase):
         self.assertEqual(obtenu.volume_m3, attendu.volume_m3)
         self.assertEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h)
         self.assertEqual(obtenu.surface_infiltration_min_m2, attendu.surface_infiltration_min_m2)
+
+    def test_un_ouvrage_amont_sans_eau_ne_change_rien(self):
+        """Le branchement change le chemin de calcul : il ne doit pas changer le résultat.
+
+        Dès qu'un ouvrage est raccordé au-dessus, le volume passe par
+        l'intégration exacte au lieu de la formule fermée, et par un balayage en
+        deux passes au lieu des 17 280 durées. Un amont qui ne restitue rien doit
+        rendre exactement ce que rendait le calcul sans amont.
+        """
+        for scenario, v_sous in ((SCENARIO_MIXTE, 0.0), (SCENARIO_SEUIL, 60.0)):
+            avec, amont, aval = systeme_essai(volumes=(200.0, 0.0), v_sous=(0.0, v_sous))
+            for bv in avec.versants_de(amont.id):
+                bv.surfaces = [SurfaceIncidente("Aucune surface", 1.0, 0.0)]
+            avec.synchroniser()
+
+            sans, amont_seul, aval_seul = systeme_essai(volumes=(200.0, 0.0),
+                                                        v_sous=(0.0, v_sous))
+            amont_seul.aval_id = ""                    # plus rien en amont de l'aval
+            for bv in list(sans.versants_de(amont_seul.id)):
+                sans.bassins_versants.remove(bv)
+            sans.synchroniser()
+
+            attendu = hydro.dimensionner(aval_seul.etude, scenario, avec_minima=False)
+            obtenu = hydro.dimensionner(aval.etude, scenario, avec_minima=False)
+            with self.subTest(scenario=scenario):
+                self.assertTrue(obtenu.amont_pris_en_compte)
+                self.assertEqual(obtenu.volume_m3, attendu.volume_m3)
+                self.assertEqual(obtenu.duree_critique_min, attendu.duree_critique_min)
+                self.assertEqual(obtenu.temps_vidange_h, attendu.temps_vidange_h)
 
     def test_la_simulation_d_un_ouvrage_du_reseau_rend_le_calcul_isole(self):
         p = self._projet_isole(avec_amont=True)

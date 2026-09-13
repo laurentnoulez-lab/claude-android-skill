@@ -150,10 +150,11 @@ class Projet:
 
         Deux formes d'amont coexistent : le bassin amont unique décrit par
         :class:`BassinAmont` (projets d'avant le réseau, et cas simple), et le
-        raccordement d'un réseau de bassins, qui fournit un hydrogramme déjà
-        calculé via :func:`bassin.core.reseau.brancher`. Les deux passent par le
-        même chemin de calcul en aval de ce prédicat : il n'y a qu'une règle de
-        dimensionnement, quelle que soit la provenance de l'apport.
+        raccordement d'un réseau de bassins, branché sur cette étude par
+        :meth:`Systeme.synchroniser` via :meth:`brancher_apport`. Les deux
+        passent par le même chemin de calcul en aval de ce prédicat : il n'y a
+        qu'une règle de dimensionnement, quelle que soit la provenance de
+        l'apport.
         """
         return self.amont.actif or self._fournisseur_apport is not None
 
