@@ -29,6 +29,12 @@ Livrables : **APK Android** et **installateur Windows**, à partir d'un code uni
 4. **Dispersion seule avec temporisation au-delà d'un seuil** — orifice surélevé : sous
    l'axe de l'orifice, seule l'infiltration évacue ; au-dessus, l'ajutage s'y ajoute.
 
+## Reprendre le développement ailleurs
+
+[docs/reprise.md](docs/reprise.md) donne le point de départ pour poursuivre ce projet dans
+une autre session : commit de référence, carte du code, invariants à ne pas casser, tests à
+lancer avant compilation.
+
 ## Méthode de calcul
 
 Voir [docs/methode.md](docs/methode.md) pour le détail (formules, hypothèses, règles du GTI).
