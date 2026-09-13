@@ -104,7 +104,7 @@ def _adresse_navigateur() -> str:
 
 def main(page: ft.Page) -> None:
     trace("démarrage")
-    page.title = f"{__app_name__} — dimensionnement de bassins d'orage"
+    page.title = f"{__app_name__} — dimensionnement de réseaux de bassins d'orage"
     try:  # sans effet (voire indisponible) sur mobile
         page.window.width = 1280
         page.window.height = 860

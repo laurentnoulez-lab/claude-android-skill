@@ -478,10 +478,14 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
     if scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL) and res.debit_ajutage_ls > 0:
         q_adm = projet.debit_fuite_admissible_ls
         if q_adm > 0 and res.debit_ajutage_ls > q_adm:
+            # La surface citée est celle qui a servi au calcul — la surface
+            # raccordée, bassins versants amont compris s'ils sont comptés —
+            # sans quoi le message contredit le chiffre qu'il explique.
             res.alertes.append(
                 f"Débit d'ajutage de {res.debit_ajutage_ls:.2f} l/s supérieur au débit de fuite "
                 f"admissible de {q_adm:.2f} l/s "
-                f"({DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA:.0f} l/s/ha x {projet.aire_totale_m2:.0f} m²)."
+                f"({DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA:.0f} l/s/ha x "
+                f"{projet.aire_raccordee_m2:.0f} m² raccordés)."
             )
 
 

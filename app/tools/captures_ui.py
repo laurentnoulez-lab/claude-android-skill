@@ -97,12 +97,14 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             # d'accessibilité de Flutter reste vide sans interaction humaine.
             # Le clavier atteint le canvas Flutter à coup sûr, contrairement à
             # l'URL (Flet n'en transmet pas le chemin sur le web) et à l'arbre
-            # d'accessibilité (vide sans interaction humaine). Ctrl+1..7 est aussi
-            # un raccourci offert à l'utilisateur.
+            # d'accessibilité (vide sans interaction humaine). Ctrl+1..9 puis
+            # Ctrl+0 sont aussi des raccourcis offerts à l'utilisateur.
             for i, vue in enumerate(VUES[1:], start=1):
                 nom = vue.replace(" ", "_")
+                # La dixième section s'ouvre par Ctrl+0, comme dans un navigateur.
+                touche = "0" if i == 9 else str(i + 1)
                 try:
-                    page.keyboard.press(f"Control+{i + 1}")
+                    page.keyboard.press(f"Control+{touche}")
                     page.wait_for_timeout(3000)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
                     defiler_et_capturer(page, sortie, nom_format, i, nom)
