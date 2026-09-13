@@ -380,7 +380,7 @@ class VueBassin(Vue):
         amont = pire[2].volume_amont_m3
         if amont > 0:
             controles.append(theme.etiquette(
-                f"Apport du bassin amont : {theme.nombre(amont, 1)} m³ "
+                f"Apport des bassins d'orage amont : {theme.nombre(amont, 1)} m³ "
                 f"(pointe {theme.nombre(pire[2].q_amont_max_ls, 2)} l/s)",
                 theme.BLEU, theme.BLEU_CLAIR, ft.Icons.MERGE))
         controles.append(ft.Text(

@@ -204,9 +204,11 @@ class VueProjet(Vue):
 
     def _bloc_sauvegarde(self) -> ft.Control:
         lignes: List[ft.Control] = [
-            ft.Text("Un projet exporté se recharge tel quel : surfaces, sol, ouvrage, bassin "
-                    "amont et scénario retenu. De quoi reprendre une étude sans tout resaisir, "
-                    "ou la transmettre à un collègue.", size=12, color=theme.GRIS),
+            ft.Text("Un projet exporté se recharge tel quel : bassins versants, bassins "
+                    "d'orage, raccordements, sol, ouvrages et scénarios. De quoi reprendre "
+                    "une étude sans tout resaisir, ou la transmettre à un collègue. Les "
+                    "projets enregistrés par une version antérieure se rechargent aussi.",
+                    size=12, color=theme.GRIS),
             ft.Row(
                 [
                     theme.bouton_principal("Exporter le projet", ft.Icons.SAVE, self._exporter),
