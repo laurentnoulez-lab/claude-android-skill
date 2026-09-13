@@ -91,9 +91,12 @@ def barre_ouvrage(vue) -> ft.Control:
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                ft.Row([ft.Text(_sous_titre(etat), size=11.5, color=theme.GRIS, expand=True,
-                                no_wrap=False)] + etiquettes,
-                       spacing=10, wrap=True),
+                # Le texte et les étiquettes tiennent chacun leur ligne : un
+                # contrôle `expand` dans un `Row` qui se replie n'a pas de
+                # largeur définie, et Flutter le rendait en un grand aplat gris.
+                ft.Text(_sous_titre(etat), size=11.5, color=theme.GRIS, no_wrap=False),
+                ft.Row(etiquettes, spacing=8, run_spacing=8, wrap=True)
+                if etiquettes else ft.Container(height=0),
             ],
             spacing=6,
         ),

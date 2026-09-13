@@ -132,7 +132,11 @@ class VueVersants(Vue):
     def _carte_versant(self, versant: BassinVersant) -> ft.Control:
         etat = self.etat
         systeme = etat.systeme
-        ouvert = self._ouvert == versant.id or len(systeme.bassins_versants) == 1
+        # Sans choix explicite, le premier est déplié : l'écran ne s'ouvre jamais
+        # sur une liste entièrement repliée, où l'on ne voit aucune surface.
+        premier = systeme.bassins_versants[0].id if systeme.bassins_versants else ""
+        ouvert = ((self._ouvert or premier) == versant.id
+                  or len(systeme.bassins_versants) == 1)
 
         def maj_nom(e: ft.ControlEvent) -> None:
             versant.nom = e.control.value

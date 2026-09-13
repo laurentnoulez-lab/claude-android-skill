@@ -82,7 +82,13 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             except Exception as exc:
                 print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
             try:  # le canvas doit avoir le focus pour recevoir les touches
-                page.click("body", position={"x": largeur // 2, "y": hauteur - 30})
+                # Un clic au milieu du bas de l'écran tombait, sur téléphone, sur
+                # la carte « Commune » : le sélecteur s'ouvrait et masquait toutes
+                # les captures suivantes. Le coin est sans contrôle, et Échap
+                # referme ce qui aurait tout de même pu s'ouvrir.
+                page.click("body", position={"x": 6, "y": hauteur - 6})
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
             except Exception:
                 pass
             # Un projet complet : sans données, tableaux et graphiques restent
@@ -104,6 +110,7 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 # La dixième section s'ouvre par Ctrl+0, comme dans un navigateur.
                 touche = "0" if i == 9 else str(i + 1)
                 try:
+                    page.keyboard.press("Escape")   # aucun dialogue ne doit masquer l'écran
                     page.keyboard.press(f"Control+{touche}")
                     page.wait_for_timeout(3000)
                     page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))

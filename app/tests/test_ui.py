@@ -994,6 +994,20 @@ class TestMiseEnPage(unittest.TestCase):
                         self.assertIn(liste.value, cles,
                                       f"la valeur {liste.value!r} n'est pas dans les options")
 
+    def test_aucun_controle_extensible_dans_une_rangee_qui_se_replie(self):
+        """Un `expand` dans un `Row(wrap=True)` n'a pas de largeur définie.
+
+        Flutter rendait alors la rangée en un grand aplat gris occupant tout
+        l'écran — ce que seul un rendu réel montre, jamais l'arbre de contrôles.
+        """
+        etat = self._etat_touffu()
+        fautifs = []
+        for classe in VUES:
+            vue = classe(PageFactice(), etat)
+            for controle in vue.construire():
+                fautifs += _extensibles_dans_un_repli(controle, classe.__name__)
+        self.assertEqual(fautifs, [])
+
     def test_le_resume_de_l_entete_affiche_une_virgule(self):
         import main as application
 
@@ -1054,6 +1068,19 @@ def _textes_debordants(controle, vue, trouves=None, profondeur=0):
                     trouves.append(f"{vue} : {(t.value or '')[:60]}")
     for enfant in _enfants(controle):
         _textes_debordants(enfant, vue, trouves, profondeur + 1)
+    return trouves
+
+
+def _extensibles_dans_un_repli(controle, vue, trouves=None, profondeur=0):
+    trouves = [] if trouves is None else trouves
+    if profondeur > 40:
+        return trouves
+    if isinstance(controle, ft.Row) and getattr(controle, "wrap", False):
+        for enfant in (controle.controls or []):
+            if getattr(enfant, "expand", None):
+                trouves.append(f"{vue} : {type(enfant).__name__} extensible dans un Row replié")
+    for enfant in _enfants(controle):
+        _extensibles_dans_un_repli(enfant, vue, trouves, profondeur + 1)
     return trouves
 
 
