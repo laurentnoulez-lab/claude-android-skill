@@ -74,11 +74,14 @@ def _segments(fleche: schema_module.Fleche, echelle: float) -> List[ft.Control]:
             continue
         gauche, droite = sorted((x0, x1))
         haut, bas = sorted((y0, y1))
+        # Le trait est centré sur son axe et ne dépasse pas ses extrémités :
+        # sans cela il mordait d'un demi-pixel sur la boîte qu'il touche.
+        vertical = abs(x1 - x0) < 1e-9
         controles.append(ft.Container(
-            left=gauche * echelle,
-            top=haut * echelle - TRAIT / 2,
-            width=max((droite - gauche) * echelle, TRAIT),
-            height=max((bas - haut) * echelle, TRAIT),
+            left=gauche * echelle - (TRAIT / 2 if vertical else 0.0),
+            top=haut * echelle - (0.0 if vertical else TRAIT / 2),
+            width=TRAIT if vertical else (droite - gauche) * echelle,
+            height=(bas - haut) * echelle if vertical else TRAIT,
             bgcolor=couleur,
             opacity=0.55 if fleche.pointille else 0.85,
             border_radius=1,

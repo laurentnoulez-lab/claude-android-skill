@@ -903,6 +903,116 @@ class TestSyntheseGraphique(unittest.TestCase):
         self.assertTrue(vue.construire())
 
 
+class TestMiseEnPage(unittest.TestCase):
+    """Aucune étiquette ne doit en recouvrir une autre, ni déborder de sa boîte.
+
+    Sans serveur graphique on ne mesure pas le rendu, mais on peut relire l'arbre
+    de contrôles : les seuls éléments réellement posés à des coordonnées fixes
+    sont ceux du schéma du réseau, et c'est là que le risque existe.
+    """
+
+    #: Le coude d'une flèche fait forcément se toucher ses deux segments.
+    TOLERANCE_PX = 2.0
+
+    def _etat_touffu(self):
+        etat = EtatApplication()
+        p = etat.projet
+        p.surfaces[7].aire_m2 = 20000.0
+        p.surface_infiltration_m2 = 250.0
+        p.fixer_ajutage_absolu(12.0)
+        p.bassin = Bassin(volume_total_m3=1200.0, surface_dispersion_m2=250.0,
+                          debit_ajutage_ls=12.0)
+        etat.ouvrage.nom = "Bassin d'orage principal du parc d'activités (zone nord)"
+        etat.versants[0].nom = "Bassin versant des voiries et parkings de la zone nord"
+        for i in range(4):
+            o = etat.ajouter_ouvrage(f"Bassin d'orage secondaire n°{i + 1}")
+            o.aval_id = etat.systeme.ouvrages[0].id
+            o.etude.fixer_ajutage_absolu(3.0)
+            o.etude.bassin = Bassin(volume_total_m3=80.0, debit_ajutage_ls=3.0)
+            for j in range(2):
+                bv = etat.ajouter_versant(f"Bassin versant {i + 1}.{j + 1}", o.id)
+                bv.surfaces = [SurfaceIncidente("Toitures", 1.0, 6000.0)]
+        etat.choisir_ouvrage(etat.systeme.ouvrages[0].id)
+        etat.invalider()
+        return etat
+
+    def _poses(self, controle, trouves=None):
+        """Contrôles réellement positionnés dans un Stack."""
+        trouves = [] if trouves is None else trouves
+        if isinstance(controle, ft.Stack):
+            for c in controle.controls or []:
+                if (getattr(c, "left", None) is not None and getattr(c, "top", None) is not None
+                        and getattr(c, "width", None) and getattr(c, "height", None)):
+                    trouves.append(c)
+        for enfant in _enfants(controle):
+            self._poses(enfant, trouves)
+        return trouves
+
+    def test_rien_ne_se_recouvre_dans_le_schema_affiche(self):
+        for echelle in (0.8, 1.0, 1.3):
+            etat = self._etat_touffu()
+            vue = VueSynthese(PageFactice(), etat)
+            vue._echelle = echelle
+            vue.afficher()
+            poses = self._poses(vue.corps)
+            self.assertGreater(len(poses), 10)
+            for i, a in enumerate(poses):
+                for b in poses[i + 1:]:
+                    ox = min(a.left + a.width, b.left + b.width) - max(a.left, b.left)
+                    oy = min(a.top + a.height, b.top + b.height) - max(a.top, b.top)
+                    with self.subTest(echelle=echelle):
+                        self.assertFalse(ox > self.TOLERANCE_PX and oy > self.TOLERANCE_PX,
+                                         f"recouvrement de {ox:.0f}x{oy:.0f} px dans le schéma")
+
+    def test_les_textes_des_boites_du_schema_sont_bornes(self):
+        """Une boîte a une hauteur fixe : son texte ne doit pas pouvoir déborder."""
+        etat = self._etat_touffu()
+        vue = VueSynthese(PageFactice(), etat)
+        vue.afficher()
+        for pose in self._poses(vue.corps):
+            for texte in _rechercher(pose, ft.Text):
+                self.assertTrue(texte.max_lines or texte.overflow,
+                                f"texte non borné dans le schéma : {texte.value!r}")
+
+    def test_aucun_texte_long_ne_pousse_ses_voisins_hors_du_rang(self):
+        """Un Text long sans repli ni expand chasse ses voisins hors de l'écran."""
+        etat = self._etat_touffu()
+        fautifs = []
+        for classe in VUES:
+            vue = classe(PageFactice(), etat)
+            for controle in vue.construire():
+                fautifs += _textes_debordants(controle, classe.__name__)
+        self.assertEqual(fautifs, [])
+
+
+def _enfants(controle):
+    sortie = []
+    for attribut in ("controls", "content", "actions", "rows", "cells", "label", "title",
+                     "subtitle", "leading", "trailing"):
+        valeur = getattr(controle, attribut, None)
+        if isinstance(valeur, (list, tuple)):
+            sortie.extend(v for v in valeur if isinstance(v, ft.Control))
+        elif isinstance(valeur, ft.Control):
+            sortie.append(valeur)
+    return sortie
+
+
+def _textes_debordants(controle, vue, trouves=None, profondeur=0):
+    trouves = [] if trouves is None else trouves
+    if profondeur > 40:
+        return trouves
+    if isinstance(controle, ft.Row) and not getattr(controle, "wrap", False):
+        voisins = [c for c in (controle.controls or []) if isinstance(c, ft.Control)]
+        if len(voisins) > 1:
+            for t in (c for c in voisins if isinstance(c, ft.Text)):
+                borne = t.expand or t.no_wrap is False or t.max_lines or t.overflow
+                if len(t.value or "") > 60 and not borne:
+                    trouves.append(f"{vue} : {(t.value or '')[:60]}")
+    for enfant in _enfants(controle):
+        _textes_debordants(enfant, vue, trouves, profondeur + 1)
+    return trouves
+
+
 def _bouton_nomme(cas, vue, libelle):
     boutons = (_rechercher(vue.corps, ft.FilledButton)
                + _rechercher(vue.corps, ft.OutlinedButton)
@@ -1353,6 +1463,119 @@ class TestCoquilleApplication(unittest.TestCase):
         page.client_storage.set(application.CLE_STOCKAGE, etat_complet().to_json())
         application.main(page)
         self.assertTrue(page.controls)
+
+
+class TestDeuxFenetres(unittest.TestCase):
+    """Deux fenêtres, un seul projet — la « nouvelle fenêtre » d'un tableur."""
+
+    def setUp(self):
+        import main as application
+
+        application.reinitialiser_partage()
+
+    tearDown = setUp
+
+    def test_la_seconde_fenetre_montre_le_meme_projet(self):
+        import main as application
+
+        premiere = PageFactice()
+        application.main(premiere)
+        etat = application.etat_partage()
+        etat.systeme.nom_projet = "Partagé"
+        etat.projet.surfaces[7].aire_m2 = 4000.0
+        etat.invalider()
+
+        seconde = PageFactice()
+        application.main(seconde)
+        self.assertIs(application.etat_partage(), etat)
+        self.assertIn("fenêtre 2", seconde.title)
+        valeurs = [c.value for c in _rechercher(seconde.controls[0], ft.TextField)]
+        self.assertIn("Partagé", valeurs,
+                      "la seconde fenêtre doit montrer le projet de la première")
+        textes = [t.value for t in _rechercher(seconde.controls[0], ft.Text) if t.value]
+        self.assertTrue(any("4000" in t or "4 000" in t for t in textes),
+                        "les surfaces saisies dans la première fenêtre doivent s'y voir")
+
+    def test_une_saisie_dans_une_fenetre_se_voit_dans_l_autre(self):
+        import main as application
+
+        premiere = PageFactice()
+        application.main(premiere)
+        seconde = PageFactice()
+        application.main(seconde)
+        etat = application.etat_partage()
+        avant = etat.resultat.volume_m3
+        etat.projet.surfaces[7].aire_m2 = etat.projet.surfaces[7].aire_m2 + 10000.0
+        etat.invalider()
+        self.assertGreater(etat.resultat.volume_m3, avant)
+        # Les deux fenêtres lisent le même état : reconstruire l'une la montre à jour.
+        vue = VueDimensionnement(seconde, etat)
+        vue.afficher()
+        self.assertIn(theme.nombre(etat.resultat.volume_m3, 1),
+                      " ".join(_textes(vue.corps)))
+
+    def test_fermer_la_seconde_fenetre_n_arrete_pas_l_application(self):
+        import main as application
+
+        premiere = PageFactice()
+        application.main(premiere)
+        seconde = PageFactice()
+        application.main(seconde)
+        etat = application.etat_partage()
+        abonnes = len(etat._abonnes)
+
+        fermeture = getattr(seconde, "on_close", None) or getattr(seconde, "on_disconnect", None)
+        self.assertIsNotNone(fermeture, "la fenêtre doit savoir qu'elle se ferme")
+        fermeture(None)
+        self.assertLess(len(etat._abonnes), abonnes,
+                        "la fenêtre fermée doit cesser d'être rafraîchie")
+        # La première fenêtre continue de fonctionner.
+        etat.projet.surfaces[7].aire_m2 = 5000.0
+        etat.invalider()
+        self.assertGreater(etat.resultat.volume_m3, 0)
+
+    def test_la_seconde_fenetre_est_refusee_proprement_quand_elle_est_impossible(self):
+        from bassin.ui import fenetres
+
+        page = PageFactice()
+        self.assertFalse(fenetres.disponible(page))     # pas de serveur local ici
+        raison = fenetres.ouvrir(page)
+        self.assertTrue(raison, "un échec doit s'expliquer, pas passer inaperçu")
+        self.assertEqual(fenetres.nombre_ouvertes(), 0)
+
+    def test_la_version_web_ne_propose_pas_de_seconde_fenetre(self):
+        from bassin.ui import fenetres
+
+        page = PageFactice()
+        page.web = True
+        page.connection = type("C", (), {"page_url": "tcp://127.0.0.1:1234"})()
+        self.assertFalse(fenetres.disponible(page))
+
+    def test_android_ne_propose_pas_de_seconde_fenetre(self):
+        from bassin.ui import fenetres
+
+        page = PageFactice()
+        page.platform = ft.PagePlatform.ANDROID
+        page.connection = type("C", (), {"page_url": "tcp://127.0.0.1:1234"})()
+        self.assertFalse(fenetres.disponible(page))
+
+    def test_le_bouton_de_nouvelle_fenetre_n_apparait_que_sur_le_bureau(self):
+        import main as application
+
+        page = PageFactice()
+        application.main(page)
+        tooltips = [b.tooltip for b in _rechercher(page.controls[0], ft.IconButton)]
+        self.assertFalse(any("Nouvelle fenêtre" in (t or "") for t in tooltips))
+
+    def test_la_seconde_fenetre_offre_de_se_fermer(self):
+        import main as application
+
+        application.main(PageFactice())
+        seconde = PageFactice()
+        application.main(seconde)
+        tooltips = [b.tooltip for b in _rechercher(seconde.controls[0], ft.IconButton)]
+        self.assertTrue(any("Fermer cette fenêtre" in (t or "") for t in tooltips),
+                        "la fenêtre supplémentaire doit pouvoir se refermer seule")
 
 
 class TestSimulationMultiple(unittest.TestCase):

@@ -177,7 +177,24 @@ def dessiner_schema(pdf: Pdf, schema: mod_schema.Schema) -> bool:
             y += mod_schema.HAUTEUR_LIGNE * echelle
             pdf._texte_brut(px(boite.x) + marge, y, ligne, taille_ligne, NOIR)
 
-    pdf.y = py(schema.hauteur) + 10
+    pdf.y = py(schema.hauteur) + 12
+    # Légende : les flèches ne portent pas d'étiquette (elles se gêneraient dès
+    # que deux ouvrages se déversent au même endroit), c'est elle qui explique.
+    x = pdf.marge
+    y = pdf.y
+    for libelle, fond, bord, pointille in (
+            ("bassin versant", VERT_PALE, rgb(5, 150, 105), False),
+            ("bassin d'orage", BLEU_PALE, BLEU, False),
+            ("bassin qui surverse", ROUGE_PALE, ROUGE, False),
+            ("exutoire", GRIS_CLAIR, GRIS, False),
+            ("surverse vers le milieu naturel", None, rgb(217, 119, 6), True)):
+        if fond is None:
+            pdf.ligne(x, y - 2, x + 12, y - 2, bord, 0.8, True)
+        else:
+            pdf.rectangle(x, y - 5.5, 12, 6, fond, bord, 0.4)
+        pdf._texte_brut(x + 16, y, libelle, 6.5, GRIS)
+        x += 22 + largeur_texte(libelle, 6.5)
+    pdf.y = y + 10
     return True
 
 

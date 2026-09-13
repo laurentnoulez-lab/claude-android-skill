@@ -2,16 +2,24 @@
 
 Le schéma se lit de gauche à droite, de l'amont vers l'exutoire. Chaque bassin
 d'orage occupe une **colonne** déterminée par sa distance à l'exutoire, si bien
-qu'un raccordement relie toujours deux colonnes voisines : aucune flèche ne
-traverse une boîte, et rien ne se superpose.
+qu'un raccordement relie toujours deux colonnes voisines.
+
+Les bassins versants se posent **au-dessus** de l'ouvrage qu'ils alimentent, et
+non à côté : les flèches qui les relient sont alors verticales, celles du réseau
+horizontales, et les unes ne peuvent plus traverser les autres. C'est ce qui
+garantit qu'aucune étiquette n'en recouvre une autre, quelle que soit la taille
+du réseau.
 
 .. code::
 
-    colonne 0          colonne 1          colonne 2
-    ┌─────────┐        ┌─────────┐        ┌─────────┐
-    │ BV amont│──┐     │         │        │         │
-    └─────────┘  └────►│ BO amont│───────►│ BO aval │───► exutoire
-                       └─────────┘        └─────────┘
+    colonne 0            colonne 1
+    ┌────────┐┌────────┐
+    │ BV nord││ BV sud │
+    └───┬────┘└────┬───┘
+        └────┬─────┘
+    ┌────────▼──────┐   ┌───────────┐
+    │ BO amont      │──►│  BO aval  │──► exutoire
+    └───────────────┘   └───────────┘
 
 Ce module ne dessine rien : il calcule des boîtes, des flèches et leurs
 positions. Le PDF les trace au vecteur, l'interface les rend en contrôles Flet,
@@ -37,8 +45,11 @@ HAUTEUR_LIGNE = 12.0
 HAUTEUR_TITRE = 19.0
 MARGE_BOITE = 8.0
 ESPACE_COLONNE = 66.0
-ESPACE_LIGNE = 16.0
+ESPACE_LIGNE = 20.0
 ESPACE_VERSANT = 8.0
+#: Hauteur de la bande laissée entre les bassins versants et leur ouvrage :
+#: c'est là que passent les flèches verticales qui les relient.
+BANDE_VERSANTS = 26.0
 
 #: Au-delà, une ligne de boîte serait tronquée à l'affichage : mieux vaut la
 #: couper à la source que laisser un texte déborder sur son voisin.
@@ -223,25 +234,28 @@ def _couper(texte: str) -> str:
 def _placer(colonnes, versants_par_ouvrage, schema: Schema) -> List[Boite]:
     """Donne à chaque boîte sa place, sans recouvrement possible.
 
-    Chaque colonne d'ouvrages est précédée, si besoin, d'un **couloir** réservé
-    à ses bassins versants : sans ce couloir, les versants d'une colonne se
-    posaient sur les ouvrages de la colonne précédente. Verticalement, les
-    versants d'un ouvrage sont empilés en face de lui et leur hauteur cumulée
-    fixe celle de la cellule, si bien que l'ouvrage suivant commence en dessous
-    de tout ce qui précède.
+    Chaque ouvrage forme une **cellule** : ses bassins versants côte à côte au-
+    dessus, lui en dessous, et entre les deux une bande vide où passent les
+    flèches verticales. Les cellules d'une même colonne s'empilent, les colonnes
+    se suivent de gauche à droite. Une flèche du réseau ne circule alors que
+    dans l'espace entre deux colonnes, qui ne contient rien.
     """
     boites: List[Boite] = []
     indices = sorted(colonnes)
-    largeurs = {c: max((b.largeur for b in colonnes[c]), default=LARGEUR_BOITE)
-                for c in indices}
-    couloirs = {c: any(versants_par_ouvrage.get(b.cle) for b in colonnes[c])
-                for c in indices}
 
+    def largeur_cellule(boite: Boite) -> float:
+        versants = versants_par_ouvrage.get(boite.cle, [])
+        if not versants:
+            return boite.largeur
+        rangee = (sum(v.largeur for v in versants)
+                  + ESPACE_VERSANT * (len(versants) - 1))
+        return max(boite.largeur, rangee)
+
+    largeurs = {c: max((largeur_cellule(b) for b in colonnes[c]), default=LARGEUR_BOITE)
+                for c in indices}
     x_colonne: Dict[int, float] = {}
     x = 0.0
     for colonne in indices:
-        if couloirs[colonne]:
-            x += LARGEUR_VERSANT + ESPACE_COLONNE
         x_colonne[colonne] = x
         x += largeurs[colonne] + ESPACE_COLONNE
     largeur_totale = max(x - ESPACE_COLONNE, 0.0)
@@ -251,21 +265,23 @@ def _placer(colonnes, versants_par_ouvrage, schema: Schema) -> List[Boite]:
         y = 0.0
         for boite in colonnes[colonne]:
             versants = versants_par_ouvrage.get(boite.cle, [])
-            hauteur_versants = (sum(v.hauteur for v in versants)
-                                + ESPACE_VERSANT * max(len(versants) - 1, 0))
-            hauteur_cellule = max(boite.hauteur, hauteur_versants)
-            boite.x = x_colonne[colonne]
-            boite.y = y + (hauteur_cellule - boite.hauteur) / 2.0
-            boites.append(boite)
-            x_versant = x_colonne[colonne] - ESPACE_COLONNE - LARGEUR_VERSANT
-            y_versant = y + (hauteur_cellule - hauteur_versants) / 2.0
+            hauteur_versants = max((v.hauteur for v in versants), default=0.0)
+            decalage = (hauteur_versants + BANDE_VERSANTS) if versants else 0.0
+            cellule = largeurs[colonne]
+            # Bassins versants côte à côte, centrés sur la cellule.
+            rangee = (sum(v.largeur for v in versants)
+                      + ESPACE_VERSANT * max(len(versants) - 1, 0))
+            x_versant = x_colonne[colonne] + (cellule - rangee) / 2.0
             for versant in versants:
-                versant.colonne = max(colonne - 1, 0)
+                versant.colonne = colonne
                 versant.x = x_versant
-                versant.y = y_versant
-                y_versant += versant.hauteur + ESPACE_VERSANT
+                versant.y = y
+                x_versant += versant.largeur + ESPACE_VERSANT
                 boites.append(versant)
-            y += hauteur_cellule + ESPACE_LIGNE
+            boite.x = x_colonne[colonne] + (cellule - boite.largeur) / 2.0
+            boite.y = y + decalage
+            boites.append(boite)
+            y += decalage + boite.hauteur + ESPACE_LIGNE
         hauteur_totale = max(hauteur_totale, y - ESPACE_LIGNE)
 
     # Les bassins versants qui ne mènent nulle part se rangent au bout, sous le
@@ -274,15 +290,18 @@ def _placer(colonnes, versants_par_ouvrage, schema: Schema) -> List[Boite]:
     orphelins = [b for cle, groupe in versants_par_ouvrage.items() if cle not in connus
                  for b in groupe]
     if orphelins:
+        x = 0.0
         y = hauteur_totale + ESPACE_LIGNE
+        hauteur = 0.0
         for versant in orphelins:
-            versant.x = 0.0
+            versant.x = x
             versant.y = y
             versant.colonne = 0
             boites.append(versant)
-            y += versant.hauteur + ESPACE_VERSANT
-        hauteur_totale = y - ESPACE_VERSANT
-        largeur_totale = max(largeur_totale, LARGEUR_VERSANT)
+            x += versant.largeur + ESPACE_VERSANT
+            hauteur = max(hauteur, versant.hauteur)
+        hauteur_totale = y + hauteur
+        largeur_totale = max(largeur_totale, x - ESPACE_VERSANT)
 
     schema.largeur = largeur_totale
     schema.hauteur = hauteur_totale
@@ -290,38 +309,62 @@ def _placer(colonnes, versants_par_ouvrage, schema: Schema) -> List[Boite]:
 
 
 def _relier(systeme, schema: Schema) -> List[Fleche]:
-    """Trace les raccordements : bassins versants, réseau, surverses."""
+    """Trace les raccordements : bassins versants (verticaux), réseau (horizontaux).
+
+    Deux flèches du réseau qui aboutissent au même ouvrage empruntent des
+    couloirs verticaux distincts : sans cela elles se superposeraient sur toute
+    la hauteur qu'elles partagent, et on ne saurait plus laquelle vient d'où.
+    """
     fleches: List[Fleche] = []
 
-    def coude(depart: Boite, arrivee: Boite, libelle: str = "",
-              pointille: bool = False) -> Fleche:
-        milieu = (depart.droite + arrivee.x) / 2.0
-        return Fleche(
-            depuis=depart.cle, vers=arrivee.cle,
-            points=[(depart.droite, depart.milieu_y), (milieu, depart.milieu_y),
-                    (milieu, arrivee.milieu_y), (arrivee.x, arrivee.milieu_y)],
-            libelle=libelle, pointille=pointille)
-
-    for bv in systeme.bassins_versants:
-        depart = schema.boite(f"bv:{bv.id}")
-        arrivee = schema.boite(bv.bassin_id)
-        if depart is not None and arrivee is not None:
-            fleches.append(coude(depart, arrivee))
     for o in systeme.ouvrages:
-        depart = schema.boite(o.id)
-        if depart is None:
-            continue
-        aval = systeme.aval(o.id)
-        arrivee = schema.boite(aval.id) if aval is not None else schema.boite("__exutoire__")
+        arrivee = schema.boite(o.id)
+        versants = systeme.versants_de(o.id)
         if arrivee is None:
             continue
-        if aval is None:
-            fleches.append(coude(depart, arrivee, "rejet"))
-        elif o.surverse_vers_milieu_naturel:
-            fleches.append(coude(depart, arrivee, "ajutage · surverse au milieu naturel",
-                                 pointille=True))
-        else:
-            fleches.append(coude(depart, arrivee, "ajutage + surverse"))
+        for rang, bv in enumerate(versants):
+            depart = schema.boite(f"bv:{bv.id}")
+            if depart is None:
+                continue
+            # Descente verticale, avec un coude si le versant n'est pas à
+            # l'aplomb. Chaque versant arrive en un point distinct du bord
+            # supérieur : deux flèches ne s'y superposent pas.
+            x_depart = depart.x + depart.largeur / 2.0
+            x_arrivee = arrivee.x + arrivee.largeur * (rang + 1) / (len(versants) + 1)
+            milieu = (depart.bas + arrivee.y) / 2.0
+            fleches.append(Fleche(
+                depuis=depart.cle, vers=arrivee.cle,
+                points=[(x_depart, depart.bas), (x_depart, milieu),
+                        (x_arrivee, milieu), (x_arrivee, arrivee.y)]))
+
+    # Les arrivées sont réparties dans l'espace entre les deux colonnes.
+    entrants: Dict[str, List[str]] = {}
+    for o in systeme.ouvrages:
+        aval = systeme.aval(o.id)
+        entrants.setdefault(aval.id if aval is not None else "__exutoire__", []).append(o.id)
+
+    for cible, sources in entrants.items():
+        arrivee = schema.boite(cible)
+        if arrivee is None:
+            continue
+        for rang, identifiant in enumerate(sources):
+            depart = schema.boite(identifiant)
+            o = systeme.ouvrage(identifiant)
+            if depart is None or o is None:
+                continue
+            espace = max(arrivee.x - depart.droite, 4.0)
+            milieu = depart.droite + espace * (rang + 1) / (len(sources) + 1)
+            y_arrivee = arrivee.y + arrivee.hauteur * (rang + 1) / (len(sources) + 1)
+            vers_exutoire = cible == "__exutoire__"
+            libelle = ("rejet" if vers_exutoire
+                       else ("ajutage · surverse au milieu naturel"
+                             if o.surverse_vers_milieu_naturel else "ajutage + surverse"))
+            fleches.append(Fleche(
+                depuis=depart.cle, vers=arrivee.cle,
+                points=[(depart.droite, depart.milieu_y), (milieu, depart.milieu_y),
+                        (milieu, y_arrivee), (arrivee.x, y_arrivee)],
+                libelle=libelle,
+                pointille=(not vers_exutoire) and o.surverse_vers_milieu_naturel))
     return fleches
 
 
