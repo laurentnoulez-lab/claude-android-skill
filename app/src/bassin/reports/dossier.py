@@ -52,6 +52,25 @@ class Dossier:
         return len(self.systeme.ouvrages) > 1 or len(self.systeme.bassins_versants) > 1
 
     @property
+    def derniere_ligne_identification(self) -> List[str]:
+        """Fin du bandeau d'identification : deux colonnes, titre et valeur.
+
+        Sur un réseau, la composition du projet. Sur un bassin unique, le nom
+        de l'ouvrage et celui de son bassin versant — des données saisies, que
+        le dossier perdait purement et simplement.
+        """
+        if self.reseau_multiple:
+            return ["Composition du projet",
+                    f"{len(self.systeme.bassins_versants)} bassins versants, "
+                    f"{len(self.systeme.ouvrages)} bassins d'orage"]
+        ouvrage = self.ouvrage_courant
+        if ouvrage is None:
+            return ["Scénario retenu", LIBELLES_SCENARIOS[self.scenario_principal]]
+        versants = self.systeme.versants_de(ouvrage.id) if self.systeme is not None else []
+        noms = ", ".join(bv.nom for bv in versants) or "aucun"
+        return [ouvrage.nom, f"bassin versant : {noms}"]
+
+    @property
     def ouvrage_courant(self):
         """Ouvrage décrit en détail par le dossier, s'il vient d'un réseau."""
         if self.fiche is not None:

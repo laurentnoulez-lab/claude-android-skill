@@ -446,6 +446,43 @@ def temps_vidange_h(volume_m3: float, q_infiltration_ls: float, q_ajutage_ls: fl
     return volume_m3 * 1000.0 / q_total / 3600.0
 
 
+def _ecarts_ouvrage_encode(projet: Projet, res: Resultat, scenario: str) -> List[str]:
+    """En quoi l'ouvrage encodé s'écarte-t-il de ce que ce scénario suppose ?
+
+    Le dimensionnement cherche un minimum sous des hypothèses ; l'onglet
+    « Bassin réel », la table de protection et la synthèse portent sur
+    l'ouvrage tel qu'il sera construit. Quand les deux divergent, deux chiffres
+    de « volume requis » s'affichent côte à côte sans que rien ne les
+    réconcilie — un bandeau annonçait « 0,0 m³ requis » au-dessus d'une table
+    pleine de volumes.
+
+    Plutôt que d'énumérer les cas un à un, on compare terme à terme ce que le
+    scénario suppose et ce qui est encodé : débit d'infiltration, débit
+    d'ajutage, volume mort sous l'ajutage.
+    """
+    bassin = projet.bassin
+    if bassin.volume_total_m3 <= 0:
+        return []                      # rien n'est encore construit
+    construit_inf = debit_infiltration_ls(bassin.surface_dispersion_m2, projet.k_bassin_ms,
+                                          projet.coef_securite_infiltration)
+    v_sous_suppose = bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
+    differences: List[str] = []
+    for libelle, suppose, encode, unite, decimales in (
+            ("débit d'infiltration", res.debit_infiltration_ls, construit_inf, "l/s", 3),
+            ("débit d'ajutage", res.debit_ajutage_ls, bassin.debit_ajutage_ls, "l/s", 3),
+            ("volume sous l'axe de l'ajutage", v_sous_suppose,
+             bassin.volume_sous_ajutage_m3, "m³", 1)):
+        if abs(suppose - encode) > max(abs(suppose) * 0.01, 1e-4):
+            differences.append(f"{libelle} {suppose:.{decimales}f} {unite} supposé contre "
+                               f"{encode:.{decimales}f} {unite} encodés")
+    if not differences:
+        return []
+    return ["L'ouvrage encodé ne correspond pas aux hypothèses de ce scénario : "
+            + " ; ".join(differences)
+            + ". La vérification de l'ouvrage, la table des pluies absorbées et la synthèse "
+              "portent sur l'ouvrage encodé : leurs volumes diffèrent donc de celui-ci."]
+
+
 def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
     from .model import DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE
 
@@ -487,6 +524,8 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
                 "La surface d'infiltration atteint déjà 10 % de la surface de référence : "
                 "le GTI admet ce cas comme un maximum raisonnable (rejet complémentaire a prévoir)."
             )
+    for ecart in _ecarts_ouvrage_encode(projet, res, scenario):
+        res.alertes.append(ecart)
     if scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL) and res.debit_ajutage_ls > 0:
         q_adm = projet.debit_fuite_admissible_ls
         if q_adm > 0 and res.debit_ajutage_ls > q_adm:

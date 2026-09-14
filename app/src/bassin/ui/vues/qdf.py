@@ -117,8 +117,21 @@ class VueTableQDF(Vue):
                 f"Aucun débordement pour la récurrence de projet ({p.periode_retour} ans), "
                 "quelle que soit la durée de pluie.", "succes")
 
+        # Le bandeau de sélection annonce le volume du *dimensionnement*, qui
+        # raisonne sur un scénario ; cette table décrit l'ouvrage **encodé**,
+        # volume mort compris. Les deux peuvent légitimement différer — sur un
+        # ajutage surélevé, notamment — et l'onglet doit donc porter son propre
+        # chiffre, sans quoi « 0,0 m³ requis » surmonte une table pleine de
+        # volumes sans que rien ne l'explique.
+        requis = table.volume_requis_max_m3(p.periode_retour)
+        exige = theme.etiquette(
+            theme.fr(f"Ouvrage encodé : {requis:.1f} m³ requis à {p.periode_retour} ans "
+                     f"pour {table.capacite_m3:.1f} m³ encodés"),
+            theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STRAIGHTEN)
+
         legende = ft.Row(
             [
+                exige,
                 theme.etiquette("Absorbé", theme.VERT, theme.VERT_CLAIR, ft.Icons.CHECK_CIRCLE),
                 theme.etiquette("Limite (> 95 % de la capacité)", theme.ORANGE, theme.ORANGE_CLAIR,
                                 ft.Icons.WARNING_AMBER),

@@ -359,10 +359,12 @@ def message(texte: str, type_: str = "info") -> ft.Control:
         "erreur": (ROUGE, ROUGE_CLAIR, ft.Icons.ERROR_OUTLINE),
     }
     couleur, fond, icone = couleurs.get(type_, couleurs["info"])
+    # Les alertes viennent du moteur, qui formate ses nombres en Python : la
+    # virgule décimale se pose ici, une fois, plutôt qu'à chaque message.
     return ft.Container(
         content=ft.Row(
             [ft.Icon(icone, color=couleur, size=18),
-             ft.Text(texte, size=12.5, color=ARDOISE, expand=True, selectable=True)],
+             ft.Text(fr(texte), size=12.5, color=ARDOISE, expand=True, selectable=True)],
             spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.START,
         ),

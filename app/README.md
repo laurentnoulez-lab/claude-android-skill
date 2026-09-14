@@ -238,6 +238,15 @@ son onglet affichait « Encodez d'abord un bassin » et son chapitre du dossier 
 amputé. Ce qui compte est qu'**de l'eau lui arrive**, que ce soit par son versant ou par
 l'amont.
 
+## Dimensionnement et ouvrage encodé : deux questions
+
+Le dimensionnement suppose des hypothèses ; l'ouvrage encodé peut en différer — un ajutage
+surélevé, un sol mesuré en fond de fouille, un ajutage que le scénario ignore. Les deux
+« volumes requis » divergent alors légitimement, et l'application **le dit** : elle compare
+terme à terme ce que le scénario suppose et ce qui est encodé (débit d'infiltration, débit
+d'ajutage, volume mort sous l'ajutage) et énonce l'écart avec ses chiffres. Sans cela, le
+bandeau annonçait « 0,0 m³ requis » au-dessus d'une table pleine de volumes.
+
 ## Le dossier PDF et Word
 
 Le rapport porte sur **l'étude entière**, pas sur le seul ouvrage affiché à l'écran. Dès

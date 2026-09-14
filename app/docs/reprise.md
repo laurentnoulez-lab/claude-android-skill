@@ -241,6 +241,23 @@ exceptés.
   qui demandent une intégration pas à pas : l'apport amont et, sur un ouvrage qui en
   reçoit, ses minima ; les minima du scénario à seuil, dont l'ajutage surélevé ne s'ouvre
   qu'à un instant fonction de l'infiltration ; la simulation du réseau.
+- **Les défauts signalés à l'usage relèvent tous de la même famille** : deux nombres qui
+  décrivent la même chose, calculés par des chemins différents et affichés côte à côte sans
+  se réconcilier. `tests/test_coherence.py` balaie un éventail de configurations (bassin
+  seul, réseau en série, ouvrage sans versant propre, volume mort, sol propre au bassin
+  construit, source QDF, ouvrage non encodé) et vérifie sur chacune que tout onglet
+  s'affiche, que tout livrable se produit et nomme ce qu'il décrit, et qu'aucun écart de
+  volume ne reste muet. **Ajoutez-y une configuration dès qu'un cas nouveau apparaît** :
+  les traiter un par un ne suffit jamais.
+- **Un garde-fou ne doit pas s'appuyer sur la chose qu'il teste.** Le contrôle des onglets
+  s'appuyait d'abord sur `etat.bassin_valide` : en réintroduisant le défaut, ce prédicat
+  devenait faux et la vérification se sautait elle-même. Il lit désormais le moteur
+  (`bassin.volume_total_m3 > 0 and etude.a_un_apport`). Vérifiez toujours qu'un garde-fou
+  mord, en réintroduisant le défaut.
+- **`_ecarts_ouvrage_encode` compare terme à terme** ce que le scénario suppose et ce qui
+  est encodé — débit d'infiltration, débit d'ajutage, volume mort. Plutôt que d'énumérer
+  les cas (ajutage surélevé, sol différent, ajutage absent du scénario…), qui se
+  redécouvraient un par un à chaque essai.
 - **« De l'eau arrive-t-il à cet ouvrage ? » se demande avec `Projet.a_un_apport`**, jamais
   avec `aire_ponderee_m2 > 0`. Un bassin de fin de réseau n'a souvent aucun versant en
   direct : le test sur la seule surface propre le privait de sa simulation, de sa table QDF

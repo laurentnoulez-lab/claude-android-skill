@@ -705,6 +705,21 @@ class TableAcceptation:
     source: str
     capacite_m3: float
 
+    def volume_requis_max_m3(self, periode_retour: int) -> float:
+        """Volume que l'ouvrage encodé doit encaisser à cette récurrence.
+
+        Le maximum de la colonne, toutes durées de pluie confondues. C'est le
+        pendant, pour l'ouvrage **construit**, du volume de dimensionnement —
+        et il peut en différer : le dimensionnement raisonne sur un scénario
+        (ajutage en fond pour « mixte »), la table sur le bassin tel qu'il est
+        encodé, volume mort compris.
+        """
+        if periode_retour not in self.periodes_retour:
+            return 0.0
+        j = self.periodes_retour.index(periode_retour)
+        return max((self.cellules[i][j].volume_requis_m3
+                    for i in range(len(self.durees_min))), default=0.0)
+
     def periode_retour_max_acceptee(self) -> Optional[int]:
         """Plus grande récurrence entièrement absorbée (toutes durées)."""
         meilleure = None

@@ -33,11 +33,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
             ["Projet", p.nom_projet or "-", "Commune", f"{p.commune_nom} ({p.commune_ins})"],
             ["Localisation", p.localisation or "-", "Période de retour", f"{p.periode_retour} ans"],
             ["Auteur", p.auteur or "-", "Source des pluies", dossier.source_pluies_datee],
-            ["Date", dossier.date, "Composition du projet",
-             f"{len(dossier.systeme.bassins_versants)} bassins versants, "
-             f"{len(dossier.systeme.ouvrages)} bassins d'orage"]
-            if dossier.reseau_multiple else
-            ["Date", dossier.date, "Scénario retenu", LIBELLES_SCENARIOS[dossier.scenario_principal]],
+            ["Date", dossier.date] + dossier.derniere_ligne_identification,
         ],
         largeurs=[3.2, 5.0, 3.4, 4.4],
         entete=False,
