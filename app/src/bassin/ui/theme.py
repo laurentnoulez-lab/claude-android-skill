@@ -209,8 +209,21 @@ def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None]
         if on_valide:
             on_valide()
 
+    def _focus(e: ft.ControlEvent) -> None:
+        """Un champ à zéro se vide quand on y entre.
+
+        Sans cela, cliquer dans un champ qui affiche « 0 » et taper « 3000 »
+        donnait « 03000 » : la valeur était juste, l'affichage fautif. Flet
+        n'expose pas de sélection programmée ; vider le zéro revient au même,
+        et un champ laissé vide vaut zéro de toute façon.
+        """
+        if lire_nombre(e.control.value) == 0 and e.control.value.strip() != "":
+            e.control.value = ""
+            _rafraichir(e.control)
+
     champ = _champ_texte(libelle, valeur, unite, aide, decimales, compact)
     champ.on_change = _change
+    champ.on_focus = _focus
     champ.on_blur = _valide
     champ.on_submit = _valide
     return ft.Container(champ, col=col) if col else champ

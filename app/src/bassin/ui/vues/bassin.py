@@ -183,7 +183,7 @@ class VueBassin(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
-            barre_ouvrage(self),
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Caractéristiques de l'ouvrage",
                 ft.Column(

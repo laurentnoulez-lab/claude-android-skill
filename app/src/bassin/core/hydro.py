@@ -258,15 +258,26 @@ class Resultat:
 
 
 def formater_duree(minutes: float) -> str:
-    """Formatage lisible d'une durée en minutes."""
+    """Durée lisible, à la même granularité quelle que soit sa longueur.
+
+    Au-delà de 24 h, l'affichage passait au dixième de jour : une durée critique
+    de 1 460 min — soit 1 j 0 h 20 — s'écrivait « 1,0 j », moins précise que le
+    « 3 h 15 » de la ligne voisine et impossible à recouper.
+    """
     minutes = float(minutes)
     if minutes < 60:
         return f"{minutes:.0f} min"
-    if minutes < 1440:
-        h, m = divmod(int(round(minutes)), 60)
+    total = int(round(minutes))
+    if total < 1440:
+        h, m = divmod(total, 60)
         return f"{h} h {m:02d}" if m else f"{h} h"
-    j = minutes / 1440.0
-    return f"{j:.1f} j" if j % 1 else f"{j:.0f} j"
+    j, reste = divmod(total, 1440)
+    h, m = divmod(reste, 60)
+    if not reste:
+        return f"{j} j"
+    if not m:
+        return f"{j} j {h} h"
+    return f"{j} j {h} h {m:02d}"
 
 
 # ---------------------------------------------------------------------------

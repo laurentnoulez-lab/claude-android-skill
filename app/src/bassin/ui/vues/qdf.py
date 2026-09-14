@@ -130,7 +130,7 @@ class VueTableQDF(Vue):
         )
 
         return [
-            barre_ouvrage(self),
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Capacité d'absorption du bassin",
                 ft.Column([bandeau, bandeau_2, legende], spacing=12),

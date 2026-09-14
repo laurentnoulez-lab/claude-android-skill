@@ -278,7 +278,7 @@ class VueRapport(Vue):
         )
 
         return [
-            barre_ouvrage(self),
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section("Récapitulatif du dossier", recap, ft.Icons.FACT_CHECK),
             theme.section(
                 "Générer les livrables",

@@ -217,11 +217,15 @@ class VueVersants(Vue):
                                         ft.Text(versant.nom or "Bassin versant sans nom",
                                                 size=15, weight=ft.FontWeight.W_700,
                                                 no_wrap=False),
-                                        ft.Text(
-                                            theme.fr(
-                                                f"{versant.aire_totale_m2:.0f} m² · "
-                                                f"{versant.aire_ponderee_m2:.0f} m² actifs · vers "
-                                                + (raccorde.nom if raccorde else "aucun bassin")),
+                                        # Dérivé : il doit suivre la saisie des
+                                        # surfaces sans qu'on retrace les champs.
+                                        self.texte_derive(
+                                            lambda v=versant: theme.fr(
+                                                f"{v.aire_totale_m2:.0f} m² · "
+                                                f"{v.aire_ponderee_m2:.0f} m² actifs · vers "
+                                                + (systeme.ouvrage(v.bassin_id).nom
+                                                   if systeme.ouvrage(v.bassin_id) else
+                                                   "aucun bassin")),
                                             size=11.5, color=theme.GRIS, no_wrap=False),
                                     ],
                                     spacing=0, expand=True, tight=True,

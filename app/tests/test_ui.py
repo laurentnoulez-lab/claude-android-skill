@@ -731,6 +731,68 @@ class TestLisibiliteRequisConstruit(unittest.TestCase):
                          "un minimum nul ne doit plus s'afficher comme une valeur")
 
 
+class TestValeursDeriveesAJour(unittest.TestCase):
+
+    """Les textes posés à côté des champs doivent suivre la saisie.
+
+    Relevé à l'audit : le sous-titre d'une carte restait à « 0 m² · 0 m² actifs »
+    après saisie, et la pastille « 2 000,0 m³ encodés » ne bougeait pas après un
+    « Recalculer ». Ces textes vivent dans la zone des champs, qu'on ne
+    reconstruit pas à chaque frappe — sans quoi le curseur sauterait.
+    """
+
+    def setUp(self):
+        self.etat = EtatApplication()
+        self.etat.systeme = exemple.systeme_demonstration()
+        self.etat.systeme.synchroniser()
+        self.etat.invalider()
+
+    def test_le_sous_titre_d_une_carte_suit_les_surfaces(self):
+        from bassin.ui.vues.versants import VueVersants
+
+        vue = VueVersants(PageFactice(), self.etat)
+        vue.afficher()
+
+        def sous_titre():
+            return next(c.value for c in _rechercher(vue.corps, ft.Text)
+                        if c.value and "m² actifs · vers" in c.value)
+
+        avant = sous_titre()
+        self.etat.versants[0].surfaces[7].aire_m2 = 6000.0
+        self.etat.invalider()
+        vue.maj_resultats()          # ce que le regroupeur finit par faire
+        self.assertNotEqual(sous_titre(), avant,
+                            "le sous-titre reste sur les surfaces d'avant la saisie")
+        self.assertIn("6500", sous_titre())
+
+    def test_la_pastille_suit_le_volume_encode(self):
+        vue = VueBassin(PageFactice(), self.etat)
+        vue.afficher()
+
+        def pastille():
+            return next(c.value for c in _rechercher(vue.corps, ft.Text)
+                        if c.value and "m³ encodés" in c.value)
+
+        self.assertIn("210,0", pastille())
+        self.etat.projet.bassin.volume_total_m3 = 50.0
+        self.etat.invalider()
+        vue.maj_resultats()
+        self.assertIn("50,0", pastille())
+
+    def test_un_champ_a_zero_se_vide_quand_on_y_entre(self):
+        """Taper « 3000 » dans un champ affichant « 0 » donnait « 03000 »."""
+        vus = []
+        champ = theme.champ_nombre("Essai", 0.0, vus.append, "m²")
+        self.assertEqual(champ.value, "0")
+        champ.on_focus(_Evenement(champ))
+        self.assertEqual(champ.value, "", "le zéro n'a pas été effacé à l'entrée")
+
+        # Un champ qui porte une vraie valeur, lui, n'est pas vidé.
+        champ = theme.champ_nombre("Essai", 3000.0, vus.append, "m²")
+        champ.on_focus(_Evenement(champ))
+        self.assertEqual(champ.value, "3000")
+
+
 class TestCascadeDansLInterface(unittest.TestCase):
 
     """Le bouton promet « un volume pour chacun » : il doit tenir ou s'expliquer."""

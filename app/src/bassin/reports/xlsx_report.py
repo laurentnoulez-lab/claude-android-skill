@@ -474,7 +474,7 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
 
     l0 = 8
     _entete(ws, l0, [
-        "Durée [min]", "a", "b", "i [mm/h]", "h [mm]", "V ruisselle [m³]",
+        "Durée [min]", "a", "b", "i [mm/h]", "h [mm]", "V ruisselé [m³]",
         "[1] V évacué [m³]", "[1] V à maîtriser [m³]",
         "[2] V évacué [m³]", "[2] V à maîtriser [m³]",
         "[3] V évacué [m³]", "[3] V à maîtriser [m³]",
@@ -505,7 +505,7 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
         # [3] temporisation + dispersion
         ws.cell(row=r, column=11, value=f"=({ancrage.q_infiltration}+{ancrage.q_ajutage})*A{r}*60/1000").number_format = "0.00"
         ws.cell(row=r, column=12, value=f"=MAX(F{r}-K{r},0)").number_format = "0.00"
-        # [4] dispersion + temporisation au-dela du seuil (ajutage sureleve).
+        # [4] dispersion + temporisation au-delà du seuil (ajutage surélevé).
         # M : débit ruisselé entrant, N : instant où le niveau atteint l'axe de l'ajutage.
         ws.cell(row=r, column=13, value=f"=F{r}*1000/(A{r}*60)").number_format = "0.000"
         ws.cell(row=r, column=14,
@@ -571,7 +571,7 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
         ("Hauteur de pluie [mm]", "=INDEX({f}!$E${r0}:$E${r1},MATCH(MAX({p}),{p},0))", "0.0"),
         ("Intensité [mm/h]", "=INDEX({f}!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))", "0.00"),
         ("Intensité [l/s/ha]", "=INDEX({f}!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))*10000/3600", "0.0"),
-        ("Débit ruisselle de pointe [l/s]", "=MAX({p})*0+INDEX({f}!$F${r0}:$F${r1},MATCH(MAX({p}),{p},0))*1000/(INDEX({f}!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))*60)", "0.00"),
+        ("Débit ruisselé de pointe [l/s]", "=MAX({p})*0+INDEX({f}!$F${r0}:$F${r1},MATCH(MAX({p}),{p},0))*1000/(INDEX({f}!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))*60)", "0.00"),
     ]
     ligne = 5
     for libelle, modele, fmt in lignes:
@@ -697,7 +697,7 @@ def _feuille_bassin(wb: Workbook, dossier: Dossier) -> None:
         _label(ws, 11, "Événement critique - hauteur", sim.hauteur_pluie_mm, "mm", "0.0")
         _label(ws, 12, "Volume stocké maximum", sim.volume_max_m3, "m³", "0.0")
         _label(ws, 13, "Taux de remplissage", sim.taux_remplissage, "[-]", "0.0%")
-        _label(ws, 14, "Volume déborde", sim.volume_debordement_m3, "m³", "0.00")
+        _label(ws, 14, "Volume débordé", sim.volume_debordement_m3, "m³", "0.00")
         _label(ws, 15, "Temps de vidange après la pluie", sim.temps_vidange_h, "h", "0.0")
         _label(ws, 16, "Statut", sim.statut,
                fond=VERT_PALE if not sim.debordement else ROUGE_PALE)

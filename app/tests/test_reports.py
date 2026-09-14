@@ -155,6 +155,43 @@ class TestExcel(BaseRapport):
         self.assertAlmostEqual(valeur("AJUTAGE", "B10"), self.dossier.orifice.diametre_mm, places=6)
 
 
+class TestOrthographeDesLivrables(unittest.TestCase):
+
+    """Un participe passé manquant dans un document signé se remarque."""
+
+    #: Relevés à l'audit dans les trois formats.
+    FAUTES = ("ruisselle de pointe", "Volume déborde", "V ruisselle",
+              "au-dela", "sureleve")
+
+    def test_aucune_faute_relevee_ne_subsiste_dans_les_generateurs(self):
+        racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for module in ("pdf_report.py", "docx_report.py", "xlsx_report.py"):
+            chemin = os.path.join(racine, "src", "bassin", "reports", module)
+            with open(chemin, encoding="utf-8") as fh:
+                source = fh.read()
+            for faute in self.FAUTES:
+                with self.subTest(module=module, faute=faute):
+                    self.assertNotIn(faute, source)
+
+    def test_les_accents_survivent_dans_le_pdf(self):
+        """L'audit lisait « Evénement » : c'était son extracteur, pas le PDF."""
+        chemin = pdf_report.ecrire(mod_dossier.construire(projet_complet()),
+                                   os.path.join(tempfile.mkdtemp(prefix="hydrobassin_ortho_"),
+                                                "accents.pdf"))
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        texte = "\n".join(flux)
+        # \311 et \351 sont É et é en WinAnsi : c'est ainsi qu'un PDF les porte.
+        self.assertIn("\\311", texte, "les capitales accentuées ont disparu du PDF")
+        self.assertIn("\\351", texte, "les minuscules accentuées ont disparu du PDF")
+
+
 class TestSourceDesPluiesNommee(unittest.TestCase):
 
     """Un tableau doit nommer la source dont il sort, pas celle qu'il pourrait avoir.

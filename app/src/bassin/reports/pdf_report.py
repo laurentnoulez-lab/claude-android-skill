@@ -392,8 +392,8 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     else:
         pdf.texte("Hauteurs de pluie issues des tables QDF du GTI (interpolation logarithmique).", 9.0)
     pdf.puce(f"Pluie critique : {res.hauteur_pluie_mm:.1f} mm en {res.duree_critique_hm} "
-             f"(intensité {res.intensite_mmh:.1f} mm/h, soit {res.intensite_ls_ha:.0f} l/s/ha).")
-    pdf.puce(f"Débit ruisselle de pointe : {res.debit_entrant_ls:.1f} l/s pour une surface active de "
+             f"(intensité {res.intensite_mmh:.1f} mm/h, soit {res.intensite_ls_ha:.1f} l/s/ha).")
+    pdf.puce(f"Débit ruisselé de pointe : {res.debit_entrant_ls:.1f} l/s pour une surface active de "
              f"{p.aire_ponderee_m2:.0f} m².")
 
     pdf.titre1(f"{suivant()}. Comparaison des scénarios")

@@ -224,7 +224,7 @@ class VueDimensionnement(Vue):
         details = [
             ("Durée critique", res.duree_critique_hm),
             ("Pluie", f"{res.hauteur_pluie_mm:.1f} mm"),
-            ("Intensité", f"{res.intensite_ls_ha:.0f} l/s/ha"),
+            ("Intensité", theme.fr(f"{res.intensite_ls_ha:.1f} l/s/ha")),
             ("Débit entrant", f"{res.debit_entrant_ls:.1f} l/s"),
             ("Débit de sortie", f"{res.debit_sortant_ls:.2f} l/s"),
             ("Vidange après la pluie", res.temps_vidange_hm),
@@ -392,7 +392,7 @@ class VueDimensionnement(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
-            barre_ouvrage(self),
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Sol et exutoire de cet ouvrage",
                 ft.Column(

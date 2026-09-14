@@ -148,11 +148,11 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         doc.paragraphe("Hauteurs de pluie issues des tables QDF du GTI (interpolation logarithmique).")
     doc.paragraphe(
         f"Pluie critique retenue : {res.hauteur_pluie_mm:.1f} mm en {res.duree_critique_hm} "
-        f"(intensité {res.intensite_mmh:.1f} mm/h, soit {res.intensite_ls_ha:.0f} l/s/ha).",
+        f"(intensité {res.intensite_mmh:.1f} mm/h, soit {res.intensite_ls_ha:.1f} l/s/ha).",
         puce=True,
     )
     doc.paragraphe(
-        f"Débit ruisselle de pointe : {res.debit_entrant_ls:.1f} l/s pour une surface active de "
+        f"Débit ruisselé de pointe : {res.debit_entrant_ls:.1f} l/s pour une surface active de "
         f"{p.aire_ponderee_m2:.0f} m².",
         puce=True,
     )
@@ -227,7 +227,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³"],
                 ["Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
                 ["Taux de remplissage", f"{sim.taux_remplissage * 100:.0f} %"],
-                ["Volume déborde", f"{sim.volume_debordement_m3:.2f} m³"],
+                ["Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
                 ["Temps de vidange", f"{sim.temps_vidange_h:.1f} h"],
                 [Cellule("Statut", gras=True),
                  Cellule(sim.statut, gras=True, fond=ROUGE if sim.debordement else VERT)],
