@@ -353,6 +353,28 @@ Ce calcul est vérifié par des tests qui comparent la valeur annoncée au temps
 réellement mesuré en simulation, entre la fin de la pluie et le bassin vide,
 pour les quatre scénarios (écart inférieur à 0,1 %).
 
+### Une minute d'écart avec la fiche GTI, et pourquoi
+
+Confrontée à la fiche GTI recalculée, l'application annonce régulièrement une
+minute de plus ou de moins : 44 h 26 contre 44 h 27, 10 h 40 contre 10 h 39. Ce
+n'est pas une divergence de méthode mais d'arrondi. La fiche arrondit le volume
+au dixième de mètre cube **avant** de diviser :
+
+```
+Calcul!B40 = ROUND(B33 ; 1) / B25 * 1000 / 3600
+```
+
+L'application divise le volume non arrondi. Sur la simulation de contrôle
+(Liège, T = 25 ans, 6 000 m², infiltration seule), le volume vaut 159,9717 m³ et
+le débit 1 l/s : l'arrondi à 160,0 m³ ajoute 28 secondes, assez pour faire
+basculer la minute affichée — 44 h 26 pour l'application, 44 h 27 pour la fiche.
+
+Les deux résultats sont justes ; celui de l'application l'est un peu plus,
+puisqu'il ne perd pas la précision du volume en route. La différence est sans
+portée pratique — le temps de vidange se compare à un maximum de 48 h — mais
+elle est notée ici pour qu'un vérificateur qui refait le calcul sur la fiche
+sache d'où vient l'écart au lieu de le prendre pour une erreur.
+
 ### Avec un bassin d'orage amont, la formule fermée ne suffit plus
 
 Cette formule suppose l'ouvrage **livré à lui-même** dès la fin de l'averse. Un bassin
