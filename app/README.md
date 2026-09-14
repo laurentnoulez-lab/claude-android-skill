@@ -213,6 +213,29 @@ Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+9** pu
 pour passer directement à une section. Les onglets de détail (Dimensionnement, Bassin, Table
 QDF, Ajutage, Rapport) portent un sélecteur d'ouvrage dès qu'un projet en compte plusieurs.
 
+## Le dossier PDF et Word
+
+Le rapport porte sur **l'étude entière**, pas sur le seul ouvrage affiché à l'écran. Dès
+que le projet compte plusieurs bassins d'orage, le dossier s'articule ainsi :
+
+| Section | Contenu |
+|---|---|
+| 1. Données d'entrée du projet | contraintes communes au réseau, puis tous les bassins versants |
+| 2. Synthèse du réseau | raccordements, dimensionnement de chaque ouvrage, simulation d'ensemble |
+| 3. Pluie de projet | Montana ou QDF : une seule fois, la pluie est commune au réseau |
+| 4, 5, … | **un chapitre par bassin d'orage** : surfaces raccordées, scénarios, vérification, table QDF, ajutage |
+| dernière | conclusion du réseau : volume cumulé, puis chaque ouvrage avec son volume, sa pluie critique et sa vidange |
+
+Ce qui vaut pour tout le système — commune, période de retour, sécurité sur K, vidange
+maximale admise, pluie de projet — n'est écrit qu'une fois ; le répéter dans chaque
+chapitre n'apprendrait rien et laisserait croire que ces valeurs diffèrent d'un ouvrage à
+l'autre. Sur un projet à bassin unique, le dossier garde sa forme d'origine (données
+d'entrée, pluie, scénarios, vérification, table QDF, ajutage, conclusion).
+
+Les deux formats sont écrits par le même découpage et se lisent donc de la même façon ;
+seule la synthèse du réseau diffère : le PDF trace le schéma au vecteur, le Word le rend
+en arbre indenté, faute d'une police vectorielle dans le rasteur embarqué.
+
 ## Le classeur Excel
 
 Le classeur n'est pas un tirage figé : il **recalcule**. Retoucher une surface, un

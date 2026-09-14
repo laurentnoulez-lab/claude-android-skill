@@ -53,6 +53,13 @@ def texte_pdf(chemin: str) -> str:
                      for t in morceaux)
 
 
+def _texte_word(chemin: str) -> str:
+    """Texte visible d'un .docx, une exécution de texte par ligne."""
+    with zipfile.ZipFile(chemin) as z:
+        document = z.read("word/document.xml").decode("utf-8")
+    return "\n".join(re.findall(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", document, re.S))
+
+
 class BaseRapport(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1196,12 +1203,24 @@ class TestNumerotationDesSections(unittest.TestCase):
                     self._verifier(self._numeros_word(
                         dossier, os.path.join(repertoire, f"{libelle}.docx")), libelle)
             # Et le rapport de réseau consacre un chapitre à chaque ouvrage :
-            # c'est là ce qui le distingue, pas son nombre de sections.
+            # c'est là ce qui le distingue, pas son nombre de sections. Les
+            # deux formats doivent le faire ; le Word s'arrêtait au seul
+            # ouvrage courant.
             chemin = pdf_report.ecrire(reseau, os.path.join(repertoire, "r.pdf"))
             texte = texte_pdf(chemin)
+            mot = _texte_word(docx_report.ecrire(reseau, os.path.join(repertoire, "r.docx")))
             for fiche in reseau.fiches:
-                with self.subTest(ouvrage=fiche.nom):
+                with self.subTest(ouvrage=fiche.nom, format="PDF"):
                     self.assertIn(fiche.nom, texte,
                                   "un ouvrage du réseau n'a pas son chapitre")
+                with self.subTest(ouvrage=fiche.nom, format="Word"):
+                    self.assertIn(fiche.nom, mot,
+                                  "un ouvrage du réseau n'a pas son chapitre")
+                    # Le chapitre n'est pas qu'un titre : il porte le volume
+                    # propre de l'ouvrage. Le Word écrit les décimales à la
+                    # virgule.
+                    volume = f"{fiche.resultat.volume_m3:.1f}".replace(".", ",")
+                    self.assertIn(volume, mot,
+                                  "le chapitre Word ne donne pas le volume de l'ouvrage")
         finally:
             shutil.rmtree(repertoire, ignore_errors=True)

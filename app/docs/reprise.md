@@ -220,6 +220,15 @@ exceptés.
   référence**, pas seulement testée contre elle-même.
 - Les rapports (PDF, DOCX, XLSX) sont trois sorties du même `dossier.construire` : une
   grandeur ajoutée doit apparaître dans les trois, ou être justifiée si elle n'y est pas.
+- **Le dossier porte sur l'étude entière.** `Dossier.par_ouvrage()` rend un dossier
+  complet par bassin d'orage — même construction, `fiche` désignant l'ouvrage décrit — et
+  `pdf_report` comme `docx_report` en font un chapitre chacun. Les deux modules partagent
+  le même découpage (`_section_versants` / `_w_versants`, `_donnees`, `_pluie`, `_ouvrage`)
+  et le même jeu de fonctions de titrage passé en paramètre : dans un chapitre d'ouvrage,
+  une section devient une sous-section et une sous-section un simple intertitre. Ce qui est
+  commun au réseau — contraintes, pluie de projet, synthèse — ne s'écrit qu'une fois. Le
+  piège est de dimensionner un ouvrage depuis le dossier courant plutôt que depuis le
+  sous-dossier du chapitre : le rapport n'annonçait alors qu'un seul bassin.
 - **Le classeur Excel est vivant, et il l'est par ouvrage.** Chaque bassin a sa ligne sur
   la feuille `Ouvrages` et ses feuilles `Pluie n` / `Scénarios n`, dont les formules
   pointent vers *ses* cellules (`_Ancrage`). Trois pièges s'y cachent, chacun rencontré :
