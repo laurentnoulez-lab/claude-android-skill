@@ -506,6 +506,38 @@ class DimensionnementDuReseau(unittest.TestCase):
                                 f"{fiche.nom} : {fiche.volume_encode_m3} m³ encodés pour "
                                 f"{fiche.volume_minimal_m3} m³ nécessaires")
 
+    def test_la_cascade_dit_ce_qu_elle_n_a_pas_pu_dimensionner(self):
+        """Un ouvrage sans exutoire ne se dimensionne pas : il faut le dire.
+
+        Relevé à l'audit : la cascade laissait l'ouvrage amont à zéro sans un
+        mot, et le volume proposé en aval encaissait la totalité de son
+        ruissellement. On pouvait croire le réseau dimensionné alors qu'un
+        ouvrage manquait au calcul.
+        """
+        systeme, amont, aval = systeme_essai(volumes=(0.0, 0.0), ajutages=(0.0, 12.0),
+                                             s_inf=(0.0, 250.0))
+        retenus = reseau.dimensionner_en_cascade(systeme)
+        par_nom = {r.nom: r for r in retenus}
+        self.assertEqual(set(par_nom), {"Amont", "Aval"},
+                         "tous les ouvrages doivent être rapportés, traités ou non")
+
+        manque = par_nom["Amont"]
+        self.assertFalse(manque.dimensionne)
+        self.assertEqual(manque.volume_m3, 0.0)
+        self.assertIn("exutoire", manque.raison)
+        self.assertIn("infiltration", manque.raison)
+
+        self.assertTrue(par_nom["Aval"].dimensionne)
+        self.assertGreater(par_nom["Aval"].volume_m3, 0.0)
+
+    def test_un_retenu_se_lit_encore_comme_un_couple(self):
+        """Les appelants existants dépaquetaient ``(nom, volume)``."""
+        systeme, _amont, _aval = systeme_essai(volumes=(0.0, 0.0))
+        for retenu in reseau.dimensionner_en_cascade(systeme):
+            nom, volume = retenu
+            self.assertEqual(nom, retenu.nom)
+            self.assertEqual(volume, retenu.volume_m3)
+
     def test_la_cascade_accorde_les_exutoires_au_scenario(self):
         """Un volume calculé avec une infiltration que l'ouvrage n'a pas déborderait."""
         systeme, _amont, aval = systeme_essai(volumes=(0.0, 0.0), s_inf=(0.0, 500.0))

@@ -699,7 +699,22 @@ def dimensionner(systeme: Systeme, avec_minima: bool = True) -> List[FicheOuvrag
     return fiches
 
 
-def dimensionner_en_cascade(systeme: Systeme, marge: float = 1.05) -> List[Tuple[str, float]]:
+@dataclass
+class RetenuCascade:
+    """Ce que la cascade a fait d'un ouvrage — ou n'a pas pu en faire."""
+
+    nom: str
+    volume_m3: float
+    dimensionne: bool = True
+    raison: str = ""
+
+    def __iter__(self):
+        """Se laisse encore lire comme un couple ``(nom, volume)``."""
+        return iter((self.nom, self.volume_m3))
+
+
+def dimensionner_en_cascade(systeme: Systeme,
+                            marge: float = 1.05) -> List["RetenuCascade"]:
     """Propose un volume pour chaque ouvrage, de l'amont vers l'aval.
 
     L'ordre compte : tant qu'un ouvrage amont surverse, l'ouvrage aval doit
@@ -711,7 +726,14 @@ def dimensionner_en_cascade(systeme: Systeme, marge: float = 1.05) -> List[Tuple
     encodé et l'hypothèse de calcul se contrediraient : un volume calculé avec
     une infiltration que l'ouvrage n'a pas déborderait en simulation.
 
-    Renvoie la liste ``(nom, volume retenu [m³])`` dans l'ordre de calcul.
+    Un ouvrage sans exutoire — ni infiltration, ni ajutage — ne se dimensionne
+    pas : son temps de vidange est infini et aucun volume ne le rend conforme.
+    La cascade le laissait alors à zéro sans un mot, et le volume proposé en
+    aval encaissait la totalité de son ruissellement : on pouvait croire le
+    réseau dimensionné alors qu'un ouvrage manquait au calcul. Chaque ouvrage
+    revient donc avec ce qui lui est arrivé.
+
+    Renvoie la liste des :class:`RetenuCascade`, dans l'ordre de calcul.
     """
     systeme.synchroniser()
     retenus: List[Tuple[str, float]] = []
@@ -725,7 +747,18 @@ def dimensionner_en_cascade(systeme: Systeme, marge: float = 1.05) -> List[Tuple
         bassin.debit_ajutage_ls = (
             o.etude.debit_ajutage_ls if o.scenario != SCENARIO_DISPERSION else 0.0)
         bassin.volume_total_m3 = round(res.volume_m3 * marge, 1) if res.dimensionnable else 0.0
-        retenus.append((o.nom, bassin.volume_total_m3))
+        if res.dimensionnable:
+            retenus.append(RetenuCascade(o.nom, bassin.volume_total_m3))
+        else:
+            if res.debit_sortant_ls <= 0:
+                raison = ("aucun exutoire encodé (ni infiltration, ni ajutage) : temps de "
+                          "vidange infini, volume non calculable. Encodez une surface "
+                          "d'infiltration et/ou un débit d'ajutage.")
+            elif o.etude.aire_raccordee_m2 <= 0:
+                raison = ("aucune surface raccordée : raccordez-lui un bassin versant.")
+            else:
+                raison = "volume nul : rien à retenir pour cet ouvrage."
+            retenus.append(RetenuCascade(o.nom, 0.0, dimensionne=False, raison=raison))
     systeme.synchroniser()
     return retenus
 

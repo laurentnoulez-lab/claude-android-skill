@@ -676,6 +676,42 @@ def _dossier_interne(chemin):
         vue_projet.repertoire_documents = origine
 
 
+class TestCascadeDansLInterface(unittest.TestCase):
+
+    """Le bouton promet « un volume pour chacun » : il doit tenir ou s'expliquer."""
+
+    def test_l_ouvrage_non_dimensionne_est_annonce(self):
+        from bassin.core import reseau as mod_reseau
+        from bassin.core.model import SurfaceIncidente
+        from bassin.ui.vues.reseau import VueReseau
+
+        etat = EtatApplication()
+        systeme = etat.systeme
+        aval = systeme.courant
+        amont = mod_reseau.ouvrage_neuf(systeme, "Bassin sans exutoire")
+        amont.aval_id = aval.id
+        systeme.ouvrages.append(amont)
+        for ouvrage, aire, ajutage in ((amont, 4000.0, 0.0), (aval, 3000.0, 5.0)):
+            versant = mod_reseau.versant_neuf(systeme, f"BV {ouvrage.nom}", ouvrage.id)
+            versant.surfaces = [SurfaceIncidente("Imperméable", 1.0, aire)]
+            systeme.bassins_versants.append(versant)
+            ouvrage.etude.surface_infiltration_m2 = 0.0
+            ouvrage.etude.fixer_ajutage_absolu(ajutage)
+        etat.invalider()
+
+        page = PageFactice()
+        vue = VueReseau(page, etat)
+        vue.afficher()
+        vue._dimensionner()
+
+        messages = [c.content.value for c in page.ouverts if hasattr(c, "content")]
+        self.assertTrue(messages)
+        dernier = messages[-1]
+        self.assertIn("Bassin sans exutoire", dernier)
+        self.assertIn("Non dimensionné", dernier)
+        self.assertIn("exutoire", dernier)
+
+
 class TestRafraichissementDesChamps(unittest.TestCase):
 
     """Changer d'ouvrage doit changer les champs, pas seulement les résultats.

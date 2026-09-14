@@ -354,8 +354,18 @@ class VueReseau(Vue):
     def _dimensionner(self, _=None) -> None:
         retenus = self.etat.dimensionner_le_reseau()
         self.rafraichir()
-        detail = " · ".join(theme.fr(f"{nom} {volume:.1f} m³") for nom, volume in retenus)
-        self.notifier(f"Dimensionnement en cascade : {detail}", "succes")
+        traites = [r for r in retenus if r.dimensionne]
+        laisses = [r for r in retenus if not r.dimensionne]
+        detail = " · ".join(theme.fr(f"{r.nom} {r.volume_m3:.1f} m³") for r in traites)
+        if laisses:
+            # Le bouton promet « un volume pour chacun » : taire ceux qu'on n'a
+            # pas pu calculer laisserait croire le réseau dimensionné.
+            manques = " ; ".join(f"« {r.nom} » : {r.raison}" for r in laisses)
+            self.notifier(
+                (f"Dimensionné : {detail}. " if traites else "")
+                + f"Non dimensionné — {manques}", "alerte")
+        else:
+            self.notifier(f"Dimensionnement en cascade : {detail}", "succes")
 
     # --------------------------------------------------------------- rendu
     def resultats(self) -> List[ft.Control]:
