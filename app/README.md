@@ -273,6 +273,27 @@ vidange de 48 à 24 h la fait passer de 109,5 à 184,3 m². Vérifié contre le 
 projets tirés au sort : écart maximal **0,1 %**, qui est la tolérance de la dichotomie
 elle-même.
 
+**La période de retour commande tout.** Les coefficients de pluie étaient figés sur la
+récurrence choisie dans l'application : la cellule la plus regardée du classeur ne servait
+à rien. La feuille `Pluies statistiques` porte maintenant les coefficients de Montana des
+**douze** périodes de retour, et chaque feuille `Pluie n` y cherche les siens. Passer de 25
+à 100 ans sur la feuille `Projet` fait passer le volume de 66,3 à 93,6 m³ — la valeur du
+moteur pour T = 100.
+
+**En mode QDF, tout se lit dans la table du GTI.** Les durées balayées y sont exactement
+celles du GTI — la table ne connaît que des durées normalisées —, donc chaque ligne se lit
+par `INDEX`, sans interpolation : le classeur retombe alors sur le moteur au chiffre près.
+La colonne des intensités était auparavant écrite en dur de bout en bout.
+
+**Ce qui se déduit ne se recopie plus.** Une donnée saisie deux fois finit par diverger :
+* la **surface active amont** d'un ouvrage est la somme des surfaces propres des ouvrages
+  d'amont ;
+* le bloc « Surfaces incidentes » de la feuille `Projet` et son K renvoient à
+  `Bassins versants` et à `Ouvrages`, où ils sont réellement saisis ;
+* le **diamètre commercial retenu** se cherche dans l'abaque — le plus grand diamètre
+  inférieur ou égal au diamètre requis, la règle du moteur — et suit donc la charge, le Cd
+  et le débit visé.
+
 **Ce qui reste figé**, dans des cellules modifiables et signalées en orange :
 
 * l'**apport des ouvrages amont**, et tous les minima d'un ouvrage qui en reçoit un : cet
@@ -282,6 +303,13 @@ elle-même.
   dépend lui-même de l'infiltration — l'inversion ci-dessus n'y tient plus ;
 * la **simulation** (pointe, débordement, vidange), pour la même raison ; capacité,
   remplissage et totaux, eux, se recalculent.
+
+Sur le réseau de démonstration, cela fait **34 cellules** sur 947 valeurs numériques. Les
+913 autres sont les **tables du GTI**, l'**abaque des diamètres**, la constante `g`, la
+**grille des durées balayées** et vos **cellules de saisie** — figées parce qu'elles
+doivent l'être. Un test classe chaque nombre écrit en dur dans l'une de ces catégories et
+**échoue si une cellule n'y entre pas** : corriger celles qu'on signale ne suffisait pas,
+il en restait toujours d'autres.
 
 Recalculé cellule par cellule, le classeur retrouve le moteur à **0,02 %** près — l'écart
 que laisse sa grille d'une centaine de durées, contre 17 280 dans l'application.

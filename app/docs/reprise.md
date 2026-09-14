@@ -241,6 +241,14 @@ exceptés.
   qui demandent une intégration pas à pas : l'apport amont et, sur un ouvrage qui en
   reçoit, ses minima ; les minima du scénario à seuil, dont l'ajutage surélevé ne s'ouvre
   qu'à un instant fonction de l'infiltration ; la simulation du réseau.
+- **Ne corrigez pas seulement la cellule qu'on vous signale.** Chaque fois qu'une valeur
+  figée a été signalée, l'inventaire complet en a révélé d'autres, plus graves : la
+  période de retour ne commandait rien (coefficients de Montana figés sur la récurrence
+  de l'application), toute la colonne des intensités était en dur en mode QDF, la surface
+  active amont, le bloc de surfaces de la feuille « Projet », le K et le diamètre
+  commercial étaient recopiés. `test_toute_cellule_figee_a_une_raison_d_etre` classe
+  désormais **chaque** nombre écrit en dur — source GTI, abaque, constante, grille de
+  durées, saisie, intégration pas à pas — et échoue sur ce qui n'entre dans aucune case.
 - **Un minimum se calcule, il ne se recopie pas.** Le moteur cherche la surface
   d'infiltration et l'ajutage minimaux par dichotomie, ce qui ne se met pas en cellule —
   mais la condition qu'ils satisfont, elle, s'inverse. `V x 1000 / Q / 3600 <= T` avec

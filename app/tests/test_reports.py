@@ -953,6 +953,176 @@ class TestClasseurDeReseau(unittest.TestCase):
         self.assertGreater(debit2, debit0 * 1.2,
                            "diviser le temps de vidange n'a pas augmenté l'ajutage minimal")
 
+    def test_la_periode_de_retour_commande_tout_le_classeur(self):
+        """Sinon, la cellule la plus regardée du classeur ne sert à rien.
+
+        Les coefficients de Montana étaient figés sur la récurrence choisie
+        dans l'application : passer de 25 à 100 ans sur la feuille « Projet »
+        ne changeait pas un seul volume. Ils se cherchent désormais dans la
+        table des douze périodes de retour.
+        """
+        wb = self._classeur()
+        for i in range(1, len(self.dossier.fiches) + 1):
+            ws = wb[f"Pluie {i}"]
+            for colonne in "BCDEFG":
+                valeur = ws[f"{colonne}5"].value
+                with self.subTest(feuille=f"Pluie {i}", cellule=f"{colonne}5"):
+                    self.assertIsInstance(valeur, str, "coefficient de Montana figé")
+                    self.assertIn("Projet!$B$10", valeur,
+                                  "le coefficient ne dépend pas de la période de retour")
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_changer_la_periode_de_retour_recalcule_les_volumes(self):
+        import copy
+
+        import formulas
+        import openpyxl
+        from bassin.core import hydro
+
+        fiche = next(f for f in self.dossier.fiches if f.apport_amont_m3 <= 0)
+        rang = self.dossier.fiches.index(fiche) + 1
+        etude = fiche.ouvrage.etude
+
+        def volume(chemin):
+            solution = formulas.ExcelModel().loads(chemin).finish().calculate()
+            cle = f"]SCÉNARIOS {rang}'!D5"
+            return next(float(v.value[0, 0]) for k, v in solution.items()
+                        if k.upper().endswith(cle))
+
+        reference = volume(self.chemin)
+        for periode in (5, 100):
+            chemin = os.path.join(self.repertoire, f"T{periode}.xlsx")
+            shutil.copy(self.chemin, chemin)
+            classeur = openpyxl.load_workbook(chemin)
+            classeur["Projet"]["B10"] = periode
+            classeur.save(chemin)
+            obtenu = volume(chemin)
+            autre = copy.deepcopy(etude)
+            autre.periode_retour = periode
+            attendu = hydro.dimensionner(autre, "mixte", avec_minima=False).volume_m3
+            with self.subTest(periode_retour=periode):
+                self.assertNotAlmostEqual(obtenu, reference, places=1,
+                                          msg="changer la période de retour n'a rien changé")
+                self.assertAlmostEqual(obtenu, attendu, delta=max(attendu * 0.01, 0.1))
+
+    def test_les_intensites_qdf_se_lisent_dans_la_table_du_gti(self):
+        """En mode QDF, toute la colonne des intensités était écrite en dur.
+
+        Les durées balayées y sont exactement celles du GTI — la table ne
+        connaît que des durées normalisées —, donc chaque ligne se lit dans la
+        feuille « Pluies statistiques » sans interpolation.
+        """
+        from bassin.core import rainfall
+
+        projet = projet_complet()
+        projet.commune_ins, projet.commune_nom = "61003", "Amay"
+        projet.source_pluie = rainfall.SOURCE_QDF
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_qdf_")
+        try:
+            import openpyxl
+
+            dossier = mod_dossier.construire(projet)
+            self.assertEqual(dossier.projet.source_pluie, rainfall.SOURCE_QDF)
+            chemin = xlsx_report.ecrire(dossier, os.path.join(repertoire, "qdf.xlsx"))
+            ws = openpyxl.load_workbook(chemin)["Pluie de projet"]
+            figees = [c.coordinate for ligne in ws.iter_rows(min_col=4, max_col=4)
+                      for c in ligne if isinstance(c.value, (int, float))]
+            self.assertEqual(figees, [], "des intensités QDF restent écrites en dur")
+            self.assertIn("Pluies statistiques", str(ws["D9"].value))
+            self.assertIn("Projet!$B$10", str(ws["D9"].value))
+        finally:
+            shutil.rmtree(repertoire, ignore_errors=True)
+
+    def test_ce_qui_se_deduit_ne_se_recopie_pas(self):
+        """Chasse aux doublons : une donnée saisie deux fois finit par diverger."""
+        wb = self._classeur()
+        # La surface active amont se déduit des ouvrages situés en amont.
+        ouvrages = wb["Ouvrages"]
+        for i, fiche in enumerate(self.dossier.fiches, start=5):
+            if fiche.aire_ponderee_amont_m2 <= 0:
+                continue
+            with self.subTest(ouvrage=fiche.nom):
+                self.assertIsInstance(ouvrages.cell(row=i, column=4).value, str,
+                                      "la surface active amont est recopiée")
+        # Le bloc « Surfaces incidentes » de la feuille « Projet » renvoie aux
+        # bassins versants, et K à la ligne de l'ouvrage.
+        projet = wb["Projet"]
+        renvois = [c.value for ligne in projet.iter_rows(min_row=15, max_row=16)
+                   for c in ligne if isinstance(c.value, str) and c.value.startswith("=")]
+        self.assertTrue(any("Bassins versants" in v for v in renvois),
+                        "les surfaces de la feuille Projet sont recopiées")
+        self.assertIn("Ouvrages!", str(projet["B22"].value))
+        # Le diamètre commercial suit la charge, le Cd et le débit visé.
+        for i in range(1, len(self.dossier.fiches) + 1):
+            with self.subTest(feuille=f"Ajutage {i}"):
+                self.assertIsInstance(wb[f"Ajutage {i}"]["B12"].value, str,
+                                      "le diamètre commercial est figé")
+
+    def test_toute_cellule_figee_a_une_raison_d_etre(self):
+        """Le garde-fou : une valeur figée nouvelle doit se justifier.
+
+        Corriger les cellules qu'on vous signale ne suffit pas — il en reste
+        toujours d'autres. Ce test classe **chaque** nombre écrit en dur dans
+        une catégorie légitime : donnée source du GTI, abaque, constante
+        physique, grille de durées, cellule de saisie, ou grandeur qui demande
+        une intégration pas à pas. Une cellule qui n'entre dans aucune de ces
+        cases fait échouer la suite : c'est un calcul qu'on a recopié au lieu
+        de l'écrire.
+        """
+        wb = self._classeur()
+        # Par feuille : les colonnes (1-indexées) dont les nombres sont
+        # légitimement figés, et pourquoi.
+        saisie_ouvrages = {5, 6, 8, 9, 10, 11, 13}   # hypothèses et ouvrage construit
+        moteur_ouvrages = {4, 14, 15, 16}            # apport amont et ce qui en dépend
+        orphelines = []
+        for ws in wb:
+            titre = ws.title
+            for ligne in ws.iter_rows():
+                for c in ligne:
+                    if not isinstance(c.value, (int, float)) or isinstance(c.value, bool):
+                        continue
+                    if titre == "Pluies statistiques":
+                        continue                      # tables du GTI
+                    if titre.startswith("Pluie") and c.column == 1:
+                        continue                      # grille des durées balayées
+                    if titre.startswith("Ajutage"):
+                        continue                      # g et abaque des diamètres
+                    if titre in ("Projet", "Bassins versants"):
+                        continue                      # cellules de saisie
+                    if titre == "Ouvrages" and c.column in saisie_ouvrages | moteur_ouvrages:
+                        continue
+                    if titre == "Réseau":
+                        continue                      # simulation du système
+                    if titre.startswith("Table QDF"):
+                        continue                      # simulation de l'ouvrage
+                    if titre.startswith("Scénarios"):
+                        continue                      # minima sans forme fermée
+                    orphelines.append(f"{titre}!{c.coordinate} = {c.value!r}")
+        self.assertEqual(orphelines, [],
+                         "cellules figées sans justification :\n" + "\n".join(orphelines))
+
+    def test_les_valeurs_figees_du_moteur_sont_signalees(self):
+        """Une valeur non recalculable doit se voir, sinon elle trompe.
+
+        Le classeur annonce qu'il recalcule : les quelques cellules qui font
+        exception portent un fond orange et la feuille dit pourquoi.
+        """
+        wb = self._classeur()
+        for i, fiche in enumerate(self.dossier.fiches, start=5):
+            if fiche.apport_amont_m3 <= 0:
+                continue
+            for colonne in (14, 16):
+                cellule = wb["Ouvrages"].cell(row=i, column=colonne)
+                with self.subTest(ouvrage=fiche.nom, colonne=colonne):
+                    self.assertIsInstance(cellule.value, (int, float))
+                    self.assertEqual(cellule.fill.fgColor.rgb[-6:].upper(), "FEF3C7",
+                                     "une valeur du moteur n'est pas signalée")
+        notes = [c.value for nom in wb.sheetnames for ligne in wb[nom].iter_rows()
+                 for c in ligne
+                 if isinstance(c.value, str) and "ne se recalcule" in c.value]
+        self.assertTrue(notes, "aucune feuille n'explique ses cellules figées")
+
     def test_aucune_formule_ne_garde_un_gabarit_non_remplace(self):
         """Une accolade dans une formule trahit un f manquant devant la chaîne.
 

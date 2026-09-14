@@ -203,7 +203,14 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     _label(ws, 7, "Date", dossier.date)
     _label(ws, 8, "Commune", projet.commune_nom)
     _label(ws, 9, "Code INS", projet.commune_ins)
-    _label(ws, 10, "Période de retour", projet.periode_retour, "ans")
+    # Cellule modifiable, et qui commande vraiment : les coefficients de pluie
+    # de chaque ouvrage s'y réfèrent. Elle est signalée comme telle.
+    _label(ws, 10, "Période de retour", projet.periode_retour, "ans",
+           fond=BLEU_PALE).comment = None
+    ws.cell(row=10, column=4,
+            value="Modifiable : 2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100 ou 200 ans. "
+                  "Tout le classeur se recalcule.").font = Font(italic=True, size=9,
+                                                                color="475569")
     _label(ws, 11, "Source des pluies", dossier.source_pluies_datee)
     if dossier.reseau_multiple:
         _label(ws, 12, "Ouvrage détaillé par ce classeur", dossier.ouvrage_courant.nom,
@@ -223,6 +230,7 @@ def construire_classeur(dossier: Dossier) -> Workbook:
         ws.cell(row=ligne, column=5, value=s.note).border = _BORDURE
         ligne += 1
     l_tot = ligne
+    ws._plage_surfaces = (15, l_tot - 1)  # type: ignore[attr-defined]
     ws.cell(row=l_tot, column=1, value="TOTAL").font = Font(bold=True)
     for col, formule in ((3, f"=SUM(C15:C{l_tot - 1})"), (4, f"=SUM(D15:D{l_tot - 1})")):
         c = ws.cell(row=l_tot, column=col, value=formule)
@@ -242,12 +250,14 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     _titre(ws, f"A{l}", "2. Sol, exutoire et contraintes", 12)
     l += 1
     c_sref = _label(ws, l, "Surface de référence du projet", projet.surface_reference_m2, "m²", "0.0"); l += 1
-    c_k = _label(ws, l, "Coefficient d'infiltration K", projet.k_infiltration_ms, "m/s", "0.00E+00"); l += 1
+    renvoi = _renvoi_ouvrage(dossier)
+    c_k = _label(ws, l, "Coefficient d'infiltration K",
+                 f"=Ouvrages!$F${renvoi}" if renvoi else projet.k_infiltration_ms,
+                 "m/s", "0.00E+00"); l += 1
     c_cs = _label(ws, l, "Coefficient de sécurité sur K", projet.coef_securite_infiltration, "[-]", "0.0"); l += 1
     # Sur un réseau, ces valeurs vivent sur la feuille « Ouvrages » : les
     # recopier ici donnerait deux vérités pour la même donnée, et modifier l'une
     # ne changerait pas l'autre. On y renvoie.
-    renvoi = _renvoi_ouvrage(dossier)
     c_sinf = _label(ws, l, "Surface d'infiltration du dispositif",
                     f"=Ouvrages!$E${renvoi}" if renvoi else projet.surface_infiltration_m2,
                     "m²", "0.0"); l += 1
@@ -337,14 +347,15 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     # ouvrage s'y réfère, et son adresse doit être connue avant de l'écrire.
     stats = _feuille_statistiques(wb, dossier)
     if fiches:
-        surfaces, totaux_versants = _feuille_versants(wb, dossier)
+        surfaces, totaux_versants, cellules_versants = _feuille_versants(wb, dossier)
+        _relier_surfaces_projet(wb, dossier, cellules_versants)
         ancrages = _feuille_ouvrages(wb, dossier, surfaces)
         if dossier.reseau_multiple:
             _feuille_reseau(wb, dossier, ancrages, totaux_versants)
         sous_dossiers = dossier.par_ouvrage()
         for i, (ancrage, fiche) in enumerate(zip(ancrages, fiches), start=1):
             sous = sous_dossiers[i - 1] if i - 1 < len(sous_dossiers) else dossier
-            _feuille_pluie(wb, dossier, ancrage)
+            _feuille_pluie(wb, dossier, ancrage, stats)
             _feuille_scenarios(wb, dossier, ancrage, fiche)
             _feuille_bassin(wb, sous, ancrage, stats, rang=i)
             _feuille_ajutage(wb, sous, ancrage, rang=i)
@@ -359,7 +370,7 @@ def construire_classeur(dossier: Dossier) -> Workbook:
             q_infiltration_bassin="Q_infiltration_bassin",
             q_ajutage_bassin="Q_ajutage_bassin",
         )
-        _feuille_pluie(wb, dossier, ancrage)
+        _feuille_pluie(wb, dossier, ancrage, stats)
         _feuille_scenarios(wb, dossier, ancrage)
         _feuille_bassin(wb, dossier, ancrage, stats)
         _feuille_ajutage(wb, dossier, ancrage)
@@ -368,7 +379,38 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     return wb
 
 
-def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[Dict[str, str], Dict[str, int]]:
+def _relier_surfaces_projet(wb: Workbook, dossier: Dossier,
+                            cellules: Dict[str, Dict[str, List[int]]]) -> None:
+    """Le bloc « Surfaces incidentes » de la feuille « Projet » renvoie aux versants.
+
+    Il recopiait les surfaces de l'ouvrage détaillé : deux vérités pour la même
+    donnée. Retoucher une surface sur « Bassins versants » — la feuille qui
+    annonce pourtant qu'elle commande tout — ne changeait rien ici, et l'inverse
+    non plus. Chaque ligne pointe désormais vers les cellules où cette
+    occupation du sol est réellement saisie, pour cet ouvrage.
+    """
+    courant = dossier.ouvrage_courant
+    par_libelle = cellules.get(getattr(courant, "id", ""), {})
+    if not par_libelle:
+        return
+    ws = wb["Projet"]
+    plage = getattr(ws, "_plage_surfaces", None)
+    if plage is None:
+        return
+    source = _ref("Bassins versants")
+    for r in range(plage[0], plage[1] + 1):
+        lignes = par_libelle.get(ws.cell(row=r, column=1).value)
+        if not lignes:
+            continue
+        ws.cell(row=r, column=3,
+                value="=" + "+".join(f"{source}!$E${l}" for l in lignes)).number_format = "0"
+        # Le coefficient est le même sur toutes ces lignes : celui de la première.
+        ws.cell(row=r, column=2,
+                value=f"={source}!$D${lignes[0]}").number_format = "0.00"
+
+
+def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[
+        Dict[str, str], Dict[str, int], Dict[str, Dict[str, List[int]]]]:
     """Surfaces de chaque bassin versant, coefficient par coefficient.
 
     C'est ici que le classeur devient vivant : retoucher une surface ou un
@@ -393,6 +435,9 @@ def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[Dict[str, str], D
     #: Par bassin versant, la ligne qui porte ses totaux — la synthèse s'y réfère
     #: au lieu de recopier des nombres.
     totaux: Dict[str, int] = {}
+    #: Par ouvrage puis par occupation du sol, les lignes où la surface est
+    #: saisie : la feuille « Projet » y renvoie au lieu de recopier.
+    cellules: Dict[str, Dict[str, List[int]]] = {}
     for versant in systeme.bassins_versants:
         aval = systeme.ouvrage(versant.bassin_id)
         debut = ligne
@@ -407,6 +452,8 @@ def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[Dict[str, str], D
             c.number_format = "0.0"
             for col in range(1, 7):
                 ws.cell(row=ligne, column=col).border = _BORDURE
+            if aval is not None:
+                cellules.setdefault(aval.id, {}).setdefault(surface.libelle, []).append(ligne)
             ligne += 1
         if aval is not None and ligne > debut:
             # Le nom de feuille qualifie la PLAGE, pas la fonction :
@@ -425,7 +472,7 @@ def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[Dict[str, str], D
         ligne += 1
 
     return ({ouvrage_id: "=" + "+".join(morceaux)
-             for ouvrage_id, morceaux in plages.items()}, totaux)
+             for ouvrage_id, morceaux in plages.items()}, totaux, cellules)
 
 
 def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
@@ -493,8 +540,17 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
         ws.cell(row=r, column=2, value=aval.nom if aval is not None else "exutoire")
         ws.cell(row=r, column=3,
                 value=surfaces.get(o.id, fiche.aire_ponderee_propre_m2)).number_format = "0.0"
-        ws.cell(row=r, column=4,
-                value=round(fiche.aire_ponderee_amont_m2, 1)).number_format = "0.0"
+        # La surface active amont est la somme des surfaces propres des ouvrages
+        # situés en amont : elle se déduit, elle ne se recopie pas. Figée, elle
+        # ne bougeait pas quand on retouchait un bassin versant amont.
+        amonts = [a.id for a in systeme.amonts_transitifs(o.id)]
+        lignes_amont = [5 + j for j, autre in enumerate(dossier.fiches)
+                        if autre.ouvrage.id in amonts]
+        if lignes_amont:
+            somme = "+".join(f"$C${la}" for la in lignes_amont)
+            ws.cell(row=r, column=4, value=f"={somme}").number_format = "0.0"
+        else:
+            ws.cell(row=r, column=4, value=0.0).number_format = "0.0"
         # Hypothèses de dimensionnement
         ws.cell(row=r, column=5, value=etude.surface_infiltration_m2).number_format = "0"
         ws.cell(row=r, column=6, value=etude.k_infiltration_ms).number_format = "0.00E+00"
@@ -565,8 +621,10 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
     return ancrages
 
 
-def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
+def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
+                   stats: Optional[Dict[str, object]] = None) -> None:
     projet = dossier.projet
+    stats = stats or {}
     ws = wb.create_sheet(ancrage.feuille_pluie)
     _largeurs(ws, {"A": 14, "B": 12, "C": 12, "D": 14, "E": 14, "F": 16, "G": 16, "H": 18,
                    "I": 16, "J": 18, "K": 16, "L": 18, "M": 15, "N": 14, "O": 16, "P": 18,
@@ -579,13 +637,25 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
     # source : sinon le classeur recalculait des intensités de Montana alors que
     # l'application affichait les mesures QDF.
     src_pluie = rainfall.SourcePluie(projet.commune_ins, projet.periode_retour, projet.source_pluie)
+    stat = _ref("Pluies statistiques")
+    m0, m1 = stats.get("montana_premiere"), stats.get("montana_derniere")
     montana = None
     if src_pluie.source == rainfall.SOURCE_MONTANA:
         montana = rainfall.montana_coeffs(projet.commune_ins, projet.periode_retour)
         _entete(ws, 4, ["Coefficients de Montana", "a1", "b1", "a2", "b2", "a3", "b3"])
         ws.cell(row=5, column=1, value="i [mm/h] = a x t[min]^(-b)")
         for i, v in enumerate(montana):
-            ws.cell(row=5, column=2 + i, value=v).number_format = "0.0000"
+            # Les coefficients dépendent de la récurrence : ils se cherchent
+            # dans la table des douze, sur la période de retour de la feuille
+            # « Projet ». Figés, ils rendaient cette cellule inerte — la
+            # changer ne recalculait rien.
+            if m0 and m1:
+                colonne = get_column_letter(3 + i)
+                valeur = (f"=INDEX({stat}!${colonne}${m0}:${colonne}${m1},"
+                          f"MATCH(Projet!$B$10,{stat}!$B${m0}:$B${m1},0))")
+            else:
+                valeur = v
+            ws.cell(row=5, column=2 + i, value=valeur).number_format = "0.0000"
         ws.cell(row=6, column=1, value="Plages : a1/b1 si t < 25 min | a2/b2 si 25 <= t <= 6000 min | a3/b3 si t > 6000 min")
         ws.cell(row=6, column=1).font = Font(italic=True, size=9, color="475569")
 
@@ -602,6 +672,10 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
 
     durees = _grille_durees(dossier)
     src = rainfall.SourcePluie(projet.commune_ins, projet.periode_retour, projet.source_pluie)
+    h0, h1 = stats.get("premiere"), stats.get("derniere")
+    l_periodes = stats.get("ligne_periodes")
+    col_h0 = get_column_letter(int(stats.get("col_premiere", 3)))
+    col_hn = get_column_letter(int(stats.get("col_premiere", 3)) + len(rainfall.RETURN_PERIODS) - 1)
     ligne = l0 + 1
     for d in durees:
         r = ligne
@@ -611,7 +685,19 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
             ws.cell(row=r, column=3, value=f"=IF(A{r}<25,$C$5,IF(A{r}<=6000,$E$5,$G$5))").number_format = "0.0000"
             ws.cell(row=r, column=4, value=f"=B{r}*A{r}^(-C{r})").number_format = "0.00"
         else:
-            ws.cell(row=r, column=4, value=src.intensite_mmh(d)).number_format = "0.00"
+            # Source QDF : les durées balayées SONT celles du GTI (la table ne
+            # connaît que des durées normalisées), donc chaque ligne se lit
+            # directement dans « Pluies statistiques » — ligne par la durée,
+            # colonne par la période de retour. Écrite en dur, cette colonne
+            # figeait tout le classeur d'un projet en mode QDF.
+            if h0 and h1 and l_periodes:
+                ws.cell(row=r, column=4, value=(
+                    f"=INDEX({stat}!${col_h0}${h0}:${col_hn}${h1},"
+                    f"MATCH($A{r},{stat}!$B${h0}:$B${h1},0),"
+                    f"MATCH(Projet!$B$10,{stat}!${col_h0}${l_periodes}:"
+                    f"${col_hn}${l_periodes},0))*60/$A{r}")).number_format = "0.00"
+            else:
+                ws.cell(row=r, column=4, value=src.intensite_mmh(d)).number_format = "0.00"
         ws.cell(row=r, column=5, value=f"=D{r}*A{r}/60").number_format = "0.00"
         ws.cell(row=r, column=6, value=f"=E{r}*{ancrage.s_ponderee}/1000").number_format = "0.00"
         # [1] temporisation seule : ajutage uniquement
@@ -964,16 +1050,25 @@ def _feuille_ajutage(wb: Workbook, dossier: Dossier, ancrage: Optional[_Ancrage]
     _label(ws, 10, "Diamètre requis d = racine(4A/pi)", "=2*SQRT(B8/PI())*1000", "mm", "0.0", fond=BLEU_PALE)
     _label(ws, 11, "Vitesse dans l'orifice v = Cd.racine(2gh)", "=B6*SQRT(2*B7*B5)", "m/s", "0.00")
 
+    from ..core.orifice import DIAMETRES_COMMERCIAUX_MM
+
+    l0 = 16
+    a0, a1 = l0 + 1, l0 + len(DIAMETRES_COMMERCIAUX_MM)
     if dossier.orifice and dossier.orifice.diametre_commercial_mm:
-        _label(ws, 12, "Diamètre commercial retenu (par defaut)", dossier.orifice.diametre_commercial_mm, "mm", "0")
+        # Le moteur retient le plus grand diamètre commercial INFÉRIEUR OU ÉGAL
+        # au diamètre requis, pour ne pas dépasser le débit de fuite autorisé.
+        # MATCH(...;1) sur l'abaque croissant donne exactement cela ; en dessous
+        # du plus petit diamètre, il n'y a pas de choix possible et on prend
+        # celui-là. Figé, ce diamètre ne suivait ni la charge, ni le Cd, ni le
+        # débit visé.
+        _label(ws, 12, "Diamètre commercial retenu (par defaut)",
+               f"=IFERROR(INDEX($A${a0}:$A${a1},MATCH($B$10,$A${a0}:$A${a1},1)),$A${a0})",
+               "mm", "0")
         _label(ws, 13, "Débit réel du diamètre retenu",
                "=B6*PI()*(B12/1000)^2/4*SQRT(2*B7*B5)*1000", "l/s", "0.000", fond=VERT_PALE)
 
-    l0 = 16
     ws.cell(row=l0 - 1, column=1, value="Abaque des diamètres commerciaux (charge = h ci-dessus)").font = Font(bold=True)
     _entete(ws, l0, ["Diamètre [mm]", "Section [cm²]", "Débit [l/s]"])
-    from ..core.orifice import DIAMETRES_COMMERCIAUX_MM
-
     for i, d in enumerate(DIAMETRES_COMMERCIAUX_MM):
         r = l0 + 1 + i
         ws.cell(row=r, column=1, value=d).border = _BORDURE
@@ -1004,8 +1099,13 @@ def _feuille_statistiques(wb: Workbook, dossier: Dossier) -> Dict[str, object]:
     for titre, table, fmt, depart in (("Hauteurs de pluie [mm]", mm, "0.0", 4),
                                       ("Intensités [l/s/ha]", lsha, "0.0", 4 + len(mm) + 4)):
         ws.cell(row=depart - 1, column=1, value=titre).font = Font(bold=True, color=BLEU)
-        _entete(ws, depart, ["Durée", "Durée [min]"]
-                + [f"{rp} ans" for rp in rainfall.RETURN_PERIODS])
+        _entete(ws, depart, ["Durée", "Durée [min]"] + [""] * len(rainfall.RETURN_PERIODS))
+        # Les périodes de retour sont écrites comme NOMBRES, affichées « 25 ans » :
+        # une formule peut alors les retrouver par MATCH, et la période de retour
+        # de la feuille « Projet » devient un vrai paramètre du classeur.
+        for j, rp in enumerate(rainfall.RETURN_PERIODS):
+            c = ws.cell(row=depart, column=3 + j, value=int(rp))
+            c.number_format = '0" ans"'
         for i, ligne in enumerate(table):
             r = depart + 1 + i
             ws.cell(row=r, column=1, value=rainfall.QDF_DURATION_LABELS[i]).font = Font(bold=True)
@@ -1019,7 +1119,32 @@ def _feuille_statistiques(wb: Workbook, dossier: Dossier) -> Dict[str, object]:
                     c.fill = PatternFill("solid", fgColor=BLEU_PALE)
         if titre.startswith("Hauteurs"):
             ancre = {"premiere": depart + 1, "derniere": depart + len(table),
-                     "col_duree": "B", "col_premiere": 3}
+                     "col_duree": "B", "col_premiere": 3, "ligne_periodes": depart}
+
+    # Coefficients de Montana pour les douze périodes de retour. Sans eux, la
+    # période de retour de la feuille « Projet » ne commandait rien : les
+    # coefficients de la feuille « Pluie n » étaient figés sur la récurrence
+    # choisie dans l'application, et la changer dans le classeur ne recalculait
+    # rien du tout.
+    if rainfall.a_donnees_montana(projet.commune_ins):
+        depart = 4 + len(mm) + 4 + len(lsha) + 4
+        ws.cell(row=depart - 1, column=1,
+                value="Coefficients de Montana - i [mm/h] = a x t[min]^(-b)").font = Font(
+                    bold=True, color=BLEU)
+        _entete(ws, depart, ["Période de retour", "T [ans]", "a1", "b1", "a2", "b2", "a3", "b3"])
+        for i, rp in enumerate(rainfall.RETURN_PERIODS):
+            r = depart + 1 + i
+            ws.cell(row=r, column=1, value=f"{rp} ans").font = Font(bold=True)
+            ws.cell(row=r, column=2, value=int(rp)).number_format = "0"
+            for j, v in enumerate(rainfall.montana_coeffs(projet.commune_ins, rp)):
+                c = ws.cell(row=r, column=3 + j, value=round(v, 4))
+                c.number_format = "0.0000"
+                c.border = _BORDURE
+            if rp == projet.periode_retour:
+                for j in range(6):
+                    ws.cell(row=r, column=3 + j).fill = PatternFill("solid", fgColor=BLEU_PALE)
+        ancre["montana_premiere"] = depart + 1
+        ancre["montana_derniere"] = depart + len(rainfall.RETURN_PERIODS)
     return ancre
 
 
@@ -1205,6 +1330,11 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
                 ws.cell(row=r, column=3, value=f"={ancrage.v_bassin}").number_format = "0.0"
             ws.cell(row=r, column=4,
                     value=f"=IF(C{r}<=0,0,B{r}/C{r}*100)").number_format = "0"
+            # L'apport amont de CETTE colonne n'est pas celui de la feuille
+            # « Ouvrages » : ici c'est le volume restitué sous l'averse la plus
+            # défavorable du système entier, là celui de la pluie critique du
+            # seul ouvrage (49,7 contre 50,8 m³ sur le réseau de démonstration).
+            # Les confondre ferait dire au classeur une chose pour une autre.
         derniere = premiere + len(sim.resultats) - 1
         _label(ws, ligne, "Volume stocké par le réseau",
                f"=SUM(B{premiere}:B{derniere})", "m³", "0.0")
