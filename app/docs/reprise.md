@@ -219,8 +219,17 @@ exceptés.
 - Toute nouvelle fonctionnalité touchant l'hydrologie doit être **confrontée aux modèles de
   référence**, pas seulement testée contre elle-même.
 - Les rapports (PDF, DOCX, XLSX) sont trois sorties du même `dossier.construire` : une
-  grandeur ajoutée doit apparaître dans les trois, ou être justifiée si elle n'y est pas
-  (le classeur Excel ne peut pas reproduire une intégration pas à pas — c'est documenté).
+  grandeur ajoutée doit apparaître dans les trois, ou être justifiée si elle n'y est pas.
+- **Le classeur Excel est vivant, et il l'est par ouvrage.** Chaque bassin a sa ligne sur
+  la feuille `Ouvrages` et ses feuilles `Pluie n` / `Scénarios n`, dont les formules
+  pointent vers *ses* cellules (`_Ancrage`). Trois pièges s'y cachent, chacun rencontré :
+  une chaîne de formule sans `f` devant laisse partir `={ancrage.q_ajutage}` tel quel
+  (un test refuse toute accolade dans une formule) ; un nom de feuille qualifie la **plage**
+  et non la fonction (`SUM('F'!A1:A9)`, jamais `'F'!SUM(...)`) ; et les noms de feuille sont
+  numérotés, car 31 caractères tronquent « Bassin d'orage de la voirie » en un intitulé
+  ambigu et l'apostrophe demanderait un doublement que les tableurs relisent diversement.
+  Seul l'apport amont reste figé — une intégration pas à pas ne se met pas en cellule — dans
+  une cellule modifiable que l'aval suit.
 - Les nombres s'affichent à la française (virgule) à l'écran comme dans les rapports ;
   `formats.fr` s'en charge, un test vérifie l'absence de point décimal dans le texte écrit.
 - L'interface se teste sans serveur graphique (`tests/test_ui.py` construit chaque vue et

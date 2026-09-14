@@ -213,6 +213,33 @@ Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+9** pu
 pour passer directement à une section. Les onglets de détail (Dimensionnement, Bassin, Table
 QDF, Ajutage, Rapport) portent un sélecteur d'ouvrage dès qu'un projet en compte plusieurs.
 
+## Le classeur Excel
+
+Le classeur n'est pas un tirage figé : il **recalcule**. Retoucher une surface, un
+coefficient de ruissellement, un K ou un débit d'ajutage change les volumes, feuille par
+feuille, jusqu'au récapitulatif du réseau.
+
+| Feuille | Contenu |
+|---|---|
+| `Projet` | données générales : commune, période de retour, source des pluies, sécurité |
+| `Bassins versants` | chaque surface, son coefficient, sa surface active |
+| `Ouvrages` | une ligne par bassin d'orage ; les cellules bleues se modifient |
+| `Pluie n` / `Scénarios n` | le balayage des durées et les quatre scénarios, **pour chaque ouvrage** |
+| `Réseau` | raccordements, synthèse, et un récapitulatif qui tire ses chiffres des feuilles ci-dessus |
+| `Bassin - table QDF`, `Ajutage`, `Pluies statistiques` | vérification de l'ouvrage courant, orifice, données sources |
+
+Les feuilles sont numérotées (`Pluie 1`, `Scénarios 2`) parce qu'Excel plafonne les noms à
+31 caractères : « Bassin d'orage de la voirie » s'y tronquerait en un intitulé indistinct
+de son voisin. Le nom de l'ouvrage se lit en titre de sa feuille et dans la colonne
+« Feuilles de calcul » de la feuille `Ouvrages`.
+
+**Une seule valeur reste figée** : l'apport des ouvrages amont. Il varie dans le temps et
+se poursuit après l'averse ; aucune formule de cellule ne sait l'intégrer pas à pas. Il
+occupe une cellule modifiable, et les volumes en aval la suivent.
+
+Recalculé cellule par cellule, le classeur retrouve le moteur à **0,02 %** près — l'écart
+que laisse sa grille d'une centaine de durées, contre 17 280 dans l'application.
+
 ## Saisie
 
 * Les nombres s'affichent à la française (**virgule décimale**), à l'écran comme dans les
