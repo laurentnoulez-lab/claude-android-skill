@@ -14,9 +14,9 @@ from .base import Vue
 
 
 class VueBassin(Vue):
-    titre = "Bassin"
+    titre = "Bassin réel"
     icone = ft.Icons.WATER_DAMAGE
-    sous_titre = "Ouvrage encodé et simulation"
+    sous_titre = "Ouvrage tel qu'il sera construit · simulation"
 
     # ------------------------------------------------------------ formulaire
     def _formulaire(self) -> ft.Control:
@@ -41,8 +41,9 @@ class VueBassin(Vue):
                 theme.champ_nombre("Volume sous l'ajutage", b.volume_sous_ajutage_m3,
                                    maj("volume_sous_ajutage_m3"), "m³", "volume mort",
                                    on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
-                theme.champ_nombre("Surface de dispersion", b.surface_dispersion_m2,
-                                   maj("surface_dispersion_m2"), "m²", "fond infiltrant",
+                theme.champ_nombre("Surface d'infiltration", b.surface_dispersion_m2,
+                                   maj("surface_dispersion_m2"), "m²",
+                                   "fond infiltrant de l'ouvrage construit",
                                    on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
                 *theme.champs_convertis(
                     "Débit d'ajutage", "l/s", b.debit_ajutage_ls,

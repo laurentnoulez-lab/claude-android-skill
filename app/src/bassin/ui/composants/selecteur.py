@@ -32,6 +32,38 @@ def _sous_titre(etat) -> str:
     return theme.fr(f"Reçoit : {entrees}   →   Rejette vers : {sortie}")
 
 
+def _comparaisons(etat, fiche) -> List[ft.Control]:
+    """Ce qui est encodé face à ce que le dimensionnement exige.
+
+    Les minima ne sont pas toujours calculés (sur un grand réseau ils se
+    demandent) ni toujours définis — un ajutage minimal n'a pas de sens si
+    l'ouvrage se vidange déjà par infiltration seule. On ne montre que ce qui
+    existe.
+    """
+    bassin = fiche.ouvrage.etude.bassin
+    res = fiche.resultat
+    etiquettes: List[ft.Control] = []
+    for encode, minimal, unite, decimales, icone, nom, accord in (
+        (bassin.debit_ajutage_ls, res.debit_ajutage_min_ls, "l/s", 2,
+         ft.Icons.TUNE, "ajutage", "encodé"),
+        (bassin.surface_dispersion_m2, res.surface_infiltration_min_m2, "m²", 0,
+         ft.Icons.GRASS, "infiltration", "encodée"),
+    ):
+        if minimal is None or minimal <= 0:
+            # Un minimum nul ne veut pas dire « zéro requis » mais « l'autre
+            # organe vidange déjà à lui seul » : l'afficher se lirait à
+            # l'envers. Le détail est dit dans l'onglet Dimensionnement.
+            continue
+        suffisant = encode + 1e-9 >= minimal
+        couleur = theme.VERT if suffisant else theme.ROUGE
+        fond = theme.VERT_CLAIR if suffisant else theme.ROUGE_CLAIR
+        etiquettes.append(theme.etiquette(
+            theme.fr(f"{nom} {encode:.{decimales}f} {unite} {accord} / "
+                     f"{minimal:.{decimales}f} {unite} requis"),
+            couleur, fond, icone))
+    return etiquettes
+
+
 def barre_ouvrage(vue) -> ft.Control:
     """Sélecteur du bassin d'orage étudié, masqué quand il n'y en a qu'un."""
     etat = vue.etat
@@ -63,8 +95,13 @@ def barre_ouvrage(vue) -> ft.Control:
     if fiche is not None:
         couleur, fond = theme.COULEURS_STATUT.get(fiche.statut, (theme.GRIS, theme.GRIS_CLAIR))
         etiquettes.append(theme.etiquette(
-            f"{fiche.volume_encode_m3:.1f} m³ encodés / {fiche.volume_minimal_m3:.1f} m³ requis",
+            theme.fr(f"{fiche.volume_encode_m3:.1f} m³ encodés / "
+                     f"{fiche.volume_minimal_m3:.1f} m³ requis"),
             couleur, fond, ft.Icons.WATER))
+        # Le volume n'est pas la seule grandeur à porter cette dualité : le
+        # débit d'ajutage et la surface infiltrante l'ont aussi, et c'est ce
+        # bandeau qui l'exprime le plus clairement.
+        etiquettes.extend(_comparaisons(etat, fiche))
 
     return ft.Container(
         content=ft.Column(

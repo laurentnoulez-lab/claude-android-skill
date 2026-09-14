@@ -52,6 +52,25 @@ K_A_VERIFIER_MS = 1e-4
 SOL_PERSONNALISE = "__personnalise__"
 
 
+def _tuile_minimum(valeur, decimales, res, projet, libelle, unite, couleur, icone,
+                   autre_organe: str) -> ft.Control:
+    """Tuile d'un minimum, qui dit pourquoi il vaut zéro.
+
+    Un « 0,0 m² » sous un scénario « infiltration + orifice » se lit comme
+    « pas d'infiltration nécessaire » alors qu'il signifie « l'autre organe
+    vidange déjà à lui seul dans le délai ». C'est exact, et trompeur.
+    """
+    if valeur is None:
+        return theme.tuile("—", libelle, unite, couleur, icone,
+                           "sans objet pour ce scénario")
+    if valeur <= 0:
+        return theme.tuile("—", libelle, unite, couleur, icone,
+                           theme.fr(f"{autre_organe} seul vidange en "
+                                    f"{res.temps_vidange_hm}"))
+    return theme.tuile(theme.fr(f"{valeur:.{decimales}f}"), libelle, unite, couleur, icone,
+                       f"minimum pour vidanger en {projet.temps_vidange_max_h:.0f} h")
+
+
 def _sol_de(k_ms: float) -> str:
     """Clé du sol correspondant à K, ou la sentinelle « valeur personnalisée ».
 
@@ -181,7 +200,7 @@ class VueDimensionnement(Vue):
                         theme.champ_nombre(
                             "Volume sous l'ajutage", p.bassin.volume_sous_ajutage_m3,
                             maj_seuil, "m³",
-                            "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin",
+                            "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin réel",
                             on_valide=self.maj_resultats,
                             col={"xs": 12, "sm": 6, "md": 3}),
                     ],
@@ -309,15 +328,15 @@ class VueDimensionnement(Vue):
                                          "Durée de pluie critique", "",
                                          theme.ARDOISE, ft.Icons.TIMER),
                              col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(
-                    "—" if res.surface_infiltration_min_m2 is None else f"{res.surface_infiltration_min_m2:.1f}",
+                ft.Container(_tuile_minimum(
+                    res.surface_infiltration_min_m2, 1, res, p,
                     "Surface d'infiltration minimale", "m²", theme.VERT, ft.Icons.GRASS,
-                    f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
+                    "l'ajutage"),
                     col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(
-                    "—" if res.debit_ajutage_min_ls is None else f"{res.debit_ajutage_min_ls:.3f}",
+                ft.Container(_tuile_minimum(
+                    res.debit_ajutage_min_ls, 3, res, p,
                     "Débit d'ajutage minimal", "l/s", theme.ORANGE, ft.Icons.TUNE,
-                    f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
+                    "l'infiltration"),
                     col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,

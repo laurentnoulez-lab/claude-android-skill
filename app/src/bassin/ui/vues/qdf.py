@@ -20,7 +20,8 @@ class VueTableQDF(Vue):
     def construire(self) -> List[ft.Control]:
         if not self.etat.bassin_valide:
             return [theme.message(
-                "Encodez d'abord un bassin (onglet « Bassin ») pour construire la table QDF.", "info")]
+                "Encodez d'abord un bassin (onglet « Bassin réel ») pour construire la table QDF.",
+                "info")]
 
         table = self.etat.table_acceptation
         assert table is not None

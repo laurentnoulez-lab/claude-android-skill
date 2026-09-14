@@ -15,7 +15,7 @@ import os
 import socketserver
 import threading
 
-VUES = ["Projet", "Bassins versants", "Réseau", "Dimensionnement", "Bassin", "Table QDF",
+VUES = ["Projet", "Bassins versants", "Réseau", "Dimensionnement", "Bassin réel", "Table QDF",
         "Ajutage", "Synthèse", "Pluies GTI", "Rapport"]
 FORMATS = {"telephone": (390, 844), "tablette": (820, 1180), "bureau": (1440, 960)}
 

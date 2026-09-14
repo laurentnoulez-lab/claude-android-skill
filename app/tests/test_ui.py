@@ -676,6 +676,61 @@ def _dossier_interne(chemin):
         vue_projet.repertoire_documents = origine
 
 
+class TestLisibiliteRequisConstruit(unittest.TestCase):
+
+    """« Ce qu'il faut » et « ce qu'on construit » doivent se distinguer.
+
+    L'auditeur a pris cette dualité, pourtant voulue, pour une anomalie : les
+    onglets « Dimensionnement » et « Bassin » se lisaient comme un couple
+    processus/objet, et la même grandeur portait deux noms.
+    """
+
+    def setUp(self):
+        self.etat = EtatApplication()
+        self.etat.systeme = exemple.systeme_demonstration()
+        self.etat.systeme.synchroniser()
+        self.etat.invalider()
+        self.page = PageFactice()
+
+    def test_l_onglet_dit_qu_il_decrit_l_ouvrage_construit(self):
+        self.assertEqual(VueBassin.titre, "Bassin réel")
+        self.assertIn("construit", VueBassin.sous_titre)
+
+    def test_la_meme_grandeur_porte_le_meme_nom_des_deux_cotes(self):
+        """« Surface de dispersion » ici, « Surface d'infiltration » là."""
+        libelles = {}
+        for classe in (VueDimensionnement, VueBassin):
+            vue = classe(PageFactice(), self.etat)
+            vue.afficher()
+            libelles[classe.__name__] = {c.label for c in _rechercher(vue.corps, ft.TextField)
+                                         if c.label}
+        for nom in ("Surface d'infiltration", "Débit d'ajutage"):
+            with self.subTest(champ=nom):
+                self.assertIn(nom, libelles["VueDimensionnement"])
+                self.assertIn(nom, libelles["VueBassin"])
+        self.assertNotIn("Surface de dispersion", libelles["VueBassin"])
+
+    def test_le_bandeau_compare_aussi_l_ajutage_et_l_infiltration(self):
+        """Le volume n'est pas la seule grandeur à porter cette dualité."""
+        vue = VueBassin(self.page, self.etat)
+        vue.afficher()
+        textes = " | ".join(c.value for c in _rechercher(vue.corps, ft.Text)
+                            if c.value and "encod" in c.value)
+        self.assertIn("m³ encodés", textes)
+        self.assertIn("ajutage", textes)
+        self.assertIn("requis", textes)
+
+    def test_un_minimum_nul_s_explique_au_lieu_d_afficher_zero(self):
+        """« 0,0 m² » sous un scénario mixte se lit « pas d'infiltration nécessaire »."""
+        vue = VueDimensionnement(self.page, self.etat)
+        vue.afficher()
+        textes = [c.value for c in _rechercher(vue.corps, ft.Text) if c.value]
+        self.assertTrue(any("seul vidange en" in t for t in textes),
+                        "un minimum nul devrait dire pourquoi il est nul")
+        self.assertFalse(any(t.strip() in ("0,0", "0.0", "0,000") for t in textes),
+                         "un minimum nul ne doit plus s'afficher comme une valeur")
+
+
 class TestCascadeDansLInterface(unittest.TestCase):
 
     """Le bouton promet « un volume pour chacun » : il doit tenir ou s'expliquer."""
