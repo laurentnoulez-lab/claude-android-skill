@@ -155,6 +155,77 @@ class TestExcel(BaseRapport):
         self.assertAlmostEqual(valeur("AJUTAGE", "B10"), self.dossier.orifice.diametre_mm, places=6)
 
 
+class TestMinimumNulDansLesLivrables(unittest.TestCase):
+
+    """Un minimum nul doit s'expliquer partout, pas seulement à l'écran.
+
+    « 0,0 m² » sous un scénario « infiltration + orifice » se lit « pas
+    d'infiltration nécessaire » là où il faut comprendre « l'ajutage seul
+    vidange déjà dans le délai ». L'écran le disait ; les livrables non.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from bassin.core import exemple
+
+        cls.systeme = exemple.systeme_demonstration()
+        cls.systeme.synchroniser()
+        cls.dossier = mod_dossier.construire(cls.systeme.courant.etude, systeme=cls.systeme)
+        cls.repertoire = tempfile.mkdtemp(prefix="hydrobassin_minima_")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repertoire, ignore_errors=True)
+
+    def test_la_phrase_dit_pourquoi_le_minimum_est_nul(self):
+        phrase = self.dossier.phrase_minimum(0.0, 1, "m²", "Surface d'infiltration minimale",
+                                             "l'ajutage")
+        self.assertIn("aucun complément", phrase)
+        self.assertIn("l'ajutage seul vidange", phrase)
+        self.assertNotIn("0,0 m²", phrase)
+
+        # Un minimum réel garde sa valeur.
+        phrase = self.dossier.phrase_minimum(0.316, 3, "l/s", "Débit d'ajutage minimal",
+                                             "l'infiltration")
+        self.assertIn("0.316", phrase.replace(",", "."))
+
+    def test_le_pdf_et_le_word_portent_cette_explication(self):
+        chemin = pdf_report.ecrire(self.dossier,
+                                   os.path.join(self.repertoire, "minima.pdf"))
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        pdf = "\n".join(flux)
+        self.assertIn("aucun compl", pdf, "le PDF annonce encore la valeur nue")
+
+        chemin = docx_report.ecrire(self.dossier,
+                                    os.path.join(self.repertoire, "minima.docx"))
+        with zipfile.ZipFile(chemin) as z:
+            document = z.read("word/document.xml").decode("utf-8")
+        textes = " ".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", document, re.S))
+        self.assertIn("aucun complément", textes)
+
+    def test_le_pied_de_page_du_pdf_est_accentue(self):
+        """« donnees GTI » : la faute que le correctif du millésime avait posée."""
+        chemin = pdf_report.ecrire(self.dossier, os.path.join(self.repertoire, "pied.pdf"))
+        with open(chemin, "rb") as fh:
+            brut = fh.read()
+        flux = []
+        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+            try:
+                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            except zlib.error:
+                continue
+        pdf = "\n".join(flux)
+        self.assertNotIn("donnees GTI", pdf)
+        self.assertIn("donn\\351es GTI", pdf)
+
+
 class TestOrthographeDesLivrables(unittest.TestCase):
 
     """Un participe passé manquant dans un document signé se remarque."""

@@ -70,6 +70,25 @@ class Dossier:
         return rainfall.SourcePluie(
             self.projet.commune_ins, self.projet.periode_retour, self.projet.source_pluie)
 
+    def phrase_minimum(self, valeur, decimales: int, unite: str, libelle: str,
+                       autre_organe: str) -> str:
+        """Phrase d'un minimum, qui dit pourquoi il vaut zéro.
+
+        Un « 0,0 m² » sous un scénario « infiltration + orifice » se lit « pas
+        d'infiltration nécessaire » alors qu'il signifie « l'autre organe
+        vidange déjà à lui seul dans le délai ». L'écran le disait ; les
+        livrables, eux, annonçaient encore la valeur nue.
+        """
+        res = self.resultat_principal
+        delai = f"{self.projet.temps_vidange_max_h:.0f} h"
+        if valeur is None:
+            return f"{libelle} : sans objet pour le scénario retenu."
+        if valeur <= 0:
+            return (f"{libelle} : aucun complément nécessaire — {autre_organe} seul vidange "
+                    f"en {res.temps_vidange_hm}, soit moins que les {delai} admises.")
+        return (f"{libelle} pour un temps de vidange de {delai} : "
+                f"{valeur:.{decimales}f} {unite}.")
+
     @property
     def source_pluies_datee(self) -> str:
         """Source des pluies **et** édition du référentiel GTI.

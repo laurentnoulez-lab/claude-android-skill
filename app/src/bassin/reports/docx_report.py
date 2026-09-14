@@ -303,13 +303,13 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         f"conduit à un volume de temporisation de {res.volume_m3:.1f} m³, vidange en {res.temps_vidange_hm}."
     )
     if res.surface_infiltration_min_m2 is not None:
-        doc.paragraphe(
-            f"Surface d'infiltration minimale pour respecter le temps de vidange de "
-            f"{p.temps_vidange_max_h:.0f} h : {res.surface_infiltration_min_m2:.1f} m².", puce=True)
+        doc.paragraphe(dossier.phrase_minimum(res.surface_infiltration_min_m2, 1, "m²",
+                                              "Surface d'infiltration minimale", "l'ajutage"),
+                       puce=True)
     if res.debit_ajutage_min_ls is not None:
-        doc.paragraphe(
-            f"Débit d'ajutage minimal pour respecter le temps de vidange de "
-            f"{p.temps_vidange_max_h:.0f} h : {res.debit_ajutage_min_ls:.3f} l/s.", puce=True)
+        doc.paragraphe(dossier.phrase_minimum(res.debit_ajutage_min_ls, 3, "l/s",
+                                              "Débit d'ajutage minimal", "l'infiltration"),
+                       puce=True)
     if p.remarques:
         doc.titre2("Remarques")
         doc.paragraphe(p.remarques)

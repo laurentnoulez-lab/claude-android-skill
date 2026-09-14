@@ -270,7 +270,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     pdf.pied = (("Réseau de bassins d'orage" if dossier.reseau_multiple else "Bassin d'orage")
                 + f" - {p.commune_nom} - T = {p.periode_retour} ans - "
                 f"{p.nom_projet or 'projet sans nom'} - {dossier.date}"
-                f" - donnees GTI {rainfall.MILLESIME_GTI}")
+                f" - données GTI {rainfall.MILLESIME_GTI}")
     L = pdf.largeur_utile
 
     pdf.titre("Dimensionnement d'un bassin d'orage" if not dossier.reseau_multiple
@@ -527,11 +527,11 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         f"conduit à un volume de temporisation de {res.volume_m3:.1f} m³, vidange en {res.temps_vidange_hm}."
     )
     if res.surface_infiltration_min_m2 is not None:
-        pdf.puce(f"Surface d'infiltration minimale pour un temps de vidange de "
-                 f"{p.temps_vidange_max_h:.0f} h : {res.surface_infiltration_min_m2:.1f} m².")
+        pdf.puce(dossier.phrase_minimum(res.surface_infiltration_min_m2, 1, "m²",
+                                        "Surface d'infiltration minimale", "l'ajutage"))
     if res.debit_ajutage_min_ls is not None:
-        pdf.puce(f"Débit d'ajutage minimal pour un temps de vidange de "
-                 f"{p.temps_vidange_max_h:.0f} h : {res.debit_ajutage_min_ls:.3f} l/s.")
+        pdf.puce(dossier.phrase_minimum(res.debit_ajutage_min_ls, 3, "l/s",
+                                        "Débit d'ajutage minimal", "l'infiltration"))
     if p.remarques:
         pdf.titre2("Remarques")
         pdf.texte(p.remarques)
