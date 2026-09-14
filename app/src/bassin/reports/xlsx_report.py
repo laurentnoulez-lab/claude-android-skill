@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.workbook.defined_name import DefinedName
 
 from ..core import hydro as _hydro, rainfall
@@ -205,17 +206,77 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     _label(ws, 9, "Code INS", projet.commune_ins)
     # Cellule modifiable, et qui commande vraiment : les coefficients de pluie
     # de chaque ouvrage s'y réfèrent. Elle est signalée comme telle.
-    _label(ws, 10, "Période de retour", projet.periode_retour, "ans",
-           fond=BLEU_PALE).comment = None
-    ws.cell(row=10, column=4,
-            value="Modifiable : 2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100 ou 200 ans. "
-                  "Tout le classeur se recalcule.").font = Font(italic=True, size=9,
-                                                                color="475569")
+    # La période de retour commande tout le classeur, et n'accepte que les douze
+    # récurrences du GTI : elle se choisit dans une liste. Libre, elle laissait
+    # taper « 35 ans » et renvoyait un #N/A muet dans chaque feuille de pluie.
+    _label(ws, 10, "Période de retour", projet.periode_retour, "ans", fond=BLEU_PALE)
+    ws.cell(row=10, column=2).number_format = "0"
+    _liste(ws, "B10", rainfall.RETURN_PERIODS, "Période de retour",
+           "Récurrences du GTI : 2, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100 ou 200 ans. "
+           "Tout le classeur se recalcule.")
     _label(ws, 11, "Source des pluies", dossier.source_pluies_datee)
     if dossier.reseau_multiple:
         _label(ws, 12, "Ouvrage détaillé par ce classeur", dossier.ouvrage_courant.nom,
                gras=True, fond=BLEU_PALE)
 
+    # Un classeur de réseau décrit le PROJET, pas l'ouvrage affiché à l'écran :
+    # ses bassins versants, ses contraintes communes et ses bassins d'orage. Les
+    # données propres à chaque ouvrage vivent sur la feuille « Ouvrages », qui
+    # les porte toutes. Cette feuille annonçait encore « Ouvrage détaillé par ce
+    # classeur » et ne montrait que lui : c'était le classeur mono-bassin qui
+    # subsistait sous un classeur de système.
+    if dossier.reseau_multiple:
+        _projet_systeme(wb, ws, dossier)
+    else:
+        _projet_ouvrage(wb, ws, dossier)
+
+    # Un classeur par ouvrage : chacun a ses surfaces, son exutoire et donc ses
+    # volumes. Ne détailler que l'ouvrage courant obligeait à régénérer le
+    # classeur autant de fois qu'il y a de bassins.
+    fiches = list(dossier.fiches) if dossier.systeme is not None else []
+    # La feuille des pluies vient en premier : la table des volumes de chaque
+    # ouvrage s'y réfère, et son adresse doit être connue avant de l'écrire.
+    stats = _feuille_statistiques(wb, dossier)
+    if fiches:
+        surfaces, totaux_versants, cellules_versants = _feuille_versants(wb, dossier)
+        _relier_surfaces_projet(wb, dossier, cellules_versants, totaux_versants)
+        ancrages = _feuille_ouvrages(wb, dossier, surfaces)
+        if dossier.reseau_multiple:
+            _feuille_reseau(wb, dossier, ancrages, totaux_versants)
+        sous_dossiers = dossier.par_ouvrage()
+        for i, (ancrage, fiche) in enumerate(zip(ancrages, fiches), start=1):
+            sous = sous_dossiers[i - 1] if i - 1 < len(sous_dossiers) else dossier
+            _feuille_pluie(wb, dossier, ancrage, stats)
+            _feuille_scenarios(wb, dossier, ancrage, fiche)
+            _feuille_bassin(wb, sous, ancrage, stats, rang=i)
+            _feuille_ajutage(wb, sous, ancrage, rang=i)
+    else:
+        ancrage = _Ancrage(
+            ouvrage_id="", nom="Bassin d'orage",
+            feuille_pluie="Pluie de projet", feuille_scenarios="Scénarios",
+            s_ponderee="S_ponderee", q_infiltration="Q_infiltration",
+            q_ajutage="Q_ajutage", v_bassin="V_bassin",
+            v_sous_ajutage="V_sous_ajutage", apport_amont="0",
+            s_dispersion="S_dispersion",
+            q_infiltration_bassin="Q_infiltration_bassin",
+            q_ajutage_bassin="Q_ajutage_bassin",
+        )
+        _feuille_pluie(wb, dossier, ancrage, stats)
+        _feuille_scenarios(wb, dossier, ancrage)
+        _feuille_bassin(wb, dossier, ancrage, stats)
+        _feuille_ajutage(wb, dossier, ancrage)
+    # La feuille des pluies se range en fin de classeur : c'est une annexe.
+    wb.move_sheet("Pluies statistiques", offset=len(wb.sheetnames))
+    return wb
+
+
+def _projet_ouvrage(wb: Workbook, ws, dossier: Dossier) -> None:
+    """Feuille « Projet » d'une étude à un seul bassin d'orage.
+
+    Elle décrit cet ouvrage-là : ses surfaces, son sol, son exutoire, le
+    bassin encodé. Les noms définis du classeur y pointent.
+    """
+    projet = dossier.projet
     _titre(ws, "A13", "1. Surfaces incidentes", 12)
     _entete(ws, 14, ["Type d'occupation du sol", "Coeff. ruiss. [-]", "Surface [m²]",
                      "Surface pondérée [m²]", "Notes"])
@@ -339,48 +400,150 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     for nom, ref in noms.items():
         wb.defined_names.add(DefinedName(nom, attr_text=ref))
 
-    # Un classeur par ouvrage : chacun a ses surfaces, son exutoire et donc ses
-    # volumes. Ne détailler que l'ouvrage courant obligeait à régénérer le
-    # classeur autant de fois qu'il y a de bassins.
-    fiches = list(dossier.fiches) if dossier.systeme is not None else []
-    # La feuille des pluies vient en premier : la table des volumes de chaque
-    # ouvrage s'y réfère, et son adresse doit être connue avant de l'écrire.
-    stats = _feuille_statistiques(wb, dossier)
-    if fiches:
-        surfaces, totaux_versants, cellules_versants = _feuille_versants(wb, dossier)
-        _relier_surfaces_projet(wb, dossier, cellules_versants)
-        ancrages = _feuille_ouvrages(wb, dossier, surfaces)
-        if dossier.reseau_multiple:
-            _feuille_reseau(wb, dossier, ancrages, totaux_versants)
-        sous_dossiers = dossier.par_ouvrage()
-        for i, (ancrage, fiche) in enumerate(zip(ancrages, fiches), start=1):
-            sous = sous_dossiers[i - 1] if i - 1 < len(sous_dossiers) else dossier
-            _feuille_pluie(wb, dossier, ancrage, stats)
-            _feuille_scenarios(wb, dossier, ancrage, fiche)
-            _feuille_bassin(wb, sous, ancrage, stats, rang=i)
-            _feuille_ajutage(wb, sous, ancrage, rang=i)
+
+def _liste(ws, plage: str, valeurs, titre: str, message: str) -> None:
+    """Liste déroulante sur une plage : on choisit, on ne tape pas.
+
+    Une cellule qui commande le classeur mais n'accepte que douze valeurs doit
+    le dire. Taper « 35 ans » à la main donnait un #N/A muet là où la liste
+    montre d'emblée ce qui existe.
+    """
+    dv = DataValidation(type="list", formula1='"' + ",".join(str(v) for v in valeurs) + '"',
+                        allow_blank=False, showDropDown=False)
+    dv.error = message
+    dv.errorTitle = titre
+    dv.prompt = message
+    dv.promptTitle = titre
+    ws.add_data_validation(dv)
+    dv.add(plage)
+
+
+def _borne(ws, plage: str, titre: str, message: str, mini=None, maxi=None) -> None:
+    """Garde-fou de saisie : une valeur impossible se refuse à l'entrée."""
+    if mini is not None and maxi is not None:
+        dv = DataValidation(type="decimal", operator="between",
+                            formula1=str(mini), formula2=str(maxi), allow_blank=True)
+    elif mini is not None:
+        dv = DataValidation(type="decimal", operator="greaterThanOrEqual",
+                            formula1=str(mini), allow_blank=True)
     else:
-        ancrage = _Ancrage(
-            ouvrage_id="", nom="Bassin d'orage",
-            feuille_pluie="Pluie de projet", feuille_scenarios="Scénarios",
-            s_ponderee="S_ponderee", q_infiltration="Q_infiltration",
-            q_ajutage="Q_ajutage", v_bassin="V_bassin",
-            v_sous_ajutage="V_sous_ajutage", apport_amont="0",
-            s_dispersion="S_dispersion",
-            q_infiltration_bassin="Q_infiltration_bassin",
-            q_ajutage_bassin="Q_ajutage_bassin",
-        )
-        _feuille_pluie(wb, dossier, ancrage, stats)
-        _feuille_scenarios(wb, dossier, ancrage)
-        _feuille_bassin(wb, dossier, ancrage, stats)
-        _feuille_ajutage(wb, dossier, ancrage)
-    # La feuille des pluies se range en fin de classeur : c'est une annexe.
-    wb.move_sheet("Pluies statistiques", offset=len(wb.sheetnames))
-    return wb
+        dv = DataValidation(type="decimal", operator="lessThanOrEqual",
+                            formula1=str(maxi), allow_blank=True)
+    dv.error = message
+    dv.errorTitle = titre
+    ws.add_data_validation(dv)
+    dv.add(plage)
+
+
+def _projet_systeme(wb: Workbook, ws, dossier: Dossier) -> None:
+    """Feuille « Projet » d'une étude de réseau : elle décrit le SYSTÈME.
+
+    Elle décrivait l'ouvrage affiché à l'écran — ses surfaces, son sol, son
+    bassin — sous un intitulé « Ouvrage détaillé par ce classeur » : le
+    classeur mono-bassin qui subsistait. Or chaque ouvrage a désormais sa ligne
+    sur « Ouvrages » et ses propres feuilles de calcul. Ne restent donc ici que
+    ce qui vaut pour tout le projet : ses bassins versants, les contraintes
+    communes, et le récapitulatif de ses bassins d'orage.
+    """
+    projet = dossier.projet
+    systeme = dossier.systeme
+    ws.cell(row=12, column=1, value="Composition").font = Font(bold=True)
+    ws.cell(row=12, column=2, value=(
+        f"{len(systeme.bassins_versants)} bassins versants, "
+        f"{len(systeme.ouvrages)} bassins d'orage")).font = Font(bold=True, color=BLEU)
+
+    # 1. Bassins versants : les surfaces sont saisies sur leur feuille ; ici on
+    # les totalise. Les renvois sont posés par _relier_surfaces_projet, qui
+    # connaît les lignes de cette feuille-là.
+    _titre(ws, "A13", "1. Bassins versants du projet", 12)
+    _entete(ws, 14, ["Bassin versant", "Raccordé au bassin d'orage", "Surface [m²]",
+                     "C moyen", "S active [m²]"])
+    ligne = 15
+    for versant in systeme.bassins_versants:
+        aval = systeme.ouvrage(versant.bassin_id)
+        ws.cell(row=ligne, column=1, value=versant.nom).border = _BORDURE
+        ws.cell(row=ligne, column=2,
+                value=aval.nom if aval is not None else "non raccordé").border = _BORDURE
+        for col in (3, 4, 5):
+            ws.cell(row=ligne, column=col).border = _BORDURE
+        ligne += 1
+    l_tot = ligne
+    ws._plage_versants = (15, l_tot - 1)  # type: ignore[attr-defined]
+    ws.cell(row=l_tot, column=1, value="TOTAL").font = Font(bold=True)
+    for col, fmt in ((3, "0"), (5, "0.0")):
+        lettre = get_column_letter(col)
+        c = ws.cell(row=l_tot, column=col, value=f"=SUM({lettre}15:{lettre}{l_tot - 1})")
+        c.font = Font(bold=True)
+        c.number_format = fmt
+        c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+        c.border = _BORDURE
+    c = ws.cell(row=l_tot, column=4, value=f"=IF(C{l_tot}>0,E{l_tot}/C{l_tot},0)")
+    c.font = Font(bold=True)
+    c.number_format = "0.000"
+    c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+    c.border = _BORDURE
+
+    # 2. Ce qui vaut pour tout le projet, et rien d'autre.
+    l = l_tot + 2
+    _titre(ws, f"A{l}", "2. Contraintes communes à tout le projet", 12); l += 1
+    c_cs = _label(ws, l, "Coefficient de sécurité sur K", projet.coef_securite_infiltration,
+                  "[-]", "0.0", fond=BLEU_PALE); l += 1
+    c_tvid = _label(ws, l, "Temps de vidange maximum admis (après la pluie)",
+                    projet.temps_vidange_max_h, "h", "0.0", fond=BLEU_PALE); l += 1
+    c_h = _label(ws, l, "Charge sur l'ajutage (axe -> trop-plein)", projet.hauteur_charge_m,
+                 "m", "0.00", fond=BLEU_PALE); l += 1
+    c_cd = _label(ws, l, "Coefficient de débit Cd", projet.coef_debit_orifice,
+                  "[-]", "0.00", fond=BLEU_PALE); l += 1
+    ws.cell(row=l, column=1, value=(
+        "Surfaces d'infiltration, K, ajutages et volumes construits sont propres à chaque "
+        "ouvrage : ils se saisissent sur la feuille « Ouvrages ».")).font = Font(
+            italic=True, size=9, color="475569")
+    l += 2
+
+    # 3. Les bassins d'orage, tous, avec leurs chiffres tirés d'« Ouvrages ».
+    _titre(ws, f"A{l}", "3. Bassins d'orage du projet", 12); l += 1
+    _entete(ws, l, ["Bassin d'orage", "Se déverse vers", "V encodé [m³]",
+                    "V minimal [m³]", "Feuilles de calcul"])
+    premiere = l + 1
+    for i, fiche in enumerate(dossier.fiches):
+        r, source = premiere + i, 5 + i
+        ws.cell(row=r, column=1, value=f"=Ouvrages!$A${source}")
+        ws.cell(row=r, column=2, value=f"=Ouvrages!$B${source}")
+        ws.cell(row=r, column=3, value=f"=Ouvrages!$I${source}").number_format = "0.0"
+        ws.cell(row=r, column=4, value=f"=Ouvrages!$P${source}").number_format = "0.0"
+        ws.cell(row=r, column=5, value=f"=Ouvrages!$R${source}")
+        for col in range(1, 6):
+            ws.cell(row=r, column=col).border = _BORDURE
+    derniere = premiere + len(dossier.fiches) - 1
+    l = derniere + 1
+    ws.cell(row=l, column=1, value="TOTAL").font = Font(bold=True)
+    for col in (3, 4):
+        lettre = get_column_letter(col)
+        c = ws.cell(row=l, column=col, value=f"=SUM({lettre}{premiere}:{lettre}{derniere})")
+        c.font = Font(bold=True)
+        c.number_format = "0.0"
+        c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+        c.border = _BORDURE
+
+    for nom, ref in (("Coef_securite", f"Projet!${c_cs.column_letter}${c_cs.row}"),
+                     ("T_vidange_max", f"Projet!${c_tvid.column_letter}${c_tvid.row}"),
+                     ("Charge_orifice", f"Projet!${c_h.column_letter}${c_h.row}"),
+                     ("Cd_orifice", f"Projet!${c_cd.column_letter}${c_cd.row}")):
+        wb.defined_names.add(DefinedName(nom, attr_text=ref))
+
+    _borne(ws, f"B{c_cs.row}", "Coefficient de sécurité",
+           "Le coefficient de sécurité sur K vaut au moins 1.", mini=1)
+    _borne(ws, f"B{c_tvid.row}", "Temps de vidange",
+           "Le temps de vidange maximum admis est un nombre d'heures positif.", mini=0.1)
+    _borne(ws, f"B{c_h.row}", "Charge sur l'ajutage",
+           "La charge sur l'ajutage est une hauteur positive, en mètres.", mini=0.01)
+    _borne(ws, f"B{c_cd.row}", "Coefficient de débit",
+           "Le coefficient de débit d'un orifice est compris entre 0 et 1.", mini=0, maxi=1)
 
 
 def _relier_surfaces_projet(wb: Workbook, dossier: Dossier,
-                            cellules: Dict[str, Dict[str, List[int]]]) -> None:
+                            cellules: Dict[str, Dict[str, List[int]]],
+                            totaux: Optional[Dict[str, int]] = None) -> None:
     """Le bloc « Surfaces incidentes » de la feuille « Projet » renvoie aux versants.
 
     Il recopiait les surfaces de l'ouvrage détaillé : deux vérités pour la même
@@ -389,13 +552,27 @@ def _relier_surfaces_projet(wb: Workbook, dossier: Dossier,
     non plus. Chaque ligne pointe désormais vers les cellules où cette
     occupation du sol est réellement saisie, pour cet ouvrage.
     """
+    totaux = totaux or {}
     courant = dossier.ouvrage_courant
     par_libelle = cellules.get(getattr(courant, "id", ""), {})
-    if not par_libelle:
-        return
     ws = wb["Projet"]
+    plage_versants = getattr(ws, "_plage_versants", None)
+    if plage_versants is not None:
+        # Feuille de réseau : le tableau liste les bassins versants du projet,
+        # chacun renvoyant aux lignes où ses surfaces sont saisies.
+        source = _ref("Bassins versants")
+        for i, versant in enumerate(dossier.systeme.bassins_versants):
+            r = plage_versants[0] + i
+            total = totaux.get(versant.id)
+            if total is None:
+                continue
+            ws.cell(row=r, column=3, value=f"={source}!$E${total}").number_format = "0"
+            ws.cell(row=r, column=5, value=f"={source}!$F${total}").number_format = "0.0"
+            ws.cell(row=r, column=4,
+                    value=f"=IF(C{r}>0,E{r}/C{r},0)").number_format = "0.000"
+        return
     plage = getattr(ws, "_plage_surfaces", None)
-    if plage is None:
+    if plage is None or not par_libelle:
         return
     source = _ref("Bassins versants")
     for r in range(plage[0], plage[1] + 1):
@@ -471,6 +648,11 @@ def _feuille_versants(wb: Workbook, dossier: Dossier) -> Tuple[
             ligne += 1
         ligne += 1
 
+    if ligne > 5:
+        _borne(ws, f"D5:D{ligne}", "Coefficient de ruissellement",
+               "Un coefficient de ruissellement est compris entre 0 et 1.", mini=0, maxi=1)
+        _borne(ws, f"E5:E{ligne}", "Surface",
+               "Une surface se saisit en m², positive ou nulle.", mini=0)
     return ({ouvrage_id: "=" + "+".join(morceaux)
              for ouvrage_id, morceaux in plages.items()}, totaux, cellules)
 
@@ -612,6 +794,23 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
             ligne=r,
         ))
 
+
+    derniere = 5 + len(dossier.fiches) - 1
+    if dossier.fiches:
+        # Les colonnes bleues et vertes sont celles qu'on retouche : une valeur
+        # impossible s'y refuse à l'entrée plutôt que de produire un volume
+        # absurde trois feuilles plus loin.
+        for colonne, titre, message in (
+                ("E", "Surface d'infiltration", "Une surface se saisit en m², positive ou nulle."),
+                ("I", "Volume total", "Un volume se saisit en m³, positif ou nul."),
+                ("J", "Volume sous l'ajutage", "Un volume se saisit en m³, positif ou nul."),
+                ("K", "Surface de dispersion", "Une surface se saisit en m², positive ou nulle."),
+                ("H", "Débit d'ajutage", "Un débit d'ajutage se saisit en l/s, positif ou nul."),
+                ("M", "Débit d'ajutage", "Un débit d'ajutage se saisit en l/s, positif ou nul.")):
+            _borne(ws, f"{colonne}5:{colonne}{derniere}", titre, message, mini=0)
+        _borne(ws, f"F5:F{derniere}", "Coefficient d'infiltration K",
+               "K se saisit en m/s : une vitesse d'infiltration strictement positive "
+               "(1e-7 à 1e-3 pour les sols courants).", mini=1e-12, maxi=1)
     ws.cell(row=5 + len(dossier.fiches) + 1, column=1,
             value="Les cellules orange viennent de l'application et ne se recalculent pas : "
                   "l'apport d'un ouvrage amont s'intègre pas à pas — il arrive étalé dans le "

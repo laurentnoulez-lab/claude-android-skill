@@ -241,6 +241,15 @@ exceptés.
   qui demandent une intégration pas à pas : l'apport amont et, sur un ouvrage qui en
   reçoit, ses minima ; les minima du scénario à seuil, dont l'ajutage surélevé ne s'ouvre
   qu'à un instant fonction de l'infiltration ; la simulation du réseau.
+- **Le classeur et le dossier décrivent le SYSTÈME.** Le réflexe mono-bassin se cache
+  encore par endroits : la feuille « Projet » annonçait « Ouvrage détaillé par ce
+  classeur », l'entête du PDF et du Word aussi. `_projet_systeme` remplace
+  `_projet_ouvrage` dès qu'il y a plusieurs ouvrages, et seuls les quatre noms définis
+  réellement communs au projet subsistent alors ; en mode réseau les onze autres ne
+  servaient plus (un test le vérifie).
+- **Une cellule à valeurs fermées porte une liste déroulante** (`_liste`), et une cellule
+  de saisie numérique un intervalle (`_borne`). Sans cela, la période de retour acceptait
+  « 35 ans » et renvoyait un #N/A muet dans chaque feuille de pluie.
 - **Ne corrigez pas seulement la cellule qu'on vous signale.** Chaque fois qu'une valeur
   figée a été signalée, l'inventaire complet en a révélé d'autres, plus graves : la
   période de retour ne commandait rien (coefficients de Montana figés sur la récurrence

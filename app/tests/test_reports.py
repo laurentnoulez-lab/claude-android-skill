@@ -1045,14 +1045,15 @@ class TestClasseurDeReseau(unittest.TestCase):
             with self.subTest(ouvrage=fiche.nom):
                 self.assertIsInstance(ouvrages.cell(row=i, column=4).value, str,
                                       "la surface active amont est recopiée")
-        # Le bloc « Surfaces incidentes » de la feuille « Projet » renvoie aux
-        # bassins versants, et K à la ligne de l'ouvrage.
+        # La feuille « Projet » ne recopie rien : ses tableaux renvoient aux
+        # feuilles où les données sont réellement saisies.
         projet = wb["Projet"]
-        renvois = [c.value for ligne in projet.iter_rows(min_row=15, max_row=16)
+        renvois = [c.value for ligne in projet.iter_rows()
                    for c in ligne if isinstance(c.value, str) and c.value.startswith("=")]
         self.assertTrue(any("Bassins versants" in v for v in renvois),
                         "les surfaces de la feuille Projet sont recopiées")
-        self.assertIn("Ouvrages!", str(projet["B22"].value))
+        self.assertTrue(any("Ouvrages!" in v for v in renvois),
+                        "les ouvrages de la feuille Projet sont recopiés")
         # Le diamètre commercial suit la charge, le Cd et le débit visé.
         for i in range(1, len(self.dossier.fiches) + 1):
             with self.subTest(feuille=f"Ajutage {i}"):
@@ -1122,6 +1123,93 @@ class TestClasseurDeReseau(unittest.TestCase):
                  for c in ligne
                  if isinstance(c.value, str) and "ne se recalcule" in c.value]
         self.assertTrue(notes, "aucune feuille n'explique ses cellules figées")
+
+    def test_la_feuille_projet_decrit_le_systeme_et_non_un_ouvrage(self):
+        """Le classeur sert pour toute l'étude : sa première feuille aussi.
+
+        Elle annonçait « Ouvrage détaillé par ce classeur » et ne montrait que
+        lui — ses surfaces, son sol, son bassin encodé. C'était le classeur
+        mono-bassin qui subsistait sous un classeur de système, alors que
+        chaque ouvrage a sa ligne sur « Ouvrages » et ses propres feuilles.
+        """
+        wb = self._classeur()
+        ws = wb["Projet"]
+        textes = [c.value for ligne in ws.iter_rows() for c in ligne
+                  if isinstance(c.value, str)]
+        self.assertNotIn("Ouvrage détaillé par ce classeur", textes,
+                         "la feuille Projet désigne encore un seul ouvrage")
+
+        # Tous les bassins versants du projet y figurent...
+        for versant in self.dossier.systeme.bassins_versants:
+            with self.subTest(versant=versant.nom):
+                self.assertIn(versant.nom, textes)
+        # ...et tous les bassins d'orage, par renvoi à la feuille « Ouvrages ».
+        renvois = "\n".join(c.value for ligne in ws.iter_rows() for c in ligne
+                            if isinstance(c.value, str) and c.value.startswith("="))
+        for i in range(len(self.dossier.fiches)):
+            with self.subTest(ouvrage=self.dossier.fiches[i].nom):
+                self.assertIn(f"Ouvrages!$A${5 + i}", renvois)
+
+        # Les noms définis qui restent sont ceux qui valent pour tout le projet.
+        self.assertEqual(sorted(wb.defined_names),
+                         sorted(["Cd_orifice", "Charge_orifice", "Coef_securite",
+                                 "T_vidange_max"]),
+                         "un nom défini décrit encore un ouvrage particulier")
+
+    def test_aucun_livrable_n_annonce_un_ouvrage_detaille(self):
+        """Le dossier porte sur l'étude entière : son entête doit le dire.
+
+        Les trois formats affichaient encore « Ouvrage détaillé : <nom> », hérité
+        du temps où ils s'arrêtaient à l'ouvrage affiché à l'écran.
+        """
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_entete_")
+        try:
+            pdf = texte_pdf(pdf_report.ecrire(
+                self.dossier, os.path.join(repertoire, "e.pdf")))
+            mot = _texte_word(docx_report.ecrire(
+                self.dossier, os.path.join(repertoire, "e.docx")))
+            classeur = self._classeur()
+            feuille = "\n".join(str(c.value) for ligne in classeur["Projet"].iter_rows()
+                                for c in ligne if c.value is not None)
+            for nom, texte in (("PDF", pdf), ("Word", mot), ("Excel", feuille)):
+                with self.subTest(format=nom):
+                    self.assertNotIn("Ouvrage détaillé", texte)
+                    self.assertIn("Composition", texte,
+                                  "l'entête ne dit pas ce que couvre le dossier")
+        finally:
+            shutil.rmtree(repertoire, ignore_errors=True)
+
+    def test_la_periode_de_retour_se_choisit_dans_une_liste(self):
+        """Douze récurrences possibles : on choisit, on ne tape pas.
+
+        Libre, la cellule laissait saisir « 35 ans » — une valeur que le GTI ne
+        connaît pas — et chaque feuille de pluie renvoyait alors un #N/A muet.
+        """
+        from bassin.core import rainfall
+
+        wb = self._classeur()
+        listes = [dv for dv in wb["Projet"].data_validations.dataValidation
+                  if dv.type == "list" and "B10" in str(dv.sqref)]
+        self.assertEqual(len(listes), 1, "aucune liste déroulante sur la période de retour")
+        for rp in rainfall.RETURN_PERIODS:
+            with self.subTest(periode_retour=rp):
+                self.assertIn(str(rp), listes[0].formula1)
+
+    def test_les_cellules_de_saisie_refusent_l_impossible(self):
+        """Un coefficient de 12 ou un volume négatif doivent se refuser à l'entrée."""
+        wb = self._classeur()
+        attendus = {
+            "Bassins versants": ["D", "E"],          # coefficient, surface
+            "Ouvrages": ["E", "F", "H", "I", "J", "K", "M"],
+            "Projet": ["B"],                          # contraintes communes
+        }
+        for feuille, colonnes in attendus.items():
+            protegees = {str(dv.sqref)[0] for dv in wb[feuille].data_validations.dataValidation
+                         if dv.type == "decimal"}
+            for colonne in colonnes:
+                with self.subTest(feuille=feuille, colonne=colonne):
+                    self.assertIn(colonne, protegees,
+                                  "colonne de saisie sans garde-fou")
 
     def test_aucune_formule_ne_garde_un_gabarit_non_remplace(self):
         """Une accolade dans une formule trahit un f manquant devant la chaîne.

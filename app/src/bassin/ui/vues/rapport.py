@@ -234,9 +234,14 @@ class VueRapport(Vue):
                     ("Bassins d'orage", str(len(etat.systeme.ouvrages))),
                     ("Surface active du système",
                      theme.nombre(etat.systeme.aire_ponderee_m2, 1, "m²")),
-                    ("Ouvrage détaillé", etat.ouvrage.nom),
+                    # Le dossier porte sur l'étude entière : annoncer ici un
+                    # « ouvrage détaillé » laissait croire qu'il s'arrête à lui.
+                    ("Portée du dossier",
+                     f"les {len(etat.systeme.ouvrages)} bassins d'orage, un chapitre chacun"
+                     if len(etat.systeme.ouvrages) > 1 else "le bassin d'orage du projet"),
+                    ("Ouvrage affiché à l'écran", etat.ouvrage.nom),
                     ("Surface active raccordée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
-                    ("Scénario retenu", LIBELLES_SCENARIOS[etat.scenario_principal]),
+                    ("Scénario de cet ouvrage", LIBELLES_SCENARIOS[etat.scenario_principal]),
                     ("Volume de temporisation",
                      theme.nombre(res.volume_m3, 1, "m³") if res.dimensionnable
                      else "— (aucun débit de sortie)"),

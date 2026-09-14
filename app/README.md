@@ -242,9 +242,23 @@ Le classeur n'est pas un tirage figé : il **recalcule**. Retoucher une surface,
 coefficient de ruissellement, un K ou un débit d'ajutage change les volumes, feuille par
 feuille, jusqu'au récapitulatif du réseau.
 
+Le classeur décrit **le projet**, pas l'ouvrage affiché à l'écran. Sa première feuille
+annonçait encore « Ouvrage détaillé par ce classeur » et ne montrait que lui : c'était le
+classeur mono-bassin qui subsistait sous un classeur de système. Elle porte désormais les
+bassins versants du projet, les contraintes communes, et le récapitulatif de tous les
+bassins d'orage — chacun renvoyant à sa ligne sur `Ouvrages` et à ses feuilles de calcul.
+Des quinze noms définis, il n'en reste que **quatre** : ceux qui valent réellement pour
+tout le projet (`Coef_securite`, `T_vidange_max`, `Charge_orifice`, `Cd_orifice`).
+
+**On choisit, on ne tape pas.** La période de retour n'accepte que les douze récurrences du
+GTI : elle est une **liste déroulante**. Libre, elle laissait saisir « 35 ans » et chaque
+feuille de pluie renvoyait un `#N/A` muet. Les autres cellules de saisie — coefficients de
+ruissellement, surfaces, volumes, débits, K — refusent à l'entrée une valeur impossible,
+plutôt que de produire un volume absurde trois feuilles plus loin.
+
 | Feuille | Contenu |
 |---|---|
-| `Projet` | données générales : commune, période de retour, source des pluies, sécurité |
+| `Projet` | le projet : bassins versants, contraintes communes, récapitulatif des ouvrages |
 | `Bassins versants` | chaque surface, son coefficient, sa surface active |
 | `Ouvrages` | une ligne par bassin d'orage ; les cellules bleues se modifient |
 | `Pluie n` / `Scénarios n` | le balayage des durées et les quatre scénarios, **pour chaque ouvrage** |
