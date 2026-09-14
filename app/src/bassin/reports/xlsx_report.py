@@ -105,6 +105,8 @@ class _Ancrage:
     v_bassin: str
     v_sous_ajutage: str
     apport_amont: str
+    #: Coefficient d'infiltration de l'ouvrage, pour convertir un débit en surface.
+    k_infiltration: str = "K_infiltration"
     #: Ouvrage tel qu'il sera construit — distinct des hypothèses ci-dessus.
     s_dispersion: str = ""
     q_infiltration_bassin: str = ""
@@ -546,6 +548,7 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
             v_bassin=f"Ouvrages!$I${r}",
             v_sous_ajutage=f"Ouvrages!$J${r}",
             apport_amont=f"Ouvrages!$N${r}",
+            k_infiltration=f"Ouvrages!$F${r}",
             s_dispersion=f"Ouvrages!$K${r}",
             q_infiltration_bassin=f"Ouvrages!$L${r}",
             q_ajutage_bassin=f"Ouvrages!$M${r}",
@@ -566,7 +569,8 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
     projet = dossier.projet
     ws = wb.create_sheet(ancrage.feuille_pluie)
     _largeurs(ws, {"A": 14, "B": 12, "C": 12, "D": 14, "E": 14, "F": 16, "G": 16, "H": 18,
-                   "I": 16, "J": 18, "K": 16, "L": 18, "M": 15, "N": 14, "O": 16, "P": 18})
+                   "I": 16, "J": 18, "K": 16, "L": 18, "M": 15, "N": 14, "O": 16, "P": 18,
+                   "Q": 20})
     _titre(ws, "A1", f"{ancrage.nom} - {projet.commune_nom} - T = {projet.periode_retour} ans", 14)
     ws["A2"] = dossier.libelle_source
     ws["A2"].font = Font(italic=True, color="475569")
@@ -592,6 +596,7 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
         "[2] V évacué [m³]", "[2] V à maîtriser [m³]",
         "[3] V évacué [m³]", "[3] V à maîtriser [m³]",
         "Q entrant [l/s]", "t seuil [min]", "[4] V évacué [m³]", "[4] V à maîtriser [m³]",
+        "Q sortie minimal [l/s]",
     ])
     ws.freeze_panes = f"A{l0 + 1}"
 
@@ -628,9 +633,21 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
                 value=(f'=IF(N{r}="",{ancrage.q_infiltration}*A{r}*60/1000,'
                        f"({ancrage.q_infiltration}*A{r}+{ancrage.q_ajutage}*MAX(A{r}-N{r},0))*60/1000)")).number_format = "0.00"
         ws.cell(row=r, column=16, value=f"=MAX(F{r}-O{r},0)").number_format = "0.00"
+        # Q : plus petit débit de sortie qui vidange dans le délai, pour CETTE
+        # durée de pluie. Inversion de la condition de vidange (voir la note
+        # sous le tableau) : le maximum de la colonne est le débit qui tient
+        # pour toutes les durées, et donc le minimum cherché.
+        ws.cell(row=r, column=17,
+                value=f"=F{r}/(3.6*T_vidange_max+0.06*A{r})").number_format = "0.000"
         ligne += 1
     ws["A3"] = f"Plage balayée : {durees[0]:.0f} min a {durees[-1] / 1440:.0f} jours ({len(durees)} durées)"
     ws["A3"].font = Font(italic=True, size=9, color="475569")
+    ws.cell(row=ligne + 1, column=1, value=(
+        "Colonne Q - le volume se vidange dans le délai tant que V x 1000 / Q / 3600 <= "
+        "T vidange max. En y portant V = h x S / 1000 - Q x t x 60 / 1000, le débit "
+        "disparaît du maximum et la condition se résout : Q >= (h x S / 1000) / "
+        "(3,6 x T vidange max + 0,06 x t). Le maximum de la colonne est donc le débit de "
+        "sortie minimal, sans tâtonnement.")).font = Font(italic=True, size=9, color="475569")
     ws._plage_pluie = (l0 + 1, ligne - 1)  # type: ignore[attr-defined]
 
 
@@ -760,17 +777,52 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
     resultats = _resultats_de(dossier, ancrage, fiche)
     scenario_retenu = (fiche.ouvrage.scenario if fiche is not None
                        else dossier.scenario_principal)
-    ws.cell(row=ligne, column=1, value="Valeurs minimales calculées par l'application").font = Font(bold=True, color=BLEU)
+    ws.cell(row=ligne, column=1, value="Valeurs minimales pour tenir le temps de vidange").font = Font(bold=True, color=BLEU)
     ligne += 1
+    q_mini = f"MAX({plage('Q')})"
+    # Ces minima se calculent : le débit de sortie minimal est le maximum de la
+    # colonne Q de la feuille des pluies, dont on retranche l'organe déjà en
+    # place. Deux cas y échappent et gardent la valeur du moteur : le scénario
+    # à seuil, où l'ajutage surélevé ne s'ouvre qu'après un instant qui dépend
+    # lui-même de l'infiltration, et un ouvrage alimenté par l'amont, dont la
+    # vidange s'intègre pas à pas.
+    figes = apport_amont
+    formules = {
+        "surface_infiltration_min_m2": {
+            SCENARIO_DISPERSION: f"=IF({ancrage.k_infiltration}<=0,\"-\","
+                                 f"MAX({q_mini},0)*Coef_securite/(1000*{ancrage.k_infiltration}))",
+            SCENARIO_MIXTE: f"=IF({ancrage.k_infiltration}<=0,\"-\","
+                            f"MAX({q_mini}-{ancrage.q_ajutage},0)*Coef_securite"
+                            f"/(1000*{ancrage.k_infiltration}))",
+        },
+        "debit_ajutage_min_ls": {
+            SCENARIO_TEMPORISATION: f"=MAX({q_mini},0)",
+            SCENARIO_MIXTE: f"=MAX({q_mini}-{ancrage.q_infiltration},0)",
+        },
+    }
     for libelle, cle in (("Surface d'infiltration minimale [m²]", "surface_infiltration_min_m2"),
                          ("Débit d'ajutage minimal [l/s]", "debit_ajutage_min_ls")):
         ws.cell(row=ligne, column=1, value=libelle).font = Font(bold=True)
         for j, s in enumerate(ORDRE_SCENARIOS):
             v = getattr(resultats[s], cle) if s in resultats else None
-            c = ws.cell(row=ligne, column=2 + j, value="-" if v is None else round(v, 3))
+            formule = None if figes else formules[cle].get(s)
+            if v is None:
+                c = ws.cell(row=ligne, column=2 + j, value="-")
+            elif formule is not None:
+                c = ws.cell(row=ligne, column=2 + j, value=formule)
+            else:
+                c = ws.cell(row=ligne, column=2 + j, value=round(v, 3))
+                c.fill = PatternFill("solid", fgColor=ORANGE_PALE)
             c.number_format = "0.000"
             c.border = _BORDURE
         ligne += 1
+    raison = ("l'apport des ouvrages amont s'intègre pas à pas" if figes
+              else "l'ajutage surélevé ne s'ouvre qu'après un instant qui dépend de l'infiltration")
+    ws.cell(row=ligne, column=1, value=(
+        f"Cellules orange : valeur du moteur, {raison} — une formule de cellule ne sait pas "
+        "le reproduire. Les autres se recalculent : modifier K, le temps de vidange maximum "
+        "ou une surface les met à jour.")).font = Font(italic=True, size=9, color="B45309")
+    ligne += 1
 
     ligne += 1
     ws.cell(row=ligne, column=1, value="Scénario retenu").font = Font(bold=True)
@@ -826,13 +878,17 @@ def _feuille_bassin(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
         _label(ws, 12, "Événement critique - durée", sim.duree_pluie_min, "min", "0")
         _label(ws, 13, "Événement critique - hauteur", sim.hauteur_pluie_mm, "mm", "0.0")
         _label(ws, 14, "Volume stocké maximum", sim.volume_max_m3, "m³", "0.0")
-        _label(ws, 15, "Taux de remplissage", sim.taux_remplissage, "[-]", "0.0%")
+        # Le taux, lui, est un rapport : il suit le volume de l'ouvrage si on
+        # le retouche dans le classeur.
+        _label(ws, 15, "Taux de remplissage",
+               f"=IF({ancrage.v_bassin}<=0,0,$B$14/{ancrage.v_bassin})", "[-]", "0.0%")
         _label(ws, 16, "Volume débordé", sim.volume_debordement_m3, "m³", "0.00")
         _label(ws, 17, "Temps de vidange après la pluie", sim.temps_vidange_h, "h", "0.0")
         _label(ws, 18, "Statut", sim.statut,
                fond=VERT_PALE if not sim.debordement else ROUGE_PALE)
         ws.cell(row=19, column=1,
-                value="La simulation s'intègre pas à pas : ces sept valeurs viennent de "
+                value="La simulation s'intègre pas à pas : la durée et la hauteur critiques, "
+                      "le volume stocké, le débordement et la vidange viennent de "
                       "l'application et ne se recalculent pas ici.").font = Font(
                           italic=True, size=9, color="475569")
 
@@ -1135,12 +1191,32 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
         ligne += 1
         couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
         fonds = {i: couleurs[res.statut] for i, (_o, res) in enumerate(sim.resultats, start=1)}
+        l_entete = ligne
         ligne = _tableau(ws, ligne, synthese_simulation_systeme(dossier), fonds)
-        _label(ws, ligne, "Volume stocké par le réseau", sim.volume_stocke_m3, "m³", "0.0")
-        _label(ws, ligne + 1, "Débordement total", sim.volume_debordement_m3, "m³", "0.00",
+        # La pointe et le débordement sortent d'une intégration pas à pas ; la
+        # capacité et le taux de remplissage, eux, se déduisent — et doivent
+        # suivre si l'on retouche le volume de l'ouvrage dans le classeur.
+        par_id = {a.ouvrage_id: a for a in ancrages}
+        premiere = l_entete + 1
+        for i, (ouvrage, _res) in enumerate(sim.resultats):
+            r = premiere + i
+            ancrage = par_id.get(ouvrage.id)
+            if ancrage is not None and ancrage.v_bassin:
+                ws.cell(row=r, column=3, value=f"={ancrage.v_bassin}").number_format = "0.0"
+            ws.cell(row=r, column=4,
+                    value=f"=IF(C{r}<=0,0,B{r}/C{r}*100)").number_format = "0"
+        derniere = premiere + len(sim.resultats) - 1
+        _label(ws, ligne, "Volume stocké par le réseau",
+               f"=SUM(B{premiere}:B{derniere})", "m³", "0.0")
+        _label(ws, ligne + 1, "Débordement total", f"=SUM(E{premiere}:E{derniere})", "m³", "0.00",
                fond=ROUGE_PALE if sim.ouvrages_en_debordement else VERT_PALE)
-        _label(ws, ligne + 2, "Vidange la plus longue", sim.temps_vidange_max_h, "h", "0.0")
-        ligne += 4
+        _label(ws, ligne + 2, "Vidange la plus longue", round(sim.temps_vidange_max_h, 1), "h", "0.0")
+        ws.cell(row=ligne + 3, column=1, value=(
+            "Pointe, débordement, apport amont et vidange viennent de l'application : la "
+            "simulation du réseau intègre les hydrogrammes pas à pas, ce qu'une formule de "
+            "cellule ne sait pas faire. Capacité, remplissage et totaux, eux, se recalculent."
+        )).font = Font(italic=True, size=9, color="B45309")
+        ligne += 5
 
     anomalies = systeme.anomalies()
     if anomalies:

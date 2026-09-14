@@ -237,8 +237,18 @@ exceptés.
   et non la fonction (`SUM('F'!A1:A9)`, jamais `'F'!SUM(...)`) ; et les noms de feuille sont
   numérotés, car 31 caractères tronquent « Bassin d'orage de la voirie » en un intitulé
   ambigu et l'apostrophe demanderait un doublement que les tableurs relisent diversement.
-  Seul l'apport amont reste figé — une intégration pas à pas ne se met pas en cellule — dans
-  une cellule modifiable que l'aval suit.
+  Restent figées, dans des cellules modifiables signalées en orange, les seules grandeurs
+  qui demandent une intégration pas à pas : l'apport amont et, sur un ouvrage qui en
+  reçoit, ses minima ; les minima du scénario à seuil, dont l'ajutage surélevé ne s'ouvre
+  qu'à un instant fonction de l'infiltration ; la simulation du réseau.
+- **Un minimum se calcule, il ne se recopie pas.** Le moteur cherche la surface
+  d'infiltration et l'ajutage minimaux par dichotomie, ce qui ne se met pas en cellule —
+  mais la condition qu'ils satisfont, elle, s'inverse. `V x 1000 / Q / 3600 <= T` avec
+  `V = h x S / 1000 - Q x t x 60 / 1000` donne `Q >= (h x S / 1000) / (3,6 T + 0,06 t)` :
+  le débit sort du maximum, et le minimum cherché est le maximum d'une colonne (colonne Q
+  de `Pluie n`). Vérifié contre le moteur sur 200 projets tirés au sort, écart maximal
+  0,1 % — la tolérance de la dichotomie. L'inversion suppose que tout le volume se vidange
+  au même débit : elle ne vaut donc ni pour le scénario à seuil, ni avec un apport amont.
 - Les nombres s'affichent à la française (virgule) à l'écran comme dans les rapports ;
   `formats.fr` s'en charge, un test vérifie l'absence de point décimal dans le texte écrit.
 - L'interface se teste sans serveur graphique (`tests/test_ui.py` construit chaque vue et

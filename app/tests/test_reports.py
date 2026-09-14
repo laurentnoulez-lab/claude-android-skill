@@ -830,6 +830,129 @@ class TestClasseurDeReseau(unittest.TestCase):
                                    fiche.volume_minimal_m3 * 1.05,
                                    "la somme devrait surestimer nettement le volume")
 
+    def _ligne_des_minima(self, ws):
+        """Où la feuille range « Surface d'infiltration minimale »."""
+        for ligne in ws.iter_rows(min_col=1, max_col=1):
+            valeur = ligne[0].value
+            if isinstance(valeur, str) and valeur.startswith("Surface d'infiltration minimale"):
+                return ligne[0].row
+        self.fail("la feuille de scénarios n'annonce plus ses minima")
+
+    def test_les_minima_se_calculent_au_lieu_d_etre_recopies(self):
+        """Une surface minimale figée ment dès qu'on retouche K ou la vidange.
+
+        Le temps de vidange se tient tant que V x 1000 / Q / 3600 <= T max. En
+        y portant V = h x S / 1000 - Q x t x 60 / 1000, le débit sort du
+        maximum et la condition se résout en Q >= (h x S / 1000) /
+        (3,6 T + 0,06 t) : plus besoin de dichotomie, une colonne et un MAX
+        suffisent. Restent deux cas sans forme fermée — le scénario à seuil et
+        un ouvrage alimenté par l'amont — qui gardent la valeur du moteur.
+        """
+        wb = self._classeur()
+        for i, fiche in enumerate(self.dossier.fiches, start=1):
+            ws = wb[f"Scénarios {i}"]
+            r = self._ligne_des_minima(ws)
+            amont = fiche.apport_amont_m3 > 0
+            # [2] dispersion : surface minimale ; [1] temporisation : ajutage minimal.
+            for cellule, libelle in ((ws.cell(row=r, column=3), "surface (dispersion)"),
+                                     (ws.cell(row=r + 1, column=2), "ajutage (temporisation)")):
+                with self.subTest(ouvrage=fiche.nom, minimum=libelle):
+                    if amont:
+                        self.assertNotIsInstance(
+                            cellule.value, str,
+                            "un ouvrage à apport amont ne peut pas se mettre en formule")
+                    else:
+                        self.assertIsInstance(cellule.value, str, "minimum figé")
+                        self.assertTrue(cellule.value.startswith("="))
+            # Le scénario à seuil reste une valeur du moteur, dans tous les cas.
+            with self.subTest(ouvrage=fiche.nom, minimum="seuil"):
+                self.assertNotIsInstance(ws.cell(row=r, column=5).value, str)
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_les_minima_calcules_retombent_sur_le_moteur(self):
+        import formulas
+        from bassin.core import hydro
+        from bassin.core.model import (SCENARIO_DISPERSION, SCENARIO_MIXTE,
+                                       SCENARIO_TEMPORISATION)
+
+        solution = formulas.ExcelModel().loads(self.chemin).finish().calculate()
+
+        def valeur(feuille, cellule):
+            cle = f"]{feuille.upper()}'!{cellule}"
+            for k, v in solution.items():
+                if k.upper().endswith(cle):
+                    return float(v.value[0, 0])
+            raise KeyError(cle)
+
+        wb = self._classeur()
+        for i, fiche in enumerate(self.dossier.fiches, start=1):
+            if fiche.apport_amont_m3 > 0:
+                continue
+            r = self._ligne_des_minima(wb[f"Scénarios {i}"])
+            etude = fiche.ouvrage.etude
+            essais = (
+                ("C", r, hydro.surface_infiltration_minimale(etude, SCENARIO_DISPERSION), 0.5),
+                ("D", r, hydro.surface_infiltration_minimale(etude, SCENARIO_MIXTE), 0.5),
+                ("B", r + 1, hydro.debit_ajutage_minimal(etude, SCENARIO_TEMPORISATION), 0.01),
+                ("D", r + 1, hydro.debit_ajutage_minimal(etude, SCENARIO_MIXTE), 0.01),
+            )
+            for colonne, ligne, attendu, absolu in essais:
+                if attendu is None:
+                    continue
+                with self.subTest(ouvrage=fiche.nom, cellule=f"{colonne}{ligne}"):
+                    self.assertAlmostEqual(valeur(f"Scénarios {i}", f"{colonne}{ligne}"),
+                                           attendu, delta=max(attendu * 0.01, absolu))
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_changer_K_ou_la_vidange_change_les_minima(self):
+        """C'est le reproche exact auquel ces formules répondent."""
+        import formulas
+        import openpyxl
+
+        wb = self._classeur()
+        rang = next(i for i, f in enumerate(self.dossier.fiches, start=1)
+                    if f.apport_amont_m3 <= 0)
+        r = self._ligne_des_minima(wb[f"Scénarios {rang}"])
+
+        def minima(chemin):
+            solution = formulas.ExcelModel().loads(chemin).finish().calculate()
+            lus = []
+            for cellule in (f"C{r}", f"B{r + 1}"):
+                cle = f"]SCÉNARIOS {rang}'!{cellule}"
+                lus.append(next(float(v.value[0, 0]) for k, v in solution.items()
+                                if k.upper().endswith(cle)))
+            return lus
+
+        surface0, debit0 = minima(self.chemin)
+        self.assertGreater(surface0, 0)
+
+        # K divisé par dix : il faut dix fois plus de surface pour le même débit.
+        divise = os.path.join(self.repertoire, "k_divise.xlsx")
+        shutil.copy(self.chemin, divise)
+        classeur = openpyxl.load_workbook(divise)
+        cellule_k = classeur["Ouvrages"].cell(row=4 + rang, column=6)
+        cellule_k.value = cellule_k.value / 10.0
+        classeur.save(divise)
+        surface1, debit1 = minima(divise)
+        self.assertAlmostEqual(surface1, surface0 * 10.0, delta=surface0 * 0.02)
+        self.assertAlmostEqual(debit1, debit0, delta=max(debit0 * 0.01, 1e-4),
+                               msg="K ne doit pas déplacer le débit d'ajutage minimal")
+
+        # Temps de vidange réduit : il faut évacuer plus vite, donc davantage.
+        presse = os.path.join(self.repertoire, "vidange_courte.xlsx")
+        shutil.copy(self.chemin, presse)
+        classeur = openpyxl.load_workbook(presse)
+        feuille, coord = list(classeur.defined_names["T_vidange_max"].destinations)[0]
+        classeur[feuille][coord.replace("$", "")] = 24.0
+        classeur.save(presse)
+        surface2, debit2 = minima(presse)
+        self.assertGreater(surface2, surface0 * 1.2,
+                           "diviser le temps de vidange n'a pas augmenté la surface minimale")
+        self.assertGreater(debit2, debit0 * 1.2,
+                           "diviser le temps de vidange n'a pas augmenté l'ajutage minimal")
+
     def test_aucune_formule_ne_garde_un_gabarit_non_remplace(self):
         """Une accolade dans une formule trahit un f manquant devant la chaîne.
 

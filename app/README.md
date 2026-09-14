@@ -256,9 +256,32 @@ Les feuilles sont numérotées (`Pluie 1`, `Scénarios 2`) parce qu'Excel plafon
 de son voisin. Le nom de l'ouvrage se lit en titre de sa feuille et dans la colonne
 « Feuilles de calcul » de la feuille `Ouvrages`.
 
-**Une seule valeur reste figée** : l'apport des ouvrages amont. Il varie dans le temps et
-se poursuit après l'averse ; aucune formule de cellule ne sait l'intégrer pas à pas. Il
-occupe une cellule modifiable, et les volumes en aval la suivent.
+**Les minima aussi se calculent.** La surface d'infiltration minimale et l'ajutage minimal
+sortaient d'une dichotomie du moteur et restaient figés : retoucher K ou le temps de
+vidange ne les bougeait pas. Or la condition de vidange s'inverse. Elle s'écrit
+`V x 1000 / Q / 3600 <= T`, et en y portant `V = h x S / 1000 - Q x t x 60 / 1000` le débit
+sort du maximum :
+
+```
+Q >= (h x S / 1000) / (3,6 x T + 0,06 x t)
+```
+
+Le débit de sortie minimal est donc le **maximum d'une colonne** — une par durée de pluie,
+sur la feuille `Pluie n` — dont on retranche l'organe déjà en place pour obtenir l'autre.
+Plus de tâtonnement : diviser K par dix multiplie la surface minimale par dix, ramener la
+vidange de 48 à 24 h la fait passer de 109,5 à 184,3 m². Vérifié contre le moteur sur 200
+projets tirés au sort : écart maximal **0,1 %**, qui est la tolérance de la dichotomie
+elle-même.
+
+**Ce qui reste figé**, dans des cellules modifiables et signalées en orange :
+
+* l'**apport des ouvrages amont**, et tous les minima d'un ouvrage qui en reçoit un : cet
+  apport varie dans le temps et se poursuit après l'averse, aucune formule de cellule ne
+  sait l'intégrer pas à pas ;
+* les minima du **scénario à seuil**, où l'ajutage surélevé ne s'ouvre qu'à un instant qui
+  dépend lui-même de l'infiltration — l'inversion ci-dessus n'y tient plus ;
+* la **simulation** (pointe, débordement, vidange), pour la même raison ; capacité,
+  remplissage et totaux, eux, se recalculent.
 
 Recalculé cellule par cellule, le classeur retrouve le moteur à **0,02 %** près — l'écart
 que laisse sa grille d'une centaine de durées, contre 17 280 dans l'application.
