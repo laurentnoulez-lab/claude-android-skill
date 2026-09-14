@@ -33,6 +33,26 @@ def projet_complet() -> Projet:
     return p
 
 
+def texte_pdf(chemin: str) -> str:
+    """Texte d'un PDF, échappements octaux WinAnsi décodés.
+
+    Les accents y sont écrits « \\351 » : sans ce décodage, un test qui cherche
+    « débordement » ne trouve rien et conclut à tort que le mot manque.
+    """
+    with open(chemin, "rb") as fh:
+        brut = fh.read()
+    flux = []
+    for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+        try:
+            flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+        except zlib.error:
+            continue
+    morceaux = re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))
+    octal = re.compile(r"\\(\d{3})")
+    return "\n".join(octal.sub(lambda m: chr(int(m.group(1), 8)), t[1:-1])
+                     for t in morceaux)
+
+
 class BaseRapport(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -759,6 +779,50 @@ class TestClasseurDeReseau(unittest.TestCase):
         self.assertEqual(len(lignes), len(self.dossier.fiches),
                          "deux ouvrages partagent la même ligne de données")
 
+    def test_un_volume_avec_apport_amont_n_est_pas_une_somme(self):
+        """L'apport amont ne s'ajoute pas : il s'intègre.
+
+        Le classeur écrivait « volume isolé + apport amont », ce qui surestime
+        de 33 % sur le réseau de démonstration : l'apport arrive étalé dans le
+        temps et s'évacue en partie au fur et à mesure. Cette valeur-là vient
+        du moteur, et doit rester un nombre signalé comme tel.
+        """
+        from bassin.core import hydro
+
+        wb = self._classeur()
+        ws = wb["Ouvrages"]
+        for i, fiche in enumerate(self.dossier.fiches, start=5):
+            cellule = ws.cell(row=i, column=16).value
+            with self.subTest(ouvrage=fiche.nom):
+                if fiche.apport_amont_m3 > 0:
+                    self.assertNotIsInstance(
+                        cellule, str,
+                        "le volume d'un ouvrage à apport amont ne peut pas être une formule")
+                    self.assertAlmostEqual(cellule, round(fiche.volume_minimal_m3, 1), places=6)
+                else:
+                    self.assertIsInstance(cellule, str)
+                    self.assertTrue(cellule.startswith("="))
+
+    def test_la_somme_surestimerait_vraiment_le_volume(self):
+        """Sans cet écart, la règle ci-dessus serait une précaution gratuite."""
+        from bassin.core import hydro
+
+        for fiche in self.dossier.fiches:
+            if fiche.apport_amont_m3 <= 0:
+                continue
+            etude = fiche.ouvrage.etude
+            branche = etude.__dict__.pop("_apport_amont", None)
+            try:
+                isole = hydro.dimensionner(etude, fiche.ouvrage.scenario,
+                                           avec_minima=False).volume_m3
+            finally:
+                if branche is not None:
+                    etude.__dict__["_apport_amont"] = branche
+            with self.subTest(ouvrage=fiche.nom):
+                self.assertGreater(isole + fiche.apport_amont_m3,
+                                   fiche.volume_minimal_m3 * 1.05,
+                                   "la somme devrait surestimer nettement le volume")
+
     def test_aucune_formule_ne_garde_un_gabarit_non_remplace(self):
         """Une accolade dans une formule trahit un f manquant devant la chaîne.
 
@@ -875,18 +939,7 @@ class TestRapportDeReseau(unittest.TestCase):
         return os.path.join(self.repertoire, nom)
 
     def _texte_pdf(self, chemin: str) -> str:
-        with open(chemin, "rb") as fh:
-            brut = fh.read()
-        flux = []
-        for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
-            try:
-                flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
-            except zlib.error:
-                continue
-        morceaux = re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))
-        octal = re.compile(r"\\(\d{3})")
-        return "\n".join(octal.sub(lambda m: chr(int(m.group(1), 8)), t[1:-1])
-                         for t in morceaux)
+        return texte_pdf(chemin)
 
     # -- le dossier ----------------------------------------------------
     def test_le_dossier_porte_le_reseau(self):
@@ -981,19 +1034,26 @@ class TestRapportDeReseau(unittest.TestCase):
         # Le classeur dit pourquoi ces valeurs ne sont pas des formules vives.
         self.assertTrue(any("aucune formule de cellule" in t for t in textes))
 
-    def test_le_classeur_ecrit_des_nombres_exploitables(self):
-        """Un tableau de synthèse doit rester calculable, pas seulement lisible."""
+    def test_la_synthese_du_reseau_se_recalcule(self):
+        """Elle recopiait des nombres qui vivent ailleurs.
+
+        Modifier une surface laissait la synthèse inchangée : le classeur se
+        contredisait lui-même. Chaque ligne tire désormais ses valeurs des
+        feuilles « Bassins versants », « Ouvrages » et « Scénarios n ».
+        """
         import openpyxl
 
         chemin = xlsx_report.ecrire(self.dossier, self.chemin("reseau_nombres.xlsx"))
         feuille = openpyxl.load_workbook(chemin)["Réseau"]
-        ligne = next(l for l in feuille.iter_rows()
-                     if isinstance(l[0].value, str)
-                     and l[0].value == self.systeme.ouvrages[0].nom
-                     and isinstance(l[5].value, (int, float)))
-        fiche = [f for f in self.dossier.fiches
-                 if f.ouvrage.id == self.systeme.ouvrages[0].id][0]
-        self.assertAlmostEqual(ligne[5].value, round(fiche.volume_minimal_m3, 1), places=6)
+        for fiche in self.dossier.fiches:
+            ligne = next((l for l in feuille.iter_rows()
+                          if isinstance(l[0].value, str) and l[0].value == fiche.nom
+                          and isinstance(l[4].value, str) and l[4].value.startswith("=")), None)
+            with self.subTest(ouvrage=fiche.nom):
+                self.assertIsNotNone(ligne, "aucune ligne de synthèse calculée")
+                self.assertTrue(ligne[2].value.startswith("=Ouvrages!"),
+                                "la surface active est recopiée au lieu d'être calculée")
+                self.assertIn("Ouvrages!", ligne[4].value)
 
     # -- cohérence entre formats ---------------------------------------
     def test_les_trois_formats_annoncent_les_memes_volumes(self):
@@ -1010,14 +1070,26 @@ class TestRapportDeReseau(unittest.TestCase):
         for attendu in attendus:
             self.assertIn(attendu, document, f"volume {attendu} absent du Word")
 
-        feuille = openpyxl.load_workbook(
-            xlsx_report.ecrire(self.dossier, self.chemin("coherence.xlsx")))["Réseau"]
-        nombres = [c.value for ligne in feuille.iter_rows()
-                   for c in ligne if isinstance(c.value, (int, float))]
-        for fiche in self.dossier.fiches:
-            self.assertTrue(
-                any(abs(n - round(fiche.volume_minimal_m3, 1)) < 1e-6 for n in nombres),
-                f"volume de « {fiche.nom} » absent du classeur")
+        # Le classeur, lui, ne recopie plus ces nombres : il les calcule. On
+        # vérifie donc qu'il vise la bonne cellule, et — sous
+        # HYDROBASSIN_TEST_FORMULES — que le calcul retombe sur la même valeur.
+        chemin = xlsx_report.ecrire(self.dossier, self.chemin("coherence.xlsx"))
+        feuille = openpyxl.load_workbook(chemin)["Ouvrages"]
+        formules = [c.value for ligne in feuille.iter_rows()
+                    for c in ligne if isinstance(c.value, str) and c.value.startswith("=")]
+        self.assertTrue(any("Scénarios" in f for f in formules),
+                        "le volume minimal ne vient pas des feuilles de scénarios")
+        if os.environ.get("HYDROBASSIN_TEST_FORMULES"):
+            import formulas
+
+            solution = formulas.ExcelModel().loads(chemin).finish().calculate()
+            for i, fiche in enumerate(self.dossier.fiches, start=5):
+                cle = f"]OUVRAGES'!P{i}"
+                valeur = next(float(v.value[0, 0]) for k, v in solution.items()
+                              if k.upper().endswith(cle))
+                with self.subTest(ouvrage=fiche.nom):
+                    self.assertAlmostEqual(valeur, fiche.volume_minimal_m3,
+                                           delta=max(fiche.volume_minimal_m3 * 0.01, 0.2))
 
     def test_virgule_decimale_dans_la_section_reseau(self):
         titre = re.compile(r"^\d+(?:\.\d+)* ")
@@ -1123,9 +1195,13 @@ class TestNumerotationDesSections(unittest.TestCase):
                 with self.subTest(projet=libelle, format="Word"):
                     self._verifier(self._numeros_word(
                         dossier, os.path.join(repertoire, f"{libelle}.docx")), libelle)
-            # Et le réseau compte bien une section de plus.
-            self.assertEqual(
-                len(self._numeros_pdf(reseau, os.path.join(repertoire, "r.pdf"))),
-                len(self._numeros_pdf(simple, os.path.join(repertoire, "s.pdf"))) + 1)
+            # Et le rapport de réseau consacre un chapitre à chaque ouvrage :
+            # c'est là ce qui le distingue, pas son nombre de sections.
+            chemin = pdf_report.ecrire(reseau, os.path.join(repertoire, "r.pdf"))
+            texte = texte_pdf(chemin)
+            for fiche in reseau.fiches:
+                with self.subTest(ouvrage=fiche.nom):
+                    self.assertIn(fiche.nom, texte,
+                                  "un ouvrage du réseau n'a pas son chapitre")
         finally:
             shutil.rmtree(repertoire, ignore_errors=True)

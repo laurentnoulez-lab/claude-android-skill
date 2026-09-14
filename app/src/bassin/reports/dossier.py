@@ -40,6 +40,9 @@ class Dossier:
     systeme: object = None
     fiches: List = field(default_factory=list)
     simulation_systeme: object = None
+    #: Fiche de l'ouvrage que *ce* dossier détaille. Vide : l'ouvrage courant
+    #: du système, ou le bassin isolé quand il n'y a pas de réseau.
+    fiche: object = None
 
     @property
     def reseau_multiple(self) -> bool:
@@ -51,7 +54,37 @@ class Dossier:
     @property
     def ouvrage_courant(self):
         """Ouvrage décrit en détail par le dossier, s'il vient d'un réseau."""
+        if self.fiche is not None:
+            return self.fiche.ouvrage
         return self.systeme.courant if self.systeme is not None else None
+
+    def par_ouvrage(self) -> List["Dossier"]:
+        """Un dossier complet par bassin d'orage du réseau.
+
+        Le rapport ne détaillait que l'ouvrage courant : surfaces, scénarios,
+        vérification, table QDF et ajutage ne parlaient que de lui. Il fallait
+        changer d'ouvrage dans l'application et régénérer le dossier pour voir
+        les autres — autant de documents séparés pour une seule étude.
+
+        Chaque ouvrage a maintenant son chapitre, écrit par le même code : il
+        suffit de lui donner son propre dossier. Le réseau, lui, n'est
+        redimensionné pour aucun d'eux — fiches et simulation d'ensemble sont
+        partagées, elles décrivent le système et non un ouvrage.
+        """
+        if self.systeme is None or not self.fiches:
+            return [self]
+        dossiers: List["Dossier"] = []
+        for fiche in self.fiches:
+            sous = construire(fiche.ouvrage.etude, fiche.ouvrage.scenario,
+                              avec_simulation=self.simulation is not None
+                              or fiche.ouvrage.etude.bassin.volume_total_m3 > 0)
+            sous.date = self.date
+            sous.systeme = self.systeme
+            sous.fiches = self.fiches
+            sous.simulation_systeme = self.simulation_systeme
+            sous.fiche = fiche
+            dossiers.append(sous)
+        return dossiers
 
     @property
     def resultat_principal(self) -> hydro.Resultat:
