@@ -124,7 +124,7 @@ class Ouvrage:
 
     def debit_infiltration_ls(self) -> float:
         return debit_infiltration_ls(self.etude.bassin.surface_dispersion_m2,
-                                     self.etude.k_infiltration_ms,
+                                     self.etude.k_bassin_ms,
                                      self.etude.coef_securite_infiltration)
 
     def debit_sortant_ls(self) -> float:

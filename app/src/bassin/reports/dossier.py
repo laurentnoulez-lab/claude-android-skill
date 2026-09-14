@@ -223,7 +223,7 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
     sim = None
     table = None
     duree, hauteur = 0.0, 0.0
-    if avec_simulation and bassin.volume_total_m3 > 0 and projet.aire_ponderee_m2 > 0:
+    if avec_simulation and bassin.volume_total_m3 > 0 and projet.a_un_apport:
         duree, hauteur = simulation.evenement_critique(projet, bassin)
         sim = simulation.simuler_evenement_critique(projet, bassin)
         table = simulation.table_acceptation(projet, bassin)

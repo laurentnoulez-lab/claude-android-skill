@@ -241,6 +241,18 @@ exceptés.
   qui demandent une intégration pas à pas : l'apport amont et, sur un ouvrage qui en
   reçoit, ses minima ; les minima du scénario à seuil, dont l'ajutage surélevé ne s'ouvre
   qu'à un instant fonction de l'infiltration ; la simulation du réseau.
+- **« De l'eau arrive-t-il à cet ouvrage ? » se demande avec `Projet.a_un_apport`**, jamais
+  avec `aire_ponderee_m2 > 0`. Un bassin de fin de réseau n'a souvent aucun versant en
+  direct : le test sur la seule surface propre le privait de sa simulation, de sa table QDF
+  et des sections correspondantes du dossier, avec un message trompeur (« Encodez d'abord
+  un bassin »). Quatre portes en dépendaient — `EtatApplication.bassin_valide`,
+  `dossier.construire`, l'alerte de `hydro._controles`, les deux recherches de minima.
+- **Le bassin construit peut avoir son propre K** (`Bassin.k_infiltration_ms`, `None` =
+  reprendre le dimensionnement ; lire via `Projet.k_bassin_ms`, jamais
+  `projet.k_infiltration_ms`, dès qu'il s'agit de l'ouvrage réel). Le dimensionnement
+  cherche des minima sous une hypothèse de sol ; la simulation, la table de protection et
+  la synthèse portent sur ce qu'on a trouvé en fond de fouille. `reprendre_dimensionnement`
+  remet ce champ à `None` : reprendre l'hypothèse doit rester possible, jamais obligatoire.
 - **Le classeur et le dossier décrivent le SYSTÈME.** Le réflexe mono-bassin se cache
   encore par endroits : la feuille « Projet » annonçait « Ouvrage détaillé par ce
   classeur », l'entête du PDF et du Word aussi. `_projet_systeme` remplace

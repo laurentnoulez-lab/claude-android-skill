@@ -799,7 +799,7 @@ class TestClasseurDeReseau(unittest.TestCase):
         wb = self._classeur()
         ws = wb["Ouvrages"]
         for i, fiche in enumerate(self.dossier.fiches, start=5):
-            cellule = ws.cell(row=i, column=16).value
+            cellule = ws.cell(row=i, column=17).value
             with self.subTest(ouvrage=fiche.nom):
                 if fiche.apport_amont_m3 > 0:
                     self.assertNotIsInstance(
@@ -1120,7 +1120,7 @@ class TestClasseurDeReseau(unittest.TestCase):
         for i, fiche in enumerate(self.dossier.fiches, start=5):
             if fiche.apport_amont_m3 <= 0:
                 continue
-            for colonne in (14, 16):
+            for colonne in (15, 17):
                 cellule = wb["Ouvrages"].cell(row=i, column=colonne)
                 with self.subTest(ouvrage=fiche.nom, colonne=colonne):
                     self.assertIsInstance(cellule.value, (int, float))
@@ -1207,7 +1207,7 @@ class TestClasseurDeReseau(unittest.TestCase):
         wb = self._classeur()
         attendus = {
             "Bassins versants": ["D", "E"],          # coefficient, surface
-            "Ouvrages": ["E", "F", "H", "I", "J", "K", "M"],
+            "Ouvrages": ["E", "F", "H", "I", "J", "K", "L", "N"],
             "Projet": ["B"],                          # contraintes communes
         }
         for feuille, colonnes in attendus.items():
@@ -1479,7 +1479,7 @@ class TestRapportDeReseau(unittest.TestCase):
 
             solution = formulas.ExcelModel().loads(chemin).finish().calculate()
             for i, fiche in enumerate(self.dossier.fiches, start=5):
-                cle = f"]OUVRAGES'!P{i}"
+                cle = f"]OUVRAGES'!Q{i}"
                 valeur = next(float(v.value[0, 0]) for k, v in solution.items()
                               if k.upper().endswith(cle))
                 with self.subTest(ouvrage=fiche.nom):

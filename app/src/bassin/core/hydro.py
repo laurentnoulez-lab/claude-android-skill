@@ -449,7 +449,7 @@ def temps_vidange_h(volume_m3: float, q_infiltration_ls: float, q_ajutage_ls: fl
 def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
     from .model import DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE
 
-    if projet.aire_ponderee_m2 <= 0:
+    if not projet.a_un_apport:
         res.conforme = False
         res.alertes.append("Aucune surface incidente encodée : encodez au moins une surface.")
     if res.debit_sortant_ls <= 0:
@@ -523,7 +523,7 @@ def _temps_vidange_pour(projet: Projet, scenario: str, s_inf: float, q_aj: float
 
 def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: float = 0.01) -> Optional[float]:
     """Plus petite surface d'infiltration respectant le temps de vidange maximal."""
-    if projet.aire_ponderee_m2 <= 0 or projet.k_infiltration_ms <= 0:
+    if not projet.a_un_apport or projet.k_infiltration_ms <= 0:
         return None
     q_aj = projet.debit_ajutage_ls if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h
@@ -550,7 +550,7 @@ def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: floa
 
 def debit_ajutage_minimal(projet: Projet, scenario: str, tolerance: float = 1e-4) -> Optional[float]:
     """Plus petit débit d'ajutage respectant le temps de vidange maximal."""
-    if projet.aire_ponderee_m2 <= 0:
+    if not projet.a_un_apport:
         return None
     s_inf = projet.surface_infiltration_m2 if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h

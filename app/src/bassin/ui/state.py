@@ -255,7 +255,7 @@ class EtatApplication:
 
     @property
     def bassin_valide(self) -> bool:
-        return self.bassin.volume_total_m3 > 0 and self.projet.aire_ponderee_m2 > 0
+        return self.bassin.volume_total_m3 > 0 and self.projet.a_un_apport
 
     # -- réseau ------------------------------------------------------------
     @property
@@ -400,6 +400,9 @@ class EtatApplication:
             self.projet.surface_infiltration_m2
             if self.scenario_principal != SCENARIO_TEMPORISATION else 0.0
         )
+        # Reprendre le dimensionnement, c'est aussi en reprendre l'hypothèse de
+        # sol : le K propre au bassin construit s'efface.
+        b.k_infiltration_ms = None
         b.debit_ajutage_ls = (
             self.projet.debit_ajutage_ls if self.scenario_principal != SCENARIO_DISPERSION else 0.0
         )

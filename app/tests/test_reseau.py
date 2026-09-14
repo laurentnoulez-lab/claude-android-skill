@@ -633,5 +633,125 @@ class SimulationDuSysteme(unittest.TestCase):
                            sim_grand.resultat(aval2.id).q_amont_max_ls)
 
 
+class TestOuvrageAlimenteParLAmont(unittest.TestCase):
+    """Un bassin de fin de réseau n'a souvent aucun versant en direct.
+
+    Il ne fait que reprendre l'aval d'un autre bassin — configuration courante
+    d'un ouvrage de finition. Exiger une surface incidente propre le privait de
+    sa simulation, de sa table QDF et de son chapitre de vérification : le
+    dossier s'arrêtait à « Encodez d'abord un bassin ».
+    """
+
+    def _systeme(self):
+        systeme = reseau.Systeme(commune_ins="63013", commune_nom="Bütgenbach",
+                                 periode_retour=25, coef_securite_infiltration=2.0)
+        amont = reseau.Ouvrage(id="am", nom="Amont", scenario=SCENARIO_MIXTE)
+        amont.etude.k_infiltration_ms = 5e-6
+        amont.etude.surface_infiltration_m2 = 1500.0
+        amont.etude.debit_ajutage_ls = 45.0
+        amont.etude.bassin = Bassin(volume_total_m3=2140.0, surface_dispersion_m2=1500.0,
+                                    debit_ajutage_ls=45.0)
+        aval = reseau.Ouvrage(id="av", nom="Aval", scenario=SCENARIO_MIXTE)
+        aval.etude.k_infiltration_ms = 5e-6
+        aval.etude.surface_infiltration_m2 = 3000.0
+        aval.etude.debit_ajutage_ls = 45.0
+        aval.etude.bassin = Bassin(volume_total_m3=2816.0, surface_dispersion_m2=3000.0,
+                                   debit_ajutage_ls=45.0)
+        amont.aval_id = aval.id
+        systeme.ouvrages = [amont, aval]
+        # Un seul bassin versant, raccordé à l'amont : l'aval n'en a aucun.
+        versant = reseau.BassinVersant(id="bv", nom="Versant", bassin_id=amont.id,
+                                       surfaces=[SurfaceIncidente("Imperméable", 1.0, 94200.0)])
+        systeme.bassins_versants = [versant]
+        systeme.synchroniser()
+        return systeme, amont, aval
+
+    def test_il_recoit_de_l_eau_sans_versant_propre(self):
+        _systeme, _amont, aval = self._systeme()
+        self.assertEqual(aval.etude.aire_ponderee_m2, 0.0)
+        self.assertTrue(aval.etude.a_un_apport_amont)
+        self.assertTrue(aval.etude.a_un_apport,
+                        "un ouvrage alimenté par l'amont reçoit bien de l'eau")
+
+    def test_sa_table_qdf_et_sa_simulation_se_calculent(self):
+        _systeme, _amont, aval = self._systeme()
+        sim = simulation.simuler_evenement_critique(aval.etude, aval.etude.bassin)
+        self.assertGreater(sim.volume_max_m3, 0.0,
+                           "l'ouvrage aval stocke bien quelque chose")
+        table = simulation.table_acceptation(aval.etude, aval.etude.bassin)
+        self.assertEqual(len(table.durees_min), len(rainfall.QDF_DURATIONS_MIN))
+        self.assertTrue(any(c.volume_requis_m3 > 0
+                            for ligne in table.cellules for c in ligne),
+                        "la table QDF de l'ouvrage aval est vide")
+
+    def test_le_dossier_lui_consacre_les_memes_sections_qu_aux_autres(self):
+        from bassin.reports import dossier as mod_dossier
+
+        systeme, _amont, _aval = self._systeme()
+        dossier = mod_dossier.construire(systeme.courant.etude, systeme=systeme)
+        for sous in dossier.par_ouvrage():
+            with self.subTest(ouvrage=sous.ouvrage_courant.nom):
+                self.assertIsNotNone(sous.simulation, "chapitre sans vérification")
+                self.assertIsNotNone(sous.table, "chapitre sans table QDF")
+
+
+class TestKPropreAuBassinConstruit(unittest.TestCase):
+    """Le dimensionnement suppose un sol ; l'ouvrage construit en a un autre.
+
+    Le dimensionnement sert à trouver les minima ; le bassin réel sert à
+    simuler, à bâtir la table de protection et la synthèse. Reprendre
+    l'hypothèse de départ doit rester possible, jamais obligatoire.
+    """
+
+    def _projet(self, k_bassin=None):
+        p = Projet(commune_ins="63013", commune_nom="Bütgenbach", periode_retour=25,
+                   coef_securite_infiltration=2.0,
+                   surfaces=[SurfaceIncidente("Imperméable", 1.0, 20000.0)])
+        p.k_infiltration_ms = 1e-5
+        p.surface_infiltration_m2 = 500.0
+        p.debit_ajutage_ls = 10.0
+        # Capacité large à dessein : un bassin qui sature déborde dans les deux
+        # cas et son pic ne distingue plus les sols.
+        p.bassin = Bassin(volume_total_m3=5000.0, surface_dispersion_m2=500.0,
+                          debit_ajutage_ls=10.0, k_infiltration_ms=k_bassin)
+        return p
+
+    def test_sans_valeur_propre_il_reprend_le_dimensionnement(self):
+        p = self._projet()
+        self.assertFalse(p.bassin.k_propre)
+        self.assertEqual(p.k_bassin_ms, p.k_infiltration_ms)
+
+    def test_avec_une_valeur_propre_c_est_elle_qui_commande(self):
+        p = self._projet(k_bassin=2e-6)
+        self.assertTrue(p.bassin.k_propre)
+        self.assertEqual(p.k_bassin_ms, 2e-6)
+        # Q = 1000 x S x K / coef, calculé à la main.
+        attendu = 1000 * 500.0 * 2e-6 / 2.0
+        q_inf, _q_aj = simulation._debits(p, p.bassin)
+        self.assertAlmostEqual(q_inf, attendu, places=9)
+
+    def test_un_sol_moins_permeable_fait_monter_le_pic_et_la_vidange(self):
+        bon = simulation.simuler_evenement_critique(self._projet(2e-5),
+                                                    self._projet(2e-5).bassin)
+        mauvais = simulation.simuler_evenement_critique(self._projet(1e-6),
+                                                        self._projet(1e-6).bassin)
+        self.assertGreater(mauvais.volume_max_m3, bon.volume_max_m3)
+        self.assertGreater(mauvais.temps_vidange_h, bon.temps_vidange_h)
+
+    def test_il_survit_a_l_enregistrement(self):
+        p = self._projet(k_bassin=3e-6)
+        relu = Projet.from_dict(p.to_dict())
+        self.assertEqual(relu.bassin.k_infiltration_ms, 3e-6)
+        self.assertEqual(relu.k_bassin_ms, 3e-6)
+
+    def test_un_projet_enregistre_avant_ce_champ_se_recharge(self):
+        """Le champ n'existait pas : son absence doit rendre le dimensionnement."""
+        donnees = self._projet().to_dict()
+        donnees["bassin"].pop("k_infiltration_ms")
+        relu = Projet.from_dict(donnees)
+        self.assertIsNone(relu.bassin.k_infiltration_ms)
+        self.assertEqual(relu.k_bassin_ms, relu.k_infiltration_ms)
+
+
 if __name__ == "__main__":
     unittest.main()

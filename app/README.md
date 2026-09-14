@@ -213,6 +213,31 @@ Rail latéral sur ordinateur, tiroir sur téléphone, et **Ctrl+1 à Ctrl+9** pu
 pour passer directement à une section. Les onglets de détail (Dimensionnement, Bassin, Table
 QDF, Ajutage, Rapport) portent un sélecteur d'ouvrage dès qu'un projet en compte plusieurs.
 
+## Dimensionnement et bassin réel
+
+Les deux onglets ne répondent pas à la même question, et ne partagent pas
+obligatoirement leurs hypothèses :
+
+| | Sert à | Données |
+|---|---|---|
+| **Dimensionnement** | trouver les **valeurs minimales** : volume, surface d'infiltration, ajutage | hypothèse de sol, surfaces raccordées |
+| **Bassin réel** | **simuler**, bâtir la **table de protection** et la **synthèse du système** | l'ouvrage tel qu'il sera construit |
+
+Le bouton « reprendre le dimensionnement » pré-remplit le bassin réel — volumes,
+surface d'infiltration, ajutage **et vitesse d'infiltration**. Mais rien n'y oblige : un
+essai en fond de fouille donne rarement le K supposé au départ, et l'onglet Bassin réel a
+donc son propre champ **K**. Vide (ou remis à zéro), il reprend celui du dimensionnement ;
+renseigné, c'est lui qui commande la simulation, la table QDF et la synthèse. Sur la
+feuille `Ouvrages` du classeur, la colonne « K bassin » vaut `=F` tant qu'on n'y touche
+pas.
+
+**Un ouvrage sans bassin versant propre est normal.** Un bassin de finition ne fait
+souvent que reprendre l'aval d'un autre : il n'a aucune surface en direct. L'application
+exigeait pourtant une surface incidente avant de calculer sa simulation et sa table QDF —
+son onglet affichait « Encodez d'abord un bassin » et son chapitre du dossier sortait
+amputé. Ce qui compte est qu'**de l'eau lui arrive**, que ce soit par son versant ou par
+l'amont.
+
 ## Le dossier PDF et Word
 
 Le rapport porte sur **l'étude entière**, pas sur le seul ouvrage affiché à l'écran. Dès

@@ -137,7 +137,11 @@ class ResultatSimulation:
 
 
 def _debits(projet: Projet, bassin: Bassin) -> Tuple[float, float]:
-    q_inf = debit_infiltration_ls(bassin.surface_dispersion_m2, projet.k_infiltration_ms,
+    # Le bassin construit peut avoir sa propre vitesse d'infiltration : la
+    # simulation, la table QDF et la synthèse portent sur l'ouvrage réel, pas
+    # sur l'hypothèse de dimensionnement.
+    k = bassin.k_infiltration_ms if bassin.k_propre else projet.k_infiltration_ms
+    q_inf = debit_infiltration_ls(bassin.surface_dispersion_m2, k,
                                   projet.coef_securite_infiltration)
     return q_inf, bassin.debit_ajutage_ls
 

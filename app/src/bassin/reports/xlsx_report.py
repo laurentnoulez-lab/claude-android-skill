@@ -108,6 +108,8 @@ class _Ancrage:
     apport_amont: str
     #: Coefficient d'infiltration de l'ouvrage, pour convertir un débit en surface.
     k_infiltration: str = "K_infiltration"
+    #: Coefficient d'infiltration du bassin réellement construit.
+    k_bassin: str = "K_infiltration"
     #: Ouvrage tel qu'il sera construit — distinct des hypothèses ci-dessus.
     s_dispersion: str = ""
     q_infiltration_bassin: str = ""
@@ -405,7 +407,7 @@ def _projet_ouvrage(wb: Workbook, ws, dossier: Dossier) -> None:
                      f"=Ouvrages!$K${renvoi}" if renvoi else projet.bassin.surface_dispersion_m2,
                      "m²", "0.0"); l += 1
     c_qbas = _label(ws, l, "Débit d'ajutage du bassin",
-                    f"=Ouvrages!$M${renvoi}" if renvoi else projet.bassin.debit_ajutage_ls,
+                    f"=Ouvrages!$N${renvoi}" if renvoi else projet.bassin.debit_ajutage_ls,
                     "l/s", "0.000"); l += 1
     c_qinfb = _label(ws, l, "Débit d'infiltration du bassin",
                      f"=1000*{c_sdisp.coordinate}*{c_k.coordinate}/{c_cs.coordinate}", "l/s", "0.000",
@@ -566,8 +568,8 @@ def _projet_systeme(wb: Workbook, ws, dossier: Dossier) -> None:
         ws.cell(row=r, column=1, value=f"=Ouvrages!$A${source}")
         ws.cell(row=r, column=2, value=f"=Ouvrages!$B${source}")
         ws.cell(row=r, column=3, value=f"=Ouvrages!$I${source}").number_format = "0.0"
-        ws.cell(row=r, column=4, value=f"=Ouvrages!$P${source}").number_format = "0.0"
-        ws.cell(row=r, column=5, value=f"=Ouvrages!$R${source}")
+        ws.cell(row=r, column=4, value=f"=Ouvrages!$Q${source}").number_format = "0.0"
+        ws.cell(row=r, column=5, value=f"=Ouvrages!$S${source}")
         for col in range(1, 6):
             ws.cell(row=r, column=col).border = _BORDURE
     derniere = premiere + len(dossier.fiches) - 1
@@ -732,8 +734,8 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
     systeme = dossier.systeme
     ws = wb.create_sheet("Ouvrages")
     _largeurs(ws, {"A": 30, "B": 24, "C": 15, "D": 15, "E": 14, "F": 12, "G": 15, "H": 14,
-                   "I": 13, "J": 14, "K": 14, "L": 16, "M": 15, "N": 14, "O": 14,
-                   "P": 15, "Q": 18, "R": 20})
+                   "I": 13, "J": 14, "K": 14, "L": 13, "M": 16, "N": 15, "O": 14,
+                   "P": 14, "Q": 15, "R": 18, "S": 20})
     _titre(ws, "A1", "Bassins d'orage - données d'entrée", 14)
     ws["A2"] = ("Une ligne par ouvrage. Les cellules orange se modifient : leur changement se "
                 "propage aux feuilles de calcul de l'ouvrage concerné, puis à la synthèse.")
@@ -743,9 +745,9 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
     for texte, debut_col, fin_col, fond in (
             ("Raccordements", 1, 4, GRIS_PALE),
             ("Hypothèses de dimensionnement", 5, 8, BLEU_PALE),
-            ("Ouvrage construit", 9, 13, VERT_PALE),
-            ("Apport amont (repris de l'application)", 14, 15, ORANGE_PALE),
-            ("Résultat", 16, 18, GRIS_PALE)):
+            ("Ouvrage construit", 9, 14, VERT_PALE),
+            ("Apport amont (repris de l'application)", 15, 16, ORANGE_PALE),
+            ("Résultat", 17, 19, GRIS_PALE)):
         ws.merge_cells(start_row=3, start_column=debut_col, end_row=3, end_column=fin_col)
         c = ws.cell(row=3, column=debut_col, value=texte)
         c.font = Font(bold=True, color=BLEU)
@@ -755,7 +757,7 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
     _entete(ws, 4, [
         "Bassin d'orage", "Se déverse vers", "S active propre [m²]", "S active amont [m²]",
         "S infiltration [m²]", "K [m/s]", "Q infiltration [l/s]", "Q ajutage [l/s]",
-        "V total [m³]", "V sous ajutage [m³]", "S dispersion [m²]",
+        "V total [m³]", "V sous ajutage [m³]", "S dispersion [m²]", "K bassin [m/s]",
         "Q infiltration bassin [l/s]", "Q ajutage bassin [l/s]",
         "Apport amont [m³]", "Pointe amont [l/s]",
         "V minimal [m³]", "Surverse", "Feuilles de calcul",
@@ -800,12 +802,18 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
         ws.cell(row=r, column=9, value=bassin.volume_total_m3).number_format = "0.0"
         ws.cell(row=r, column=10, value=bassin.volume_sous_ajutage_m3).number_format = "0.0"
         ws.cell(row=r, column=11, value=bassin.surface_dispersion_m2).number_format = "0"
+        # Le fond réellement construit peut avoir sa propre vitesse
+        # d'infiltration : un essai en fond de fouille donne rarement la valeur
+        # supposée au dimensionnement. Vide, la colonne reprend l'hypothèse.
         ws.cell(row=r, column=12,
-                value=f"=1000*K{r}*F{r}/Coef_securite").number_format = "0.000"
-        ws.cell(row=r, column=13, value=bassin.debit_ajutage_ls).number_format = "0.000"
+                value=(bassin.k_infiltration_ms if bassin.k_propre
+                       else f"=F{r}")).number_format = "0.00E+00"
+        ws.cell(row=r, column=13,
+                value=f"=1000*K{r}*L{r}/Coef_securite").number_format = "0.000"
+        ws.cell(row=r, column=14, value=bassin.debit_ajutage_ls).number_format = "0.000"
         # Apport amont, puis résultat
-        ws.cell(row=r, column=14, value=round(fiche.apport_amont_m3, 2)).number_format = "0.00"
-        ws.cell(row=r, column=15, value=round(fiche.q_amont_max_ls, 3)).number_format = "0.000"
+        ws.cell(row=r, column=15, value=round(fiche.apport_amont_m3, 2)).number_format = "0.00"
+        ws.cell(row=r, column=16, value=round(fiche.q_amont_max_ls, 3)).number_format = "0.000"
         col = colonne_scenario[o.scenario]
         # Sans apport amont, le volume minimal est exactement celui que calcule
         # la feuille de scénarios. Avec, il ne s'en déduit pas : l'apport arrive
@@ -814,22 +822,22 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
         # démonstration. Seule l'intégration pas à pas donne la valeur juste ;
         # elle est reprise de l'application et signalée comme non recalculable.
         if fiche.apport_amont_m3 > 0:
-            c_min = ws.cell(row=r, column=16, value=round(fiche.volume_minimal_m3, 1))
+            c_min = ws.cell(row=r, column=17, value=round(fiche.volume_minimal_m3, 1))
             c_min.fill = orange
         else:
-            c_min = ws.cell(row=r, column=16, value=f"={_ref(feuille_scen)}!{col}5")
+            c_min = ws.cell(row=r, column=17, value=f"={_ref(feuille_scen)}!{col}5")
         c_min.number_format = "0.0"
-        ws.cell(row=r, column=17,
+        ws.cell(row=r, column=18,
                 value="milieu naturel" if o.surverse_vers_milieu_naturel else
                       (aval.nom if aval is not None else "exutoire"))
-        ws.cell(row=r, column=18, value=f"Pluie {i + 1} · Scénarios {i + 1}")
+        ws.cell(row=r, column=19, value=f"Pluie {i + 1} · Scénarios {i + 1}")
 
         for col_i in (5, 6, 8):
             ws.cell(row=r, column=col_i).fill = bleu
-        for col_i in (9, 10, 11, 13):
+        for col_i in (9, 10, 11, 12, 14):
             ws.cell(row=r, column=col_i).fill = vert
-        ws.cell(row=r, column=14).fill = orange
-        for col_i in range(1, 19):
+        ws.cell(row=r, column=15).fill = orange
+        for col_i in range(1, 20):
             ws.cell(row=r, column=col_i).border = _BORDURE
 
         ancrages.append(_Ancrage(
@@ -842,12 +850,13 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
             q_ajutage=f"Ouvrages!$H${r}",
             v_bassin=f"Ouvrages!$I${r}",
             v_sous_ajutage=f"Ouvrages!$J${r}",
-            apport_amont=f"Ouvrages!$N${r}",
+            apport_amont=f"Ouvrages!$O${r}",
             k_infiltration=f"Ouvrages!$F${r}",
+            k_bassin=f"Ouvrages!$L${r}",
             s_dispersion=f"Ouvrages!$K${r}",
-            q_infiltration_bassin=f"Ouvrages!$L${r}",
-            q_ajutage_bassin=f"Ouvrages!$M${r}",
-            volume_minimal=f"Ouvrages!$P${r}",
+            q_infiltration_bassin=f"Ouvrages!$M${r}",
+            q_ajutage_bassin=f"Ouvrages!$N${r}",
+            volume_minimal=f"Ouvrages!$Q${r}",
             ligne=r,
         ))
 
@@ -863,11 +872,12 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
                 ("J", "Volume sous l'ajutage", "Un volume se saisit en m³, positif ou nul."),
                 ("K", "Surface de dispersion", "Une surface se saisit en m², positive ou nulle."),
                 ("H", "Débit d'ajutage", "Un débit d'ajutage se saisit en l/s, positif ou nul."),
-                ("M", "Débit d'ajutage", "Un débit d'ajutage se saisit en l/s, positif ou nul.")):
+                ("N", "Débit d'ajutage", "Un débit d'ajutage se saisit en l/s, positif ou nul.")):
             _borne(ws, f"{colonne}5:{colonne}{derniere}", titre, message, mini=0)
-        _borne(ws, f"F5:F{derniere}", "Coefficient d'infiltration K",
-               "K se saisit en m/s : une vitesse d'infiltration strictement positive "
-               "(1e-7 à 1e-3 pour les sols courants).", mini=1e-12, maxi=1)
+        for colonne in ("F", "L"):
+            _borne(ws, f"{colonne}5:{colonne}{derniere}", "Coefficient d'infiltration K",
+                   "K se saisit en m/s : une vitesse d'infiltration strictement positive "
+                   "(1e-7 à 1e-3 pour les sols courants).", mini=1e-12, maxi=1)
     ws.cell(row=5 + len(dossier.fiches) + 1, column=1,
             value="Orange : valeur en dur. Les colonnes de saisie vous appartiennent ; "
                   "l'apport amont et le volume qui en dépend viennent de l'application et ne "

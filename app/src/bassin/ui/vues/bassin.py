@@ -33,6 +33,12 @@ class VueBassin(Vue):
             p.hauteur_charge_m = v
             self.etat.invalider()
 
+        def maj_k(v: float) -> None:
+            # Zéro (ou champ vidé) rend la main au dimensionnement : reprendre
+            # son hypothèse doit rester possible sans être imposé.
+            b.k_infiltration_ms = v if v > 0 else None
+            self.etat.invalider()
+
         return ft.ResponsiveRow(
             [
                 theme.champ_nombre("Volume tampon total", b.volume_total_m3, maj("volume_total_m3"),
@@ -55,6 +61,14 @@ class VueBassin(Vue):
                     indisponible_b="encodez d'abord les surfaces incidentes",
                     decimales_a=3, decimales_b=2,
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
+                *theme.champs_convertis(
+                    "Vitesse d'infiltration K", "m/s", p.k_bassin_ms,
+                    "soit", "mm/h", 3600000.0, maj_k, on_valide=self.maj_resultats,
+                    aide_a=("essai en fond de fouille" if b.k_propre else
+                            "repris du dimensionnement · 0 pour y revenir"),
+                    aide_b="équivalent, modifiable aussi",
+                    decimales_a=8, decimales_b=2,
+                    col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge sur l'ajutage", p.hauteur_charge_m, maj_charge, "m",
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
                                    col={"xs": 12, "sm": 6, "md": 3}),
@@ -72,7 +86,7 @@ class VueBassin(Vue):
     def resultats(self) -> List[ft.Control]:
         p = self.etat.projet
         b = self.etat.bassin
-        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_infiltration_ms,
+        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_bassin_ms,
                                                  p.coef_securite_infiltration)
         entete = ft.Row(
             [

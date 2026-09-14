@@ -59,11 +59,23 @@ class Bassin:
     volume_sous_ajutage_m3: float = 0.0
     surface_dispersion_m2: float = 0.0
     debit_ajutage_ls: float = 0.0
+    #: Vitesse d'infiltration du fond réellement construit [m/s]. ``None``
+    #: reprend celle du dimensionnement. Les deux parties ne parlent pas de la
+    #: même chose : le dimensionnement cherche les minima sous une hypothèse de
+    #: sol, l'ouvrage construit se vérifie sur le sol qu'on y a effectivement
+    #: trouvé — un essai d'infiltration en fond de fouille donne rarement la
+    #: valeur supposée au départ.
+    k_infiltration_ms: Optional[float] = None
 
     @property
     def volume_tampon_m3(self) -> float:
         """Volume utile situé au-dessus de l'ajutage."""
         return max(self.volume_total_m3 - self.volume_sous_ajutage_m3, 0.0)
+
+    @property
+    def k_propre(self) -> bool:
+        """Le bassin construit a-t-il sa propre vitesse d'infiltration ?"""
+        return self.k_infiltration_ms is not None and self.k_infiltration_ms > 0
 
 
 @dataclass
@@ -157,6 +169,29 @@ class Projet:
         l'apport.
         """
         return self.amont.actif or self._fournisseur_apport is not None
+
+    @property
+    def k_bassin_ms(self) -> float:
+        """Vitesse d'infiltration du bassin construit.
+
+        Celle encodée dans l'onglet « Bassin réel » si elle l'a été, sinon
+        celle du dimensionnement. Reprendre l'hypothèse de départ doit rester
+        possible, mais jamais obligatoire.
+        """
+        return self.bassin.k_infiltration_ms if self.bassin.k_propre else self.k_infiltration_ms
+
+    @property
+    def a_un_apport(self) -> bool:
+        """De l'eau arrive-t-elle à cet ouvrage ?
+
+        Son propre bassin versant, **ou** ce que lui restituent les ouvrages
+        amont. Un ouvrage de fin de réseau n'a souvent aucun versant en direct
+        — il ne fait que reprendre l'aval d'un autre bassin : exiger une
+        surface incidente propre le privait de sa simulation, de sa table QDF
+        et de son chapitre de vérification au dossier, alors que c'est
+        précisément là qu'on veut savoir quelle récurrence il encaisse.
+        """
+        return self.aire_ponderee_m2 > 0 or self.a_un_apport_amont
 
     @property
     def _fournisseur_apport(self):
