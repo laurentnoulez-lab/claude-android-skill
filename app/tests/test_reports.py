@@ -583,6 +583,170 @@ if __name__ == "__main__":
     unittest.main(verbosity=2)
 
 
+class TestClasseurDeReseau(unittest.TestCase):
+
+    """Le classeur détaille tout le système, et se recalcule.
+
+    Il ne portait qu'un ouvrage : ses formules visaient des noms globaux définis
+    sur la feuille « Projet », si bien qu'il fallait régénérer le classeur
+    autant de fois qu'il y a de bassins pour les voir tous.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from bassin.core import exemple
+
+        cls.systeme = exemple.systeme_demonstration()
+        cls.systeme.synchroniser()
+        cls.dossier = mod_dossier.construire(cls.systeme.courant.etude, systeme=cls.systeme)
+        cls.repertoire = tempfile.mkdtemp(prefix="hydrobassin_classeur_")
+        cls.chemin = os.path.join(cls.repertoire, "reseau.xlsx")
+        xlsx_report.ecrire(cls.dossier, cls.chemin)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.repertoire, ignore_errors=True)
+
+    def _classeur(self):
+        import openpyxl
+        return openpyxl.load_workbook(self.chemin)
+
+    def test_chaque_ouvrage_a_ses_feuilles_de_calcul(self):
+        wb = self._classeur()
+        n = len(self.dossier.fiches)
+        self.assertGreater(n, 1, "le réseau de démonstration doit compter plusieurs ouvrages")
+        for i in range(1, n + 1):
+            self.assertIn(f"Pluie {i}", wb.sheetnames)
+            self.assertIn(f"Scénarios {i}", wb.sheetnames)
+
+    def test_les_noms_de_feuilles_sont_acceptables_par_excel(self):
+        """31 caractères, aucun des caractères interdits, et deux à deux distincts."""
+        wb = self._classeur()
+        for nom in wb.sheetnames:
+            with self.subTest(feuille=nom):
+                self.assertLessEqual(len(nom), 31)
+                for interdit in "[]:*?/\\":
+                    self.assertNotIn(interdit, nom)
+        self.assertEqual(len(wb.sheetnames), len(set(wb.sheetnames)))
+
+    def test_les_surfaces_et_les_ouvrages_sont_des_donnees_vives(self):
+        wb = self._classeur()
+        for feuille, attendu in (("Bassins versants", 5), ("Ouvrages", 1)):
+            ws = wb[feuille]
+            formules = [c.value for ligne in ws.iter_rows() for c in ligne
+                        if isinstance(c.value, str) and c.value.startswith("=")]
+            with self.subTest(feuille=feuille):
+                self.assertGreaterEqual(len(formules), attendu)
+
+    def test_chaque_feuille_pointe_vers_son_propre_ouvrage(self):
+        """Sans quoi tous les onglets recalculeraient le même bassin."""
+        wb = self._classeur()
+        lignes = set()
+        for i in range(1, len(self.dossier.fiches) + 1):
+            ws = wb[f"Pluie {i}"]
+            refs = {c.value for ligne in ws.iter_rows() for c in ligne
+                    if isinstance(c.value, str) and "Ouvrages!$C$" in c.value}
+            self.assertTrue(refs, f"la feuille Pluie {i} ne référence aucune surface")
+            lignes.add(tuple(sorted(r[r.index("Ouvrages!$C$"):][:14] for r in list(refs)[:1])))
+        self.assertEqual(len(lignes), len(self.dossier.fiches),
+                         "deux ouvrages partagent la même ligne de données")
+
+    def test_aucune_formule_ne_garde_un_gabarit_non_remplace(self):
+        """Une accolade dans une formule trahit un f manquant devant la chaîne.
+
+        Le cas s'est produit : un dictionnaire de formules n'était pas fait de
+        f-strings, et « ={ancrage.q_infiltration}+… » partait tel quel dans le
+        classeur, où Excel n'y voyait qu'une erreur de valeur.
+        """
+        wb = self._classeur()
+        fautives = []
+        for nom in wb.sheetnames:
+            for ligne in wb[nom].iter_rows():
+                for c in ligne:
+                    v = c.value
+                    if isinstance(v, str) and v.startswith("=") and ("{" in v or "}" in v):
+                        fautives.append(f"{nom}!{c.coordinate} : {v[:70]}")
+        self.assertEqual(fautives, [], "\n".join([""] + fautives))
+
+    def test_le_recapitulatif_du_reseau_se_recalcule(self):
+        wb = self._classeur()
+        ws = wb["Réseau"]
+        formules = [c.value for ligne in ws.iter_rows() for c in ligne
+                    if isinstance(c.value, str) and c.value.startswith("=")]
+        self.assertTrue(any("Scénarios" in f for f in formules),
+                        "la synthèse réseau ne tire rien des feuilles des ouvrages")
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_les_formules_de_chaque_ouvrage_reproduisent_le_moteur(self):
+        import formulas
+        from bassin.core import hydro
+
+        modele = formulas.ExcelModel().loads(self.chemin).finish()
+        solution = modele.calculate()
+
+        def valeur(feuille, cellule):
+            cle = f"]{feuille.upper()}'!{cellule}"
+            for k, v in solution.items():
+                if k.upper().endswith(cle):
+                    return float(v.value[0, 0])
+            raise KeyError(cle)
+
+        for i, fiche in enumerate(self.dossier.fiches, start=1):
+            etude = fiche.ouvrage.etude
+            for j, scenario in enumerate(mod_dossier.ORDRE_SCENARIOS):
+                colonne = chr(ord("B") + j)
+                obtenu = valeur(f"Scénarios {i}", f"{colonne}5")
+                # La feuille calcule le bassin seul : l'apport amont est une
+                # colonne à part, car il s'intègre pas à pas.
+                branche = etude.__dict__.pop("_apport_amont", None)
+                try:
+                    attendu = hydro.dimensionner(etude, scenario).volume_m3
+                finally:
+                    if branche is not None:
+                        etude.__dict__["_apport_amont"] = branche
+                with self.subTest(ouvrage=fiche.nom, scenario=scenario):
+                    self.assertAlmostEqual(obtenu, attendu, delta=max(attendu * 0.005, 0.05))
+
+    @unittest.skipUnless(os.environ.get("HYDROBASSIN_TEST_FORMULES"),
+                         "évaluation des formules Excel (variable HYDROBASSIN_TEST_FORMULES)")
+    def test_modifier_une_surface_change_le_volume_du_bon_bassin(self):
+        """C'est l'objet même d'un classeur à formules vives."""
+        import formulas
+        import openpyxl
+
+        def volumes(chemin):
+            modele = formulas.ExcelModel().loads(chemin).finish()
+            solution = modele.calculate()
+            lus = {}
+            for i in range(1, len(self.dossier.fiches) + 1):
+                cle = f"]SCÉNARIOS {i}'!B5"
+                for k, v in solution.items():
+                    if k.upper().endswith(cle):
+                        lus[i] = float(v.value[0, 0])
+                        break
+            return lus
+
+        avant = volumes(self.chemin)
+        self.assertEqual(len(avant), len(self.dossier.fiches))
+
+        modifie = os.path.join(self.repertoire, "modifie.xlsx")
+        shutil.copy(self.chemin, modifie)
+        wb = openpyxl.load_workbook(modifie)
+        ws = wb["Bassins versants"]
+        cible = next(l[4] for l in ws.iter_rows(min_row=5)
+                     if isinstance(l[4].value, (int, float)) and l[4].value > 0)
+        cible.value = cible.value * 2
+        wb.save(modifie)
+
+        apres = volumes(modifie)
+        self.assertGreater(apres[1], avant[1],
+                           "doubler une surface n'a pas augmenté le volume du bassin")
+        for i in range(2, len(self.dossier.fiches) + 1):
+            self.assertAlmostEqual(apres[i], avant[i], places=6,
+                                   msg="un autre bassin a bougé alors que sa surface n'a pas changé")
+
+
 class TestRapportDeReseau(unittest.TestCase):
     """Les trois formats documentent le réseau, et disent la même chose."""
 

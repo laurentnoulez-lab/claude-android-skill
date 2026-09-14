@@ -9,14 +9,15 @@ de la méthode rationnelle. L'utilisateur peut modifier les données d'entrée
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 
-from ..core import rainfall
+from ..core import hydro as _hydro, rainfall
 from ..core.model import (
     LIBELLES_SCENARIOS,
     SCENARIO_DISPERSION,
@@ -70,6 +71,56 @@ def _label(ws, ligne: int, texte: str, valeur=None, unite: str = "", format_nomb
 def _largeurs(ws, largeurs: Dict[str, int]) -> None:
     for col, w in largeurs.items():
         ws.column_dimensions[col].width = w
+
+
+def _ref(feuille: str) -> str:
+    """Référence de feuille utilisable dans une formule.
+
+    Excel veut l'apostrophe doublée à l'intérieur d'un nom cité : « Bassin
+    d'orage » s'écrit 'Bassin d''orage'. Presque tous les noms d'ouvrage d'un
+    projet francophone en portent une, et la formule était simplement refusée.
+    """
+    return "'" + feuille.replace("'", "''") + "'"
+
+
+@dataclass
+class _Ancrage:
+    """Où un ouvrage range ses données d'entrée, pour que ses formules y pointent.
+
+    Le classeur ne portait qu'un ouvrage : ses formules visaient des noms
+    globaux — ``S_ponderee``, ``Q_ajutage`` — définis sur la feuille « Projet ».
+    Un réseau en compte plusieurs, chacun avec ses surfaces et son exutoire :
+    chaque ouvrage a donc sa ligne sur la feuille « Ouvrages », et ses feuilles
+    de calcul pointent vers **ses** cellules. Modifier une surface ou un ajutage
+    dans le classeur recalcule alors l'ouvrage concerné, et lui seul.
+    """
+
+    ouvrage_id: str
+    nom: str
+    feuille_pluie: str
+    feuille_scenarios: str
+    s_ponderee: str
+    q_infiltration: str
+    q_ajutage: str
+    v_bassin: str
+    v_sous_ajutage: str
+    apport_amont: str
+
+    def plage_pluie(self, col: str, r0: int, r1: int) -> str:
+        return f"{_ref(self.feuille_pluie)}!${col}${r0}:${col}${r1}"
+
+
+def _nom_de_feuille(base: str, rang: int) -> str:
+    """Nom de feuille : « Pluie 1 », « Scénarios 2 »…
+
+    Un nom d'ouvrage ne convient pas. Excel plafonne à 31 caractères, et
+    « Bassin d'orage de la voirie » tronqué donne « Scénarios Bassin d'orage de
+    la » — indistinct du suivant. Il faudrait en outre y doubler l'apostrophe
+    dans chaque formule, ce que tous les tableurs ne relisent pas de la même
+    façon. Le nom de l'ouvrage se lit en titre de sa feuille et dans la colonne
+    « Feuilles » de la feuille « Ouvrages ».
+    """
+    return f"{base} {rang}"
 
 
 def _grille_durees(dossier: Dossier) -> List[float]:
@@ -238,22 +289,172 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     for nom, ref in noms.items():
         wb.defined_names.add(DefinedName(nom, attr_text=ref))
 
-    if dossier.reseau_multiple:
-        _feuille_reseau(wb, dossier)
-    _feuille_pluie(wb, dossier)
-    _feuille_scenarios(wb, dossier)
+    # Un classeur par ouvrage : chacun a ses surfaces, son exutoire et donc ses
+    # volumes. Ne détailler que l'ouvrage courant obligeait à régénérer le
+    # classeur autant de fois qu'il y a de bassins.
+    fiches = list(dossier.fiches) if dossier.systeme is not None else []
+    if fiches:
+        surfaces = _feuille_versants(wb, dossier)
+        ancrages = _feuille_ouvrages(wb, dossier, surfaces)
+        if dossier.reseau_multiple:
+            _feuille_reseau(wb, dossier, ancrages)
+        for ancrage, fiche in zip(ancrages, fiches):
+            _feuille_pluie(wb, dossier, ancrage)
+            _feuille_scenarios(wb, dossier, ancrage, fiche)
+    else:
+        ancrage = _Ancrage(
+            ouvrage_id="", nom="Bassin d'orage",
+            feuille_pluie="Pluie de projet", feuille_scenarios="Scénarios",
+            s_ponderee="S_ponderee", q_infiltration="Q_infiltration",
+            q_ajutage="Q_ajutage", v_bassin="V_bassin",
+            v_sous_ajutage="V_sous_ajutage", apport_amont="0",
+        )
+        _feuille_pluie(wb, dossier, ancrage)
+        _feuille_scenarios(wb, dossier, ancrage)
     _feuille_bassin(wb, dossier)
     _feuille_ajutage(wb, dossier)
     _feuille_statistiques(wb, dossier)
     return wb
 
 
-def _feuille_pluie(wb: Workbook, dossier: Dossier) -> None:
+def _feuille_versants(wb: Workbook, dossier: Dossier) -> Dict[str, str]:
+    """Surfaces de chaque bassin versant, coefficient par coefficient.
+
+    C'est ici que le classeur devient vivant : retoucher une surface ou un
+    coefficient de ruissellement propage la correction jusqu'aux volumes, en
+    passant par la surface active de l'ouvrage qui reçoit ce versant.
+
+    Renvoie, par identifiant d'ouvrage, la formule donnant sa surface active
+    propre.
+    """
+    systeme = dossier.systeme
+    ws = wb.create_sheet("Bassins versants")
+    _largeurs(ws, {"A": 26, "B": 30, "C": 34, "D": 12, "E": 14, "F": 18})
+    _titre(ws, "A1", "Bassins versants et surfaces incidentes", 14)
+    ws["A2"] = ("S active = coefficient x surface. Modifier une surface ou un coefficient "
+                "recalcule l'ouvrage qui reçoit ce bassin versant.")
+    ws["A2"].font = Font(italic=True, color="475569")
+
+    _entete(ws, 4, ["Bassin versant", "Raccordé au bassin d'orage",
+                    "Occupation du sol", "Coeff. [-]", "Surface [m²]", "S active [m²]"])
+    ligne = 5
+    plages: Dict[str, List[str]] = {}
+    for versant in systeme.bassins_versants:
+        aval = systeme.ouvrage(versant.bassin_id)
+        debut = ligne
+        for surface in versant.surfaces:
+            ws.cell(row=ligne, column=1, value=versant.nom if ligne == debut else "")
+            ws.cell(row=ligne, column=2,
+                    value=(aval.nom if aval is not None else "non raccordé") if ligne == debut else "")
+            ws.cell(row=ligne, column=3, value=surface.libelle)
+            ws.cell(row=ligne, column=4, value=surface.coefficient).number_format = "0.00"
+            ws.cell(row=ligne, column=5, value=surface.aire_m2).number_format = "0"
+            c = ws.cell(row=ligne, column=6, value=f"=D{ligne}*E{ligne}")
+            c.number_format = "0.0"
+            for col in range(1, 7):
+                ws.cell(row=ligne, column=col).border = _BORDURE
+            ligne += 1
+        if aval is not None and ligne > debut:
+            # Le nom de feuille qualifie la PLAGE, pas la fonction :
+            # « 'Feuille'!SUM(...) » n'est pas une formule valide.
+            plages.setdefault(aval.id, []).append(
+                f"SUM({_ref('Bassins versants')}!$F${debut}:$F${ligne - 1})")
+        if ligne > debut:
+            c = ws.cell(row=ligne, column=6, value=f"=SUM(F{debut}:F{ligne - 1})")
+            c.font = Font(bold=True)
+            c.number_format = "0.0"
+            ws.cell(row=ligne, column=3, value=f"Total {versant.nom}").font = Font(bold=True)
+            ws.cell(row=ligne, column=5,
+                    value=f"=SUM(E{debut}:E{ligne - 1})").number_format = "0"
+            ligne += 1
+        ligne += 1
+
+    return {ouvrage_id: "=" + "+".join(morceaux)
+            for ouvrage_id, morceaux in plages.items()}
+
+
+def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
+                      surfaces: Dict[str, str]) -> List[_Ancrage]:
+    """Données d'entrée de chaque ouvrage : une ligne, des cellules modifiables.
+
+    L'apport des ouvrages amont fait exception : il varie dans le temps et se
+    poursuit après l'averse, ce qu'une formule de cellule ne sait pas
+    reproduire. Il est donc repris de l'application, dans une cellule que l'on
+    peut corriger à la main — et les volumes en aval suivent.
+    """
+    systeme = dossier.systeme
+    ws = wb.create_sheet("Ouvrages")
+    _largeurs(ws, {"A": 30, "B": 26, "C": 16, "D": 14, "E": 14, "F": 14, "G": 16, "H": 16,
+                   "I": 16, "J": 18, "K": 14, "L": 16, "M": 24})
+    _titre(ws, "A1", "Bassins d'orage - données d'entrée", 14)
+    ws["A2"] = ("Une ligne par ouvrage. Les cellules bleues sont modifiables : leur "
+                "changement se propage aux feuilles de calcul de l'ouvrage concerné.")
+    ws["A2"].font = Font(italic=True, color="475569")
+
+    _entete(ws, 4, [
+        "Bassin d'orage", "Se déverse vers", "S active propre [m²]",
+        "S infiltration [m²]", "K [m/s]", "Q infiltration [l/s]", "Q ajutage [l/s]",
+        "V encodé [m³]", "V sous ajutage [m³]", "Apport amont [m³]",
+        "Pointe amont [l/s]", "Surverse", "Feuilles de calcul",
+    ])
+    ws.row_dimensions[4].height = 32
+
+    bleu = PatternFill("solid", fgColor=BLEU_PALE)
+    ancrages: List[_Ancrage] = []
+    for i, fiche in enumerate(dossier.fiches):
+        o = fiche.ouvrage
+        etude = o.etude
+        r = 5 + i
+        aval = systeme.aval(o.id)
+        ws.cell(row=r, column=1, value=o.nom).font = Font(bold=True)
+        ws.cell(row=r, column=2, value=aval.nom if aval is not None else "exutoire")
+        c = ws.cell(row=r, column=3, value=surfaces.get(o.id, fiche.aire_ponderee_propre_m2))
+        c.number_format = "0.0"
+        ws.cell(row=r, column=4, value=etude.surface_infiltration_m2).number_format = "0"
+        ws.cell(row=r, column=5, value=etude.k_infiltration_ms).number_format = "0.00E+00"
+        ws.cell(row=r, column=6,
+                value=f"=1000*D{r}*E{r}/Coef_securite").number_format = "0.000"
+        ws.cell(row=r, column=7, value=etude.bassin.debit_ajutage_ls).number_format = "0.000"
+        ws.cell(row=r, column=8, value=etude.bassin.volume_total_m3).number_format = "0.0"
+        ws.cell(row=r, column=9,
+                value=etude.bassin.volume_sous_ajutage_m3).number_format = "0.0"
+        ws.cell(row=r, column=10, value=round(fiche.apport_amont_m3, 2)).number_format = "0.00"
+        ws.cell(row=r, column=11, value=round(fiche.q_amont_max_ls, 3)).number_format = "0.000"
+        ws.cell(row=r, column=12,
+                value="milieu naturel" if o.surverse_vers_milieu_naturel else
+                      (aval.nom if aval is not None else "exutoire"))
+        ws.cell(row=r, column=13, value=f"Pluie {i + 1} · Scénarios {i + 1}")
+        for col in (4, 5, 7, 8, 9, 10):
+            ws.cell(row=r, column=col).fill = bleu
+        for col in range(1, 14):
+            ws.cell(row=r, column=col).border = _BORDURE
+
+        ancrages.append(_Ancrage(
+            ouvrage_id=o.id,
+            nom=o.nom,
+            feuille_pluie=_nom_de_feuille("Pluie", i + 1),
+            feuille_scenarios=_nom_de_feuille("Scénarios", i + 1),
+            s_ponderee=f"Ouvrages!$C${r}",
+            q_infiltration=f"Ouvrages!$F${r}",
+            q_ajutage=f"Ouvrages!$G${r}",
+            v_bassin=f"Ouvrages!$H${r}",
+            v_sous_ajutage=f"Ouvrages!$I${r}",
+            apport_amont=f"Ouvrages!$J${r}",
+        ))
+
+    ws.cell(row=5 + len(dossier.fiches) + 1, column=1,
+            value="L'apport amont ne se met pas en formule : il varie dans le temps et se "
+                  "poursuit après l'averse. Il vient de l'application ; corrigez-le ici pour "
+                  "en voir l'effet.").font = Font(italic=True, size=9, color="475569")
+    return ancrages
+
+
+def _feuille_pluie(wb: Workbook, dossier: Dossier, ancrage: _Ancrage) -> None:
     projet = dossier.projet
-    ws = wb.create_sheet("Pluie de projet")
+    ws = wb.create_sheet(ancrage.feuille_pluie)
     _largeurs(ws, {"A": 14, "B": 12, "C": 12, "D": 14, "E": 14, "F": 16, "G": 16, "H": 18,
                    "I": 16, "J": 18, "K": 16, "L": 18, "M": 15, "N": 14, "O": 16, "P": 18})
-    _titre(ws, "A1", f"Pluie de projet - {projet.commune_nom} - T = {projet.periode_retour} ans", 14)
+    _titre(ws, "A1", f"{ancrage.nom} - {projet.commune_nom} - T = {projet.periode_retour} ans", 14)
     ws["A2"] = dossier.libelle_source
     ws["A2"].font = Font(italic=True, color="475569")
 
@@ -294,25 +495,25 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier) -> None:
         else:
             ws.cell(row=r, column=4, value=src.intensite_mmh(d)).number_format = "0.00"
         ws.cell(row=r, column=5, value=f"=D{r}*A{r}/60").number_format = "0.00"
-        ws.cell(row=r, column=6, value=f"=E{r}*S_ponderee/1000").number_format = "0.00"
+        ws.cell(row=r, column=6, value=f"=E{r}*{ancrage.s_ponderee}/1000").number_format = "0.00"
         # [1] temporisation seule : ajutage uniquement
-        ws.cell(row=r, column=7, value=f"=Q_ajutage*A{r}*60/1000").number_format = "0.00"
+        ws.cell(row=r, column=7, value=f"={ancrage.q_ajutage}*A{r}*60/1000").number_format = "0.00"
         ws.cell(row=r, column=8, value=f"=MAX(F{r}-G{r},0)").number_format = "0.00"
         # [2] dispersion seule : infiltration uniquement
-        ws.cell(row=r, column=9, value=f"=Q_infiltration*A{r}*60/1000").number_format = "0.00"
+        ws.cell(row=r, column=9, value=f"={ancrage.q_infiltration}*A{r}*60/1000").number_format = "0.00"
         ws.cell(row=r, column=10, value=f"=MAX(F{r}-I{r},0)").number_format = "0.00"
         # [3] temporisation + dispersion
-        ws.cell(row=r, column=11, value=f"=(Q_infiltration+Q_ajutage)*A{r}*60/1000").number_format = "0.00"
+        ws.cell(row=r, column=11, value=f"=({ancrage.q_infiltration}+{ancrage.q_ajutage})*A{r}*60/1000").number_format = "0.00"
         ws.cell(row=r, column=12, value=f"=MAX(F{r}-K{r},0)").number_format = "0.00"
         # [4] dispersion + temporisation au-dela du seuil (ajutage sureleve).
         # M : débit ruisselé entrant, N : instant où le niveau atteint l'axe de l'ajutage.
         ws.cell(row=r, column=13, value=f"=F{r}*1000/(A{r}*60)").number_format = "0.000"
         ws.cell(row=r, column=14,
-                value=(f'=IF(V_sous_ajutage<=0,0,IF(M{r}-Q_infiltration<=0,"",'
-                       f"V_sous_ajutage*1000/(M{r}-Q_infiltration)/60))")).number_format = "0.0"
+                value=(f'=IF({ancrage.v_sous_ajutage}<=0,0,IF(M{r}-{ancrage.q_infiltration}<=0,"",'
+                       f"{ancrage.v_sous_ajutage}*1000/(M{r}-{ancrage.q_infiltration})/60))")).number_format = "0.0"
         ws.cell(row=r, column=15,
-                value=(f'=IF(N{r}="",Q_infiltration*A{r}*60/1000,'
-                       f"(Q_infiltration*A{r}+Q_ajutage*MAX(A{r}-N{r},0))*60/1000)")).number_format = "0.00"
+                value=(f'=IF(N{r}="",{ancrage.q_infiltration}*A{r}*60/1000,'
+                       f"({ancrage.q_infiltration}*A{r}+{ancrage.q_ajutage}*MAX(A{r}-N{r},0))*60/1000)")).number_format = "0.00"
         ws.cell(row=r, column=16, value=f"=MAX(F{r}-O{r},0)").number_format = "0.00"
         ligne += 1
     ws["A3"] = f"Plage balayée : {durees[0]:.0f} min a {durees[-1] / 1440:.0f} jours ({len(durees)} durées)"
@@ -320,16 +521,34 @@ def _feuille_pluie(wb: Workbook, dossier: Dossier) -> None:
     ws._plage_pluie = (l0 + 1, ligne - 1)  # type: ignore[attr-defined]
 
 
-def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
-    ws_p = wb["Pluie de projet"]
+def _resultats_de(dossier: Dossier, ancrage: _Ancrage, fiche) -> Dict[str, object]:
+    """Les quatre scénarios de cet ouvrage, et non ceux de l'ouvrage courant."""
+    if fiche is None or dossier.systeme is None:
+        return dict(dossier.resultats)
+    etude = fiche.ouvrage.etude
+    resultats = {}
+    for scenario in ORDRE_SCENARIOS:
+        try:
+            resultats[scenario] = _hydro.dimensionner(etude, scenario)
+        except Exception:
+            continue
+    return resultats
+
+
+def _feuille_scenarios(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
+                       fiche=None) -> None:
+    ws_p = wb[ancrage.feuille_pluie]
     r0, r1 = ws_p._plage_pluie  # type: ignore[attr-defined]
-    ws = wb.create_sheet("Scénarios")
+    ws = wb.create_sheet(ancrage.feuille_scenarios)
     projet = dossier.projet
     _largeurs(ws, {"A": 52, "B": 16, "C": 16, "D": 16, "E": 16})
-    _titre(ws, "A1", "Comparaison des quatre scénarios", 14)
+    _titre(ws, "A1", f"{ancrage.nom} - comparaison des quatre scénarios", 14)
     note = ("Les volumes et durées critiques sont recalculés par formules à partir de la "
-            "feuille 'Pluie de projet'.")
-    if projet.amont.actif:
+            f"feuille '{ancrage.feuille_pluie}'.")
+    # Sur un réseau, l'apport vient des ouvrages amont et se lit dans une
+    # cellule modifiable ; sur un bassin isolé, du panneau « bassin amont ».
+    apport_amont = (fiche.apport_amont_m3 > 0 if fiche is not None else projet.amont.actif)
+    if apport_amont:
         note += (" Ces formules n'appliquent la méthode rationnelle qu'au bassin versant du "
                  "projet : l'apport du bassin d'orage amont varie dans le temps et se poursuit "
                  "après l'averse, il demande une intégration pas à pas qu'une formule de "
@@ -344,15 +563,15 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
     ws.row_dimensions[4].height = 46
 
     def plage(col: str) -> str:
-        return f"'Pluie de projet'!${col}${r0}:${col}${r1}"
+        return ancrage.plage_pluie(col, r0, r1)
 
     lignes: List[Tuple[str, str, str]] = [
         ("Volume à maîtriser [m³]", "=MAX({p})", "0.0"),
-        ("Durée critique [min]", "=INDEX('Pluie de projet'!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))", "0"),
-        ("Hauteur de pluie [mm]", "=INDEX('Pluie de projet'!$E${r0}:$E${r1},MATCH(MAX({p}),{p},0))", "0.0"),
-        ("Intensité [mm/h]", "=INDEX('Pluie de projet'!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))", "0.00"),
-        ("Intensité [l/s/ha]", "=INDEX('Pluie de projet'!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))*10000/3600", "0.0"),
-        ("Débit ruisselle de pointe [l/s]", "=MAX({p})*0+INDEX('Pluie de projet'!$F${r0}:$F${r1},MATCH(MAX({p}),{p},0))*1000/(INDEX('Pluie de projet'!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))*60)", "0.00"),
+        ("Durée critique [min]", "=INDEX({f}!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))", "0"),
+        ("Hauteur de pluie [mm]", "=INDEX({f}!$E${r0}:$E${r1},MATCH(MAX({p}),{p},0))", "0.0"),
+        ("Intensité [mm/h]", "=INDEX({f}!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))", "0.00"),
+        ("Intensité [l/s/ha]", "=INDEX({f}!$D${r0}:$D${r1},MATCH(MAX({p}),{p},0))*10000/3600", "0.0"),
+        ("Débit ruisselle de pointe [l/s]", "=MAX({p})*0+INDEX({f}!$F${r0}:$F${r1},MATCH(MAX({p}),{p},0))*1000/(INDEX({f}!$A${r0}:$A${r1},MATCH(MAX({p}),{p},0))*60)", "0.00"),
     ]
     ligne = 5
     for libelle, modele, fmt in lignes:
@@ -360,16 +579,17 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
         for j, s in enumerate(ORDRE_SCENARIOS):
             col = colonnes[s][0]
             c = ws.cell(row=ligne, column=2 + j,
-                        value=modele.format(p=plage(col), r0=r0, r1=r1))
+                        value=modele.format(p=plage(col), r0=r0, r1=r1,
+                                            f=_ref(ancrage.feuille_pluie)))
             c.number_format = fmt
             c.border = _BORDURE
         ligne += 1
 
     debits = {
-        SCENARIO_TEMPORISATION: "=Q_ajutage",
-        SCENARIO_DISPERSION: "=Q_infiltration",
-        SCENARIO_MIXTE: "=Q_infiltration+Q_ajutage",
-        SCENARIO_SEUIL: "=Q_infiltration+Q_ajutage",
+        SCENARIO_TEMPORISATION: f"={ancrage.q_ajutage}",
+        SCENARIO_DISPERSION: f"={ancrage.q_infiltration}",
+        SCENARIO_MIXTE: f"={ancrage.q_infiltration}+{ancrage.q_ajutage}",
+        SCENARIO_SEUIL: f"={ancrage.q_infiltration}+{ancrage.q_ajutage}",
     }
     ws.cell(row=ligne, column=1, value="Débit de sortie [l/s]").font = Font(bold=True)
     for j, s in enumerate(ORDRE_SCENARIOS):
@@ -383,9 +603,9 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
     for j, s in enumerate(ORDRE_SCENARIOS):
         col_lettre = get_column_letter(2 + j)
         if s == SCENARIO_SEUIL:
-            formule = (f"=IF({col_lettre}{l_debit}<=0,\"\",(MAX({col_lettre}5-V_sous_ajutage,0)*1000/"
-                       f"{col_lettre}{l_debit}+MIN({col_lettre}5,V_sous_ajutage)*1000/"
-                       f"MAX(Q_infiltration,0.0000001))/3600)")
+            formule = (f"=IF({col_lettre}{l_debit}<=0,\"\",(MAX({col_lettre}5-{ancrage.v_sous_ajutage},0)*1000/"
+                       f"{col_lettre}{l_debit}+MIN({col_lettre}5,{ancrage.v_sous_ajutage})*1000/"
+                       f"MAX({ancrage.q_infiltration},0.0000001))/3600)")
         else:
             formule = f"=IF({col_lettre}{l_debit}<=0,\"\",{col_lettre}5*1000/{col_lettre}{l_debit}/3600)"
         c = ws.cell(row=ligne, column=2 + j, value=formule)
@@ -402,25 +622,37 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
         c.border = _BORDURE
     ligne += 2
 
-    if projet.amont.actif:
-        ws.cell(row=ligne, column=1,
-                value="Volume à maîtriser, apport du bassin amont compris [m³]").font = Font(
-                    bold=True, color=BLEU)
+    if apport_amont:
+        titre = ("Volume à maîtriser, apport des ouvrages amont compris [m³]" if fiche is not None
+                 else "Volume à maîtriser, apport du bassin amont compris [m³]")
+        ws.cell(row=ligne, column=1, value=titre).font = Font(bold=True, color=BLEU)
         for j, s_scen in enumerate(ORDRE_SCENARIOS):
-            c = ws.cell(row=ligne, column=2 + j,
-                        value=round(dossier.resultats[s_scen].volume_m3, 1))
+            col_lettre = get_column_letter(2 + j)
+            if fiche is not None:
+                # Le réseau range l'apport dans une cellule : la somme suit.
+                valeur = f"={col_lettre}5+{ancrage.apport_amont}"
+            else:
+                # Bassin isolé : la valeur qui fait foi vient de l'application.
+                valeur = round(dossier.resultats[s_scen].volume_m3, 1)
+            c = ws.cell(row=ligne, column=2 + j, value=valeur)
             c.number_format = "0.0"
             c.border = _BORDURE
             c.fill = PatternFill("solid", fgColor=BLEU_PALE)
         ligne += 2
 
+    # Les minima et le scénario retenu décrivent CET ouvrage : sur un réseau, les
+    # reprendre du dossier afficherait ceux de l'ouvrage courant sur toutes les
+    # feuilles.
+    resultats = _resultats_de(dossier, ancrage, fiche)
+    scenario_retenu = (fiche.ouvrage.scenario if fiche is not None
+                       else dossier.scenario_principal)
     ws.cell(row=ligne, column=1, value="Valeurs minimales calculées par l'application").font = Font(bold=True, color=BLEU)
     ligne += 1
     for libelle, cle in (("Surface d'infiltration minimale [m²]", "surface_infiltration_min_m2"),
                          ("Débit d'ajutage minimal [l/s]", "debit_ajutage_min_ls")):
         ws.cell(row=ligne, column=1, value=libelle).font = Font(bold=True)
         for j, s in enumerate(ORDRE_SCENARIOS):
-            v = getattr(dossier.resultats[s], cle)
+            v = getattr(resultats[s], cle) if s in resultats else None
             c = ws.cell(row=ligne, column=2 + j, value="-" if v is None else round(v, 3))
             c.number_format = "0.000"
             c.border = _BORDURE
@@ -428,9 +660,10 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier) -> None:
 
     ligne += 1
     ws.cell(row=ligne, column=1, value="Scénario retenu").font = Font(bold=True)
-    ws.cell(row=ligne, column=2, value=LIBELLES_SCENARIOS[dossier.scenario_principal]).font = Font(bold=True, color=BLEU)
+    ws.cell(row=ligne, column=2, value=LIBELLES_SCENARIOS[scenario_retenu]).font = Font(bold=True, color=BLEU)
     ligne += 2
-    alertes = dossier.resultat_principal.alertes + dossier.resultat_principal.messages
+    principal = resultats.get(scenario_retenu)
+    alertes = (principal.alertes + principal.messages) if principal is not None else []
     if alertes:
         ws.cell(row=ligne, column=1, value="Observations").font = Font(bold=True, color="B45309")
         ligne += 1
@@ -595,7 +828,8 @@ def _nombre_ou_texte(valeur: str):
         return valeur
 
 
-def _feuille_reseau(wb: Workbook, dossier: Dossier) -> None:
+def _feuille_reseau(wb: Workbook, dossier: Dossier,
+                    ancrages: Sequence[_Ancrage] = ()) -> None:
     """Feuille « Réseau » : raccordements, bassins versants, ouvrages, simulation.
 
     Les formules vives des autres feuilles ne peuvent pas reproduire le réseau :
@@ -632,9 +866,47 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier) -> None:
              if not fiche.suffisant and fiche.volume_encode_m3 > 0}
     ligne = _tableau(ws, ligne + 1, synthese_reseau(dossier), fonds)
 
+    if ancrages:
+        _titre(ws, f"A{ligne}", "4. Récapitulatif recalculé par formules", 12)
+        ligne += 1
+        ws.cell(row=ligne, column=1,
+                value="Ces lignes se recalculent : elles tirent leurs volumes des feuilles de "
+                      "chaque ouvrage, qui tirent les leurs de « Bassins versants » et "
+                      "« Ouvrages ».").font = Font(italic=True, size=9, color="475569")
+        ligne += 1
+        _entete(ws, ligne, ["Bassin d'orage", "Scénario retenu", "V minimal [m³]",
+                            "Apport amont [m³]", "V à mettre en œuvre [m³]",
+                            "V encodé [m³]", "Suffisant ?"])
+        ligne += 1
+        colonne_scenario = {s: get_column_letter(2 + j) for j, s in enumerate(ORDRE_SCENARIOS)}
+        for ancrage, fiche in zip(ancrages, dossier.fiches):
+            col = colonne_scenario[fiche.ouvrage.scenario]
+            feuille = _ref(ancrage.feuille_scenarios)
+            ws.cell(row=ligne, column=1, value=ancrage.nom).font = Font(bold=True)
+            ws.cell(row=ligne, column=2, value=LIBELLES_SCENARIOS[fiche.ouvrage.scenario])
+            ws.cell(row=ligne, column=3, value=f"={feuille}!{col}5").number_format = "0.0"
+            ws.cell(row=ligne, column=4, value=f"={ancrage.apport_amont}").number_format = "0.00"
+            ws.cell(row=ligne, column=5,
+                    value=f"=C{ligne}+D{ligne}").number_format = "0.0"
+            ws.cell(row=ligne, column=6, value=f"={ancrage.v_bassin}").number_format = "0.0"
+            ws.cell(row=ligne, column=7,
+                    value=f'=IF(F{ligne}>=E{ligne},"OUI","NON")')
+            for col_i in range(1, 8):
+                ws.cell(row=ligne, column=col_i).border = _BORDURE
+            ligne += 1
+        c = ws.cell(row=ligne, column=1, value="Total")
+        c.font = Font(bold=True)
+        for col_i, lettre in ((5, "E"), (6, "F")):
+            c = ws.cell(row=ligne, column=col_i,
+                        value=f"=SUM({lettre}{ligne - len(ancrages)}:{lettre}{ligne - 1})")
+            c.font = Font(bold=True)
+            c.number_format = "0.0"
+            c.fill = PatternFill("solid", fgColor=BLEU_PALE)
+        ligne += 2
+
     sim = dossier.simulation_systeme
     if sim is not None:
-        _titre(ws, f"A{ligne}", "4. Simulation du système complet", 12)
+        _titre(ws, f"A{ligne}", "5. Simulation du système complet", 12)
         ligne += 1
         ws.cell(row=ligne, column=1,
                 value=(f"Averse la plus défavorable : {sim.hauteur_mm:.1f} mm en "
