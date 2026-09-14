@@ -250,6 +250,14 @@ exceptés.
 - **Une cellule à valeurs fermées porte une liste déroulante** (`_liste`), et une cellule
   de saisie numérique un intervalle (`_borne`). Sans cela, la période de retour acceptait
   « 35 ans » et renvoyait un #N/A muet dans chaque feuille de pluie.
+- **Une valeur en dur porte une couleur, sans exception.**
+  `_signaler_les_valeurs_en_dur` balaie le classeur entier au dernier moment et colore
+  chaque nombre qui n'est pas une formule : orange (à l'utilisateur de la remplir ou de la
+  vérifier), gris (donnée source du GTI, abaque, constante, grille de durées). Marquer les
+  cellules une à une à l'écriture se révélait incomplet à chaque relecture. Une teinte
+  d'état — OK / limite / débordement — ne doit donc plus couvrir une ligne entière : elle
+  se restreint aux colonnes du nom et du statut (`colonnes_teintees`), faute de quoi deux
+  codes couleur se disputent la même cellule et aucun ne renseigne.
 - **Ne corrigez pas seulement la cellule qu'on vous signale.** Chaque fois qu'une valeur
   figée a été signalée, l'inventaire complet en a révélé d'autres, plus graves : la
   période de retour ne commandait rien (coefficients de Montana figés sur la récurrence

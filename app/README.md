@@ -308,7 +308,22 @@ La colonne des intensités était auparavant écrite en dur de bout en bout.
   inférieur ou égal au diamètre requis, la règle du moteur — et suit donc la charge, le Cd
   et le débit visé.
 
-**Ce qui reste figé**, dans des cellules modifiables et signalées en orange :
+**Une règle, appliquée partout : ce qui n'est pas une formule porte une couleur.**
+Énumérer les exceptions ne marchait pas — il en restait toujours une. Une passe finale
+balaie le classeur entier et colore chaque nombre écrit en dur :
+
+| | |
+|---|---|
+| 🟧 **orange** | valeur en dur : **à vous de la remplir ou de la vérifier**, elle ne se recalcule pas |
+| ⬜ **gris** | donnée source : tables du GTI, abaque des diamètres, constante `g`, grille des durées balayées |
+| | tout le reste est une formule |
+
+La légende est écrite sur la feuille `Projet`, et un test refuse qu'une cellule figée
+apparaisse sans couleur. Sur le réseau de démonstration : **4 287 formules**, **71 cellules
+orange** — dont 40 de saisie et 31 valeurs du moteur — et 872 cellules grises. Hors données
+sources, le classeur est vivant à **98,4 %**.
+
+**Ce qui reste figé** et pourquoi :
 
 * l'**apport des ouvrages amont**, et tous les minima d'un ouvrage qui en reçoit un : cet
   apport varie dans le temps et se poursuit après l'averse, aucune formule de cellule ne
@@ -318,12 +333,10 @@ La colonne des intensités était auparavant écrite en dur de bout en bout.
 * la **simulation** (pointe, débordement, vidange), pour la même raison ; capacité,
   remplissage et totaux, eux, se recalculent.
 
-Sur le réseau de démonstration, cela fait **34 cellules** sur 947 valeurs numériques. Les
-913 autres sont les **tables du GTI**, l'**abaque des diamètres**, la constante `g`, la
-**grille des durées balayées** et vos **cellules de saisie** — figées parce qu'elles
-doivent l'être. Un test classe chaque nombre écrit en dur dans l'une de ces catégories et
-**échoue si une cellule n'y entre pas** : corriger celles qu'on signale ne suffisait pas,
-il en restait toujours d'autres.
+La dernière à y être passée était la **vidange la plus longue** du réseau, qui recopiait
+un nombre : la colonne des vidanges était du texte (« 16 h 13 »), donc inutilisable par une
+formule. Elle porte maintenant une durée — affichage identique — dont la ligne du bas prend
+le maximum.
 
 Recalculé cellule par cellule, le classeur retrouve le moteur à **0,02 %** près — l'écart
 que laisse sa grille d'une centaine de durées, contre 17 280 dans l'application.

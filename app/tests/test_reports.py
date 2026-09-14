@@ -1060,48 +1060,55 @@ class TestClasseurDeReseau(unittest.TestCase):
                 self.assertIsInstance(wb[f"Ajutage {i}"]["B12"].value, str,
                                       "le diamètre commercial est figé")
 
-    def test_toute_cellule_figee_a_une_raison_d_etre(self):
-        """Le garde-fou : une valeur figée nouvelle doit se justifier.
+    def test_toute_valeur_en_dur_se_voit(self):
+        """La règle du classeur : ce qui n'est pas une formule porte une couleur.
 
         Corriger les cellules qu'on vous signale ne suffit pas — il en reste
-        toujours d'autres. Ce test classe **chaque** nombre écrit en dur dans
-        une catégorie légitime : donnée source du GTI, abaque, constante
-        physique, grille de durées, cellule de saisie, ou grandeur qui demande
-        une intégration pas à pas. Une cellule qui n'entre dans aucune de ces
-        cases fait échouer la suite : c'est un calcul qu'on a recopié au lieu
-        de l'écrire.
+        toujours d'autres. Plutôt que d'énumérer les cas légitimes, le classeur
+        applique une règle unique, et ce test la vérifie sur **chaque** nombre
+        écrit en dur : orange (à vous de la remplir ou de la vérifier) ou gris
+        (donnée source du GTI, abaque, constante, grille de durées). Une
+        cellule figée sans couleur fait échouer la suite.
         """
         wb = self._classeur()
-        # Par feuille : les colonnes (1-indexées) dont les nombres sont
-        # légitimement figés, et pourquoi.
-        saisie_ouvrages = {5, 6, 8, 9, 10, 11, 13}   # hypothèses et ouvrage construit
-        moteur_ouvrages = {4, 14, 15, 16}            # apport amont et ce qui en dépend
-        orphelines = []
+        muettes = []
         for ws in wb:
-            titre = ws.title
             for ligne in ws.iter_rows():
                 for c in ligne:
                     if not isinstance(c.value, (int, float)) or isinstance(c.value, bool):
                         continue
-                    if titre == "Pluies statistiques":
-                        continue                      # tables du GTI
-                    if titre.startswith("Pluie") and c.column == 1:
-                        continue                      # grille des durées balayées
-                    if titre.startswith("Ajutage"):
-                        continue                      # g et abaque des diamètres
-                    if titre in ("Projet", "Bassins versants"):
-                        continue                      # cellules de saisie
-                    if titre == "Ouvrages" and c.column in saisie_ouvrages | moteur_ouvrages:
-                        continue
-                    if titre == "Réseau":
-                        continue                      # simulation du système
-                    if titre.startswith("Table QDF"):
-                        continue                      # simulation de l'ouvrage
-                    if titre.startswith("Scénarios"):
-                        continue                      # minima sans forme fermée
-                    orphelines.append(f"{titre}!{c.coordinate} = {c.value!r}")
-        self.assertEqual(orphelines, [],
-                         "cellules figées sans justification :\n" + "\n".join(orphelines))
+                    couleur = (c.fill.fgColor.rgb or "")[-6:].upper()
+                    if couleur not in ("FEF3C7", "F1F5F9"):
+                        muettes.append(f"{ws.title}!{c.coordinate} = {c.value!r}")
+        self.assertEqual(muettes, [],
+                         "valeurs en dur non signalées :\n" + "\n".join(muettes))
+
+    def test_le_classeur_explique_son_code_couleur(self):
+        """Une couleur qui n'est expliquée nulle part ne renseigne personne."""
+        wb = self._classeur()
+        textes = "\n".join(str(c.value) for ligne in wb["Projet"].iter_rows()
+                           for c in ligne if isinstance(c.value, str))
+        self.assertIn("Comment lire ce classeur", textes)
+        for attendu in ("Valeur en dur", "Donnée source", "Résultat calculé"):
+            with self.subTest(entree=attendu):
+                self.assertIn(attendu, textes)
+
+    def test_la_vidange_la_plus_longue_se_calcule(self):
+        """C'était l'exemple donné : B38 recopiait un nombre.
+
+        La colonne des vidanges était du texte (« 16 h 13 »), donc inutilisable
+        par une formule. Elle porte maintenant une durée, affichée à
+        l'identique, dont la ligne du bas prend le maximum.
+        """
+        wb = self._classeur()
+        ws = wb["Réseau"]
+        cible = next((c.row for c in next(zip(*ws.iter_rows(min_col=1, max_col=1)))
+                      if isinstance(c.value, str) and c.value.startswith("Vidange la plus longue")),
+                     None)
+        self.assertIsNotNone(cible, "la ligne « Vidange la plus longue » a disparu")
+        valeur = ws.cell(row=cible, column=2).value
+        self.assertIsInstance(valeur, str, "la vidange la plus longue est recopiée")
+        self.assertTrue(valeur.startswith("=MAX("), valeur)
 
     def test_les_valeurs_figees_du_moteur_sont_signalees(self):
         """Une valeur non recalculable doit se voir, sinon elle trompe.

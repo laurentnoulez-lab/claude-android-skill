@@ -267,7 +267,40 @@ def construire_classeur(dossier: Dossier) -> Workbook:
         _feuille_ajutage(wb, dossier, ancrage)
     # La feuille des pluies se range en fin de classeur : c'est une annexe.
     wb.move_sheet("Pluies statistiques", offset=len(wb.sheetnames))
+    _signaler_les_valeurs_en_dur(wb)
     return wb
+
+
+def _signaler_les_valeurs_en_dur(wb: Workbook) -> None:
+    """Toute valeur qui n'est pas une formule se voit, et se voit partout.
+
+    Un classeur qui annonce qu'il recalcule doit dire où il ne recalcule pas.
+    Le marquage cellule par cellule à l'écriture se révélait incomplet à chaque
+    relecture : une valeur figée ajoutée quelque part passait inaperçue. Cette
+    passe finale balaie le classeur entier et applique la règle une fois pour
+    toutes — **orange = à vous de la remplir ou de la vérifier, elle ne se
+    recalcule pas**.
+
+    Les données sources — tables du GTI, abaque des diamètres commerciaux,
+    constante de pesanteur, grille des durées balayées — reçoivent un gris
+    discret : elles ne se recalculent pas non plus, mais ce n'est pas à
+    l'utilisateur de les remplir, et les noyer d'orange masquerait les
+    cellules qui, elles, l'attendent.
+    """
+    orange = PatternFill("solid", fgColor=ORANGE_PALE)
+    gris = PatternFill("solid", fgColor=GRIS_PALE)
+    for ws in wb:
+        titre = ws.title
+        for ligne in ws.iter_rows():
+            for c in ligne:
+                if c.value is None or isinstance(c.value, str) or isinstance(c.value, bool):
+                    continue
+                if not isinstance(c.value, (int, float)):
+                    continue          # durées : des dates, écrites par formule ou non
+                source = (titre == "Pluies statistiques"
+                          or (titre.startswith("Pluie") and c.column == 1)
+                          or (titre.startswith("Ajutage") and (c.column == 1 or c.row == 7)))
+                c.fill = gris if source else orange
 
 
 def _projet_ouvrage(wb: Workbook, ws, dossier: Dossier) -> None:
@@ -399,6 +432,7 @@ def _projet_ouvrage(wb: Workbook, ws, dossier: Dossier) -> None:
     }
     for nom, ref in noms.items():
         wb.defined_names.add(DefinedName(nom, attr_text=ref))
+    _legende_couleurs(ws, c_cd.row + 2)
 
 
 def _liste(ws, plage: str, valeurs, titre: str, message: str) -> None:
@@ -433,6 +467,28 @@ def _borne(ws, plage: str, titre: str, message: str, mini=None, maxi=None) -> No
     dv.errorTitle = titre
     ws.add_data_validation(dv)
     dv.add(plage)
+
+
+def _legende_couleurs(ws, ligne: int) -> None:
+    """Le code couleur du classeur, écrit une fois, là où on le lit d'abord."""
+    _titre(ws, f"A{ligne}", "Comment lire ce classeur", 12)
+    entrees = (
+        (ORANGE_PALE, "Valeur en dur",
+         "à vous de la remplir ou de la vérifier : elle ne se recalcule pas."),
+        (GRIS_PALE, "Donnée source",
+         "tables du GTI, abaque des diamètres, constante g, grille des durées balayées."),
+        (VERT_PALE, "Résultat calculé", "formule : il suit ce que vous modifiez."),
+    )
+    for i, (couleur, titre, explication) in enumerate(entrees, start=1):
+        c = ws.cell(row=ligne + i, column=1, value=titre)
+        c.fill = PatternFill("solid", fgColor=couleur)
+        c.font = Font(bold=True)
+        c.border = _BORDURE
+        ws.cell(row=ligne + i, column=2, value=explication).font = Font(size=9, color="475569")
+    ws.cell(row=ligne + len(entrees) + 1, column=1, value=(
+        "Tout le reste est une formule. Une cellule sans couleur et sans formule n'existe "
+        "pas : un test du dépôt refuse qu'il en apparaisse une.")).font = Font(
+            italic=True, size=9, color="475569")
 
 
 def _projet_systeme(wb: Workbook, ws, dossier: Dossier) -> None:
@@ -539,6 +595,7 @@ def _projet_systeme(wb: Workbook, ws, dossier: Dossier) -> None:
            "La charge sur l'ajutage est une hauteur positive, en mètres.", mini=0.01)
     _borne(ws, f"B{c_cd.row}", "Coefficient de débit",
            "Le coefficient de débit d'un orifice est compris entre 0 et 1.", mini=0, maxi=1)
+    _legende_couleurs(ws, l + 2)
 
 
 def _relier_surfaces_projet(wb: Workbook, dossier: Dossier,
@@ -678,7 +735,7 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
                    "I": 13, "J": 14, "K": 14, "L": 16, "M": 15, "N": 14, "O": 14,
                    "P": 15, "Q": 18, "R": 20})
     _titre(ws, "A1", "Bassins d'orage - données d'entrée", 14)
-    ws["A2"] = ("Une ligne par ouvrage. Les cellules bleues se modifient : leur changement se "
+    ws["A2"] = ("Une ligne par ouvrage. Les cellules orange se modifient : leur changement se "
                 "propage aux feuilles de calcul de l'ouvrage concerné, puis à la synthèse.")
     ws["A2"].font = Font(italic=True, color="475569")
 
@@ -812,7 +869,9 @@ def _feuille_ouvrages(wb: Workbook, dossier: Dossier,
                "K se saisit en m/s : une vitesse d'infiltration strictement positive "
                "(1e-7 à 1e-3 pour les sols courants).", mini=1e-12, maxi=1)
     ws.cell(row=5 + len(dossier.fiches) + 1, column=1,
-            value="Les cellules orange viennent de l'application et ne se recalculent pas : "
+            value="Orange : valeur en dur. Les colonnes de saisie vous appartiennent ; "
+                  "l'apport amont et le volume qui en dépend viennent de l'application et ne "
+                  "se recalculent pas : "
                   "l'apport d'un ouvrage amont s'intègre pas à pas — il arrive étalé dans le "
                   "temps et s'évacue en partie au fur et à mesure —, ce qu'une formule de "
                   "cellule ne sait pas reproduire. L'ajouter au volume isolé le surestimerait."
@@ -1161,7 +1220,21 @@ def _feuille_bassin(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
     if dossier.simulation:
         sim = dossier.simulation
         _label(ws, 12, "Événement critique - durée", sim.duree_pluie_min, "min", "0")
-        _label(ws, 13, "Événement critique - hauteur", sim.hauteur_pluie_mm, "mm", "0.0")
+        # La hauteur se DÉDUIT de la durée critique : Montana donne
+        # i = a x t^(-b) puis h = i x t / 60. La durée de la simulation
+        # appartient à la grille fine du moteur, donc la formule s'applique
+        # exactement. Recopiée, cette hauteur ne suivait pas la période de
+        # retour.
+        pluie = _ref(ancrage.feuille_pluie)
+        p_bassin = dossier.projet
+        if rainfall.a_donnees_montana(p_bassin.commune_ins) and \
+                p_bassin.source_pluie == rainfall.SOURCE_MONTANA:
+            hauteur = (f"=IF($B$12<25,{pluie}!$B$5*$B$12^(-{pluie}!$C$5),"
+                       f"IF($B$12<=6000,{pluie}!$D$5*$B$12^(-{pluie}!$E$5),"
+                       f"{pluie}!$F$5*$B$12^(-{pluie}!$G$5)))*$B$12/60")
+        else:
+            hauteur = sim.hauteur_pluie_mm
+        _label(ws, 13, "Événement critique - hauteur", hauteur, "mm", "0.0")
         _label(ws, 14, "Volume stocké maximum", sim.volume_max_m3, "m³", "0.0")
         # Le taux, lui, est un rapport : il suit le volume de l'ouvrage si on
         # le retouche dans le classeur.
@@ -1348,8 +1421,15 @@ def _feuille_statistiques(wb: Workbook, dossier: Dossier) -> Dict[str, object]:
 
 
 def _tableau(ws, ligne: int, lignes: Sequence[Sequence[str]],
-             fonds: Optional[Dict[int, str]] = None) -> int:
-    """Écrit un tableau (entête + lignes) et renvoie la première ligne libre."""
+             fonds: Optional[Dict[int, str]] = None,
+             colonnes_teintees: Optional[Sequence[int]] = None) -> int:
+    """Écrit un tableau (entête + lignes) et renvoie la première ligne libre.
+
+    ``colonnes_teintees`` restreint la teinte d'état à quelques colonnes. Une
+    teinte sur toute la ligne entrerait sinon en conflit avec l'orange qui
+    signale une valeur non liée : deux codes couleur pour deux choses
+    différentes sur la même cellule ne disent plus rien.
+    """
     _entete(ws, ligne, list(lignes[0]))
     fonds = fonds or {}
     for i, valeurs in enumerate(lignes[1:], start=1):
@@ -1363,7 +1443,7 @@ def _tableau(ws, ligne: int, lignes: Sequence[Sequence[str]],
                 # peuvent être longs : ils se replient plutôt que d'être coupés
                 # par la cellule voisine.
                 c.alignment = Alignment(vertical="center", wrap_text=True)
-            if i in fonds:
+            if i in fonds and (colonnes_teintees is None or (1 + j) in colonnes_teintees):
                 c.fill = PatternFill("solid", fgColor=fonds[i])
     return ligne + len(lignes) + 1
 
@@ -1516,7 +1596,8 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
         couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
         fonds = {i: couleurs[res.statut] for i, (_o, res) in enumerate(sim.resultats, start=1)}
         l_entete = ligne
-        ligne = _tableau(ws, ligne, synthese_simulation_systeme(dossier), fonds)
+        ligne = _tableau(ws, ligne, synthese_simulation_systeme(dossier), fonds,
+                         colonnes_teintees=(1, 8))
         # La pointe et le débordement sortent d'une intégration pas à pas ; la
         # capacité et le taux de remplissage, eux, se déduisent — et doivent
         # suivre si l'on retouche le volume de l'ouvrage dans le classeur.
@@ -1534,12 +1615,21 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
             # défavorable du système entier, là celui de la pluie critique du
             # seul ouvrage (49,7 contre 50,8 m³ sur le réseau de démonstration).
             # Les confondre ferait dire au classeur une chose pour une autre.
+            # La vidange s'écrit comme une DURÉE et non comme du texte : même
+            # affichage (« 16 h 13 »), mais la ligne du bas peut en prendre le
+            # maximum au lieu de recopier un nombre.
+            c_vid = ws.cell(row=r, column=7, value=_res.temps_vidange_h / 24.0)
+            c_vid.number_format = '[h]" h "mm'
+            c_vid.border = _BORDURE
         derniere = premiere + len(sim.resultats) - 1
         _label(ws, ligne, "Volume stocké par le réseau",
                f"=SUM(B{premiere}:B{derniere})", "m³", "0.0")
         _label(ws, ligne + 1, "Débordement total", f"=SUM(E{premiere}:E{derniere})", "m³", "0.00",
                fond=ROUGE_PALE if sim.ouvrages_en_debordement else VERT_PALE)
-        _label(ws, ligne + 2, "Vidange la plus longue", round(sim.temps_vidange_max_h, 1), "h", "0.0")
+        c_max = _label(ws, ligne + 2, "Vidange la plus longue",
+                       f"=MAX(G{premiere}:G{derniere})", "h")
+        c_max.number_format = '[h]" h "mm'
+
         ws.cell(row=ligne + 3, column=1, value=(
             "Pointe, débordement, apport amont et vidange viennent de l'application : la "
             "simulation du réseau intègre les hydrogrammes pas à pas, ce qu'une formule de "
