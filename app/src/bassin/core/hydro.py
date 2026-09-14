@@ -463,7 +463,8 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
             f"({projet.temps_vidange_max_h:.0f} h)."
         )
         if scenario in (SCENARIO_DISPERSION, SCENARIO_MIXTE, SCENARIO_SEUIL):
-            msg += " La surface d'infiltration doit être augmentée."
+            msg += (" La surface d'infiltration doit être augmentée, dans la mesure des "
+                    "possibilités techniques.")
         else:
             msg += " Le débit d'ajutage doit être augmente."
         res.alertes.append(msg)

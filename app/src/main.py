@@ -295,15 +295,22 @@ def main(page: ft.Page) -> None:
         from bassin.ui.state import diagnostic_stockage, repertoire_documents
 
         try:
-            nb_communes = len(rainfall.communes())
+            communes = rainfall.communes()
+            nb_communes = len(communes)
+            nb_montana = sum(1 for c in communes if c.a_montana)
+            nb_qdf = sum(1 for c in communes if c.a_qdf)
             origine = rainfall.SOURCE_DONNEES["origine"]
         except Exception as exc:
-            nb_communes, origine = 0, f"ÉCHEC : {exc}"
+            nb_communes = nb_montana = nb_qdf = 0
+            origine = f"ÉCHEC : {exc}"
         lignes = [
             f"{__app_name__} version {__version__}",
             f"Plateforme : {getattr(page, 'platform', '?')} · largeur {page.width} × hauteur {page.height}",
             f"Python {sys.version.split()[0]} · Flet {getattr(ft, '__version__', '?')}",
-            f"Pluies GTI : {nb_communes} communes ({origine})",
+            f"Pluies GTI {rainfall.MILLESIME_GTI} : {nb_communes} communes, dont "
+            f"{nb_montana} avec coefficients de Montana et {nb_qdf} avec tables QDF "
+            f"({origine})",
+            f"Vérifier l'édition en vigueur : {rainfall.SOURCE_GTI_URL}",
             f"Dossier des rapports : {repertoire_documents()}",
             f"Fenêtres : {_PARTAGE['fenetres']} ouverte(s) · seconde fenêtre "
             + ("disponible" if fenetres.disponible(page) else "indisponible ici"),

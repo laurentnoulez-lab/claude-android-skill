@@ -64,6 +64,19 @@ def _data_path() -> str:
 
 
 #: Renseigne d'où proviennent effectivement les données (diagnostic).
+#: Édition de la fiche GTI dont sont extraites les pluies embarquées.
+#:
+#: La fiche officielle demande de cocher « J'ai vérifié que la présente fiche
+#: correspond bien à la dernière version disponible » : un dossier doit donc
+#: pouvoir dire sur quelle édition il s'appuie. Le millésime est établi par
+#: l'accord exact des coefficients de Montana embarqués avec ceux de
+#: ``GTI_infiltration_retention_calcul_2023_11`` (un test le vérifie sur Liège
+#: et Arlon). **À mettre à jour en même temps que le fichier de données.**
+MILLESIME_GTI = "2023-11"
+
+#: Où vérifier qu'une édition plus récente n'est pas parue.
+SOURCE_GTI_URL = "https://inondations.wallonie.be"
+
 SOURCE_DONNEES = {"origine": "inconnue"}
 
 

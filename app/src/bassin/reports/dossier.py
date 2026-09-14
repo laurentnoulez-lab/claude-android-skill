@@ -71,6 +71,16 @@ class Dossier:
             self.projet.commune_ins, self.projet.periode_retour, self.projet.source_pluie)
 
     @property
+    def source_pluies_datee(self) -> str:
+        """Source des pluies **et** édition du référentiel GTI.
+
+        La fiche officielle demande de vérifier qu'on travaille sur la dernière
+        version parue. Un dossier signé doit donc dire de quelle édition il
+        sort, sans quoi personne ne peut refaire ce contrôle après coup.
+        """
+        return f"{self.libelle_source} · données GTI {rainfall.MILLESIME_GTI}"
+
+    @property
     def titre_table_volumes(self) -> str:
         """Intitulé du tableau des volumes requis, source nommée.
 

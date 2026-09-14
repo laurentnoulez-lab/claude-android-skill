@@ -180,7 +180,7 @@ def construire_classeur(dossier: Dossier) -> Workbook:
     _label(ws, 8, "Commune", projet.commune_nom)
     _label(ws, 9, "Code INS", projet.commune_ins)
     _label(ws, 10, "Période de retour", projet.periode_retour, "ans")
-    _label(ws, 11, "Source des pluies", dossier.libelle_source)
+    _label(ws, 11, "Source des pluies", dossier.source_pluies_datee)
     if dossier.reseau_multiple:
         _label(ws, 12, "Ouvrage détaillé par ce classeur", dossier.ouvrage_courant.nom,
                gras=True, fond=BLEU_PALE)

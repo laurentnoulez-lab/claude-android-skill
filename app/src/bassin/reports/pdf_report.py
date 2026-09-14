@@ -269,7 +269,8 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     pdf = Pdf()
     pdf.pied = (("Réseau de bassins d'orage" if dossier.reseau_multiple else "Bassin d'orage")
                 + f" - {p.commune_nom} - T = {p.periode_retour} ans - "
-                f"{p.nom_projet or 'projet sans nom'} - {dossier.date}")
+                f"{p.nom_projet or 'projet sans nom'} - {dossier.date}"
+                f" - donnees GTI {rainfall.MILLESIME_GTI}")
     L = pdf.largeur_utile
 
     pdf.titre("Dimensionnement d'un bassin d'orage" if not dossier.reseau_multiple
@@ -280,7 +281,7 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         [
             ["Projet", p.nom_projet or "-", "Commune", f"{p.commune_nom} ({p.commune_ins})"],
             ["Localisation", p.localisation or "-", "Période de retour", f"{p.periode_retour} ans"],
-            ["Auteur", p.auteur or "-", "Source des pluies", dossier.libelle_source],
+            ["Auteur", p.auteur or "-", "Source des pluies", dossier.source_pluies_datee],
             ["Date", dossier.date, "Scénario retenu", LIBELLES_SCENARIOS[dossier.scenario_principal]],
         ] + ([["Ouvrage détaillé", dossier.ouvrage_courant.nom, "Composition du projet",
                f"{len(dossier.systeme.bassins_versants)} bassins versants, "
