@@ -6,7 +6,8 @@ from typing import Callable, List, Optional, Sequence
 
 import flet as ft
 
-from ..formats import fr, nombre  # noqa: F401  (réexporté pour les vues)
+from ..core.model import DOMAINES
+from ..formats import duree_h, fr, nombre  # noqa: F401  (réexportés pour les vues)
 
 BLEU = "#1D4ED8"
 BLEU_CLAIR = "#DBEAFE"
@@ -128,6 +129,11 @@ def formater_nombre(valeur: float, decimales: int = 3) -> str:
     """Affichage francophone : virgule décimale, pas de notation scientifique."""
     if valeur is None:
         return ""
+    valeur = float(valeur)
+    if valeur != valeur:
+        return "—"
+    if valeur in (float("inf"), float("-inf")):
+        return "∞" if valeur > 0 else "-∞"
     if valeur == 0:
         return "0"
     if abs(valeur) < 1e-3 or abs(valeur) >= 1e7:
@@ -176,21 +182,34 @@ def _signaler(champ: ft.Control, erreur: Optional[str]) -> None:
 def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None],
                  unite: str = "", aide: str = "", decimales: int = 3,
                  col: Optional[dict] = None, on_valide: Optional[Callable[[], None]] = None,
-                 compact: bool = False) -> ft.Control:
+                 compact: bool = False, domaine: Optional[str] = None) -> ft.Control:
     """Champ numérique tolérant (virgule ou point, champ vide = 0).
 
     ``on_change`` ne met à jour que la donnée : le texte saisi n'est jamais
     reformaté et l'interface n'est pas reconstruite, sans quoi le champ perdrait
     le focus à chaque frappe. ``on_valide`` est appelé quand l'utilisateur quitte
     le champ ou valide : c'est là que les résultats sont recalculés.
+
+    ``domaine`` nomme la grandeur dans :data:`bassin.core.model.DOMAINES` : une
+    valeur qui sort de ses bornes physiques n'est pas écrite dans le projet, et
+    le champ dit pourquoi. C'est la même table que celle dont le moteur tire ses
+    alertes et le classeur ses validations : une seule déclaration, trois
+    barrières.
     """
+    borne = DOMAINES.get(domaine) if domaine else None
+
+    def _refus(valeur_num: float) -> Optional[str]:
+        if borne is None:
+            return None
+        ecart = borne.ecart(valeur_num)
+        return fr(f"{borne.libelle} {ecart}") if ecart else None
 
     def _change(e: ft.ControlEvent) -> None:
         # Pendant la frappe on reste muet : « 1e-5 » passe par « 1e » et « 1e- »,
         # qui sont invalides sans que l'utilisateur ait fait la moindre faute.
         _signaler(e.control, None)
         valeur_num = lire_nombre(e.control.value)
-        if valeur_num is not None:
+        if valeur_num is not None and _refus(valeur_num) is None:
             on_change(valeur_num)
 
     def _valide(e: ft.ControlEvent) -> None:
@@ -199,6 +218,11 @@ def champ_nombre(libelle: str, valeur: float, on_change: Callable[[float], None]
             # La saisie est conservée telle quelle : l'utilisateur doit pouvoir
             # corriger ce qu'il a tapé plutôt que de le voir disparaître.
             _signaler(e.control, "Nombre invalide")
+            return
+        refus = _refus(valeur_num)
+        if refus is not None:
+            # Même principe : on montre la raison, on ne touche pas au projet.
+            _signaler(e.control, refus)
             return
         _signaler(e.control, None)
         on_change(valeur_num)
@@ -245,7 +269,7 @@ def champs_convertis(
     aide_a: str = "", aide_b: str = "", indisponible_b: str = "",
     decimales_a: int = 6, decimales_b: int = 3,
     col_a: Optional[dict] = None, col_b: Optional[dict] = None,
-    compact: bool = False,
+    compact: bool = False, domaine: Optional[str] = None,
 ) -> List[ft.Control]:
     """Deux champs liés par une conversion : ``valeur_b = valeur_a × facteur``.
 
@@ -260,6 +284,19 @@ def champs_convertis(
     Si ``facteur`` est absent ou nul, le second champ est désactivé et explique
     pourquoi.
     """
+    borne = DOMAINES.get(domaine) if domaine else None
+
+    def _refuse(valeur: float) -> Optional[str]:
+        """Message de refus si la grandeur sort de son domaine physique.
+
+        Les deux champs expriment la **même** grandeur : la borne se vérifie sur
+        sa valeur de référence, quelle que soit l'unité employée pour la saisir.
+        """
+        if borne is None:
+            return None
+        ecart = borne.ecart(valeur)
+        return fr(f"{borne.libelle} {ecart}") if ecart else None
+
     champ_a = _champ_texte(libelle_a, valeur_a, unite_a, aide_a, decimales_a, compact)
     valeur_b = valeur_a * facteur if facteur else 0.0
     champ_b = _champ_texte(libelle_b, valeur_b, unite_b,
@@ -279,6 +316,10 @@ def champs_convertis(
             # Muet pendant la frappe, explicite une fois le champ quitté.
             _signaler(e.control, "Nombre invalide" if valider else None)
             return
+        refus = _refuse(valeur)
+        if refus is not None:
+            _signaler(e.control, refus)
+            return
         _signaler(e.control, None)
         appliquer(valeur)
         if facteur:
@@ -293,10 +334,15 @@ def champs_convertis(
         if valeur is None:
             _signaler(e.control, "Nombre invalide" if valider else None)
             return
-        _signaler(e.control, None)
         if not facteur:
+            _signaler(e.control, None)
             return
         equivalent = valeur / facteur
+        refus = _refuse(equivalent if appliquer_b is None else valeur)
+        if refus is not None:
+            _signaler(e.control, refus)
+            return
+        _signaler(e.control, None)
         if appliquer_b is not None:
             appliquer_b(valeur)
         else:

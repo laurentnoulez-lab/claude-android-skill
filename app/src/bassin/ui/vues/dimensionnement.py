@@ -141,7 +141,7 @@ class VueDimensionnement(Vue):
             "Vitesse d'infiltration K", "m/s", p.k_infiltration_ms,
             "soit", "mm/h", MM_H, maj_k, on_valide=self.maj_resultats,
             aide_a="essai in situ · 1e-5 ou 0,00001",
-            aide_b="équivalent, modifiable aussi",
+            aide_b="équivalent, modifiable aussi", domaine="k_infiltration_ms",
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
@@ -157,7 +157,7 @@ class VueDimensionnement(Vue):
             aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                    f" · maximum GTI : 5 l/s/ha",
             indisponible_b="encodez d'abord les surfaces incidentes",
-            decimales_a=3, decimales_b=2,
+            decimales_a=3, decimales_b=2, domaine="debit_ajutage_ls",
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
@@ -194,7 +194,8 @@ class VueDimensionnement(Vue):
                         theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
                                            maj("surface_infiltration_m2"), "m²",
                                            "fond du dispositif", on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
+                                           col={"xs": 12, "sm": 6, "md": 3},
+                                           domaine="surface_infiltration_m2"),
                         champs_ajutage[0],
                         champs_ajutage[1],
                         theme.champ_nombre(
@@ -202,7 +203,8 @@ class VueDimensionnement(Vue):
                             maj_seuil, "m³",
                             "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin réel",
                             on_valide=self.maj_resultats,
-                            col={"xs": 12, "sm": 6, "md": 3}),
+                            col={"xs": 12, "sm": 6, "md": 3},
+                            domaine="volume_sous_ajutage_m3"),
                     ],
                     spacing=12,
                     run_spacing=12,

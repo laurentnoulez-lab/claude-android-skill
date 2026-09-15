@@ -233,8 +233,9 @@ class VueSynthese(Vue):
                 "Aucun ouvrage ne déborde pour cette averse.", "succes"))
         if sim.temps_vidange_max_h > systeme.temps_vidange_max_h:
             avis.append(theme.message(
-                theme.fr(f"La vidange la plus longue atteint {sim.temps_vidange_max_h:.1f} h, "
-                         f"au-delà du maximum admis de {systeme.temps_vidange_max_h:.0f} h."),
+                theme.fr(f"La vidange la plus longue atteint "
+                         f"{theme.duree_h(sim.temps_vidange_max_h)}, au-delà du maximum admis "
+                         f"de {systeme.temps_vidange_max_h:.0f} h."),
                 "alerte"))
         return [entete, tableau] + avis + [
             graphiques.construire(self._graphique_niveaux(sim), 280),

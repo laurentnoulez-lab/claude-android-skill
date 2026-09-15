@@ -6,6 +6,7 @@ from typing import List, Sequence
 
 from ..core import hydro, rainfall
 from ..core.model import LIBELLES_SCENARIOS
+from ..formats import duree_h
 from . import charts, schema as mod_schema
 from .docx_writer import Cellule, DocxBuilder
 from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau, synthese_scenarios,
@@ -454,7 +455,7 @@ def _w_ouvrage(doc, dossier, titre, sous_titre):
                 ["Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
                 ["Taux de remplissage", f"{sim.taux_remplissage * 100:.0f} %"],
                 ["Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
-                ["Temps de vidange", f"{sim.temps_vidange_h:.1f} h"],
+                ["Temps de vidange", duree_h(sim.temps_vidange_h)],
                 [Cellule("Statut", gras=True),
                  Cellule(sim.statut, gras=True, fond=ROUGE if sim.debordement else VERT)],
             ],

@@ -36,8 +36,9 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from typing import Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from . import hydro, simulation
+from . import hydro, rainfall, simulation
 from .model import (
+    assainir_valeurs,
     Bassin,
     BassinAmont,
     COEF_SECURITE_INFILTRATION,
@@ -53,6 +54,9 @@ from .simulation import Apport
 
 #: Destination d'un bassin d'orage qui n'est pas raccordé à un autre bassin.
 EXUTOIRE = ""
+
+#: Commune de repli quand celle du fichier est absente des données du GTI.
+COMMUNE_PAR_DEFAUT = "63013"
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +275,7 @@ class Systeme:
 
     def anomalies(self) -> List[str]:
         """Défauts de construction du réseau, en clair."""
-        messages: List[str] = []
+        messages: List[str] = list(self.normaliser_pluie()) + list(self.assainir())
         if not self.ouvrages:
             messages.append("Aucun bassin d'orage : le réseau est vide.")
         noms: Dict[str, int] = {}
@@ -340,6 +344,8 @@ class Systeme:
             self.ouvrages.append(ouvrage_neuf(self, "Bassin d'orage 1"))
         if self.ouvrage(self.ouvrage_courant) is None:
             self.ouvrage_courant = self.ouvrages[0].id
+        self.normaliser_pluie()
+        self.assainir()
         noeuds = self.noeuds()
         for o in self.ouvrages:
             e = o.etude
@@ -370,6 +376,79 @@ class Systeme:
             else:
                 e.brancher_apport(None)
             e.recalculer_ajutage()
+
+    def normaliser_pluie(self) -> List[str]:
+        """Ramène la commune et la récurrence dans les données du GTI.
+
+        Un fichier de projet retouché à la main, ou écrit par une version à
+        venir, peut nommer une commune inconnue ou une récurrence hors table.
+        L'application ne peut alors rien calculer : plutôt que de s'arrêter sur
+        une exception au premier tracé de courbe, elle revient à une pluie
+        valable et **dit ce qu'elle a substitué** — :meth:`anomalies` le porte
+        à l'écran comme au dossier. Se taire reviendrait à livrer un calcul fait
+        sur une autre pluie que celle qu'annonce l'entête.
+
+        La substitution est retenue tant qu'elle tient : dès que l'utilisateur
+        choisit lui-même une autre commune ou une autre récurrence, le message
+        disparaît sans qu'il ait à le faire taire.
+        """
+        retenues: Dict[str, Tuple[object, str]] = getattr(self, "_substitutions_pluie", {})
+        # Une substitution que l'utilisateur a depuis remplacée n'a plus à être dite.
+        retenues = {champ: (valeur, message) for champ, (valeur, message) in retenues.items()
+                    if getattr(self, champ) == valeur}
+
+        if (not rainfall.a_donnees_montana(self.commune_ins)
+                and not rainfall.a_donnees_qdf(self.commune_ins)):
+            ancienne = self.commune_ins or "(vide)"
+            self.commune_ins = COMMUNE_PAR_DEFAUT
+            commune = rainfall.commune_par_ins(COMMUNE_PAR_DEFAUT)
+            self.commune_nom = commune.nom if commune else self.commune_nom
+            retenues["commune_ins"] = (self.commune_ins, (
+                f"Commune INS {ancienne} absente des données du GTI : le calcul est fait "
+                f"sur {self.commune_nom} (INS {COMMUNE_PAR_DEFAUT}). Choisissez la commune "
+                "du projet."))
+        if int(self.periode_retour) not in rainfall.RETURN_PERIODS:
+            ancienne = self.periode_retour
+            self.periode_retour = min(rainfall.RETURN_PERIODS,
+                                      key=lambda rp: (abs(rp - int(ancienne)), rp))
+            retenues["periode_retour"] = (self.periode_retour, (
+                f"Période de retour de {ancienne} ans absente du GTI : le calcul est fait "
+                f"à {self.periode_retour} ans. Les récurrences tabulées sont "
+                + ", ".join(str(rp) for rp in rainfall.RETURN_PERIODS) + " ans."))
+        if self.source_pluie not in (rainfall.SOURCE_MONTANA, rainfall.SOURCE_QDF):
+            ancienne = self.source_pluie
+            self.source_pluie = rainfall.SOURCE_MONTANA
+            retenues["source_pluie"] = (self.source_pluie, (
+                f"Source de pluie « {ancienne} » inconnue : les formules de Montana du GTI "
+                "ont été retenues."))
+        self._substitutions_pluie = retenues
+        return [message for _valeur, message in retenues.values()]
+
+    def assainir(self) -> List[str]:
+        """Retire du projet les valeurs qui ne sont pas des nombres.
+
+        Appelée avant tout calcul : l'infini et le NaN sont écartés **à
+        l'entrée**, une bonne fois, plutôt que rattrapés à chaque endroit qui
+        les afficherait ou les tracerait — il y en a trop pour les tenir tous,
+        et il en resterait toujours un. Ce qui est simplement hors domaine, lui,
+        n'est pas touché : c'est un chiffre, et c'est à l'utilisateur de le
+        revoir, averti par :func:`model.valeurs_hors_domaine`.
+        """
+        dits: List[str] = list(getattr(self, "_valeurs_assainies", []))
+        for ouvrage in self.ouvrages:
+            for message in assainir_valeurs(ouvrage.etude):
+                dits.append(f"« {ouvrage.nom} » — {message}")
+        for versant in self.bassins_versants:
+            for message in _assainir_versant(versant):
+                dits.append(f"« {versant.nom} » — {message}")
+        # Un même défaut ne se dit qu'une fois, quel que soit le nombre de
+        # recalculs : le message reste tant que le projet n'a pas été réenregistré.
+        uniques: List[str] = []
+        for message in dits:
+            if message not in uniques:
+                uniques.append(message)
+        self._valeurs_assainies = uniques
+        return uniques
 
     def noeuds(self) -> Dict[str, "Noeud"]:
         """Description hydrologique figée de chaque ouvrage, amont compris."""
@@ -436,6 +515,13 @@ def _connus(classe, data: Dict) -> Dict:
     champs = set(classe.__dataclass_fields__)
     return {k: v for k, v in dict(data).items() if k in champs and k != "surfaces"
             and k != "etude"}
+
+
+def _assainir_versant(versant: BassinVersant) -> List[str]:
+    """Valeurs non numériques d'un bassin versant, retirées et dites."""
+    from .model import _porteurs_versant
+
+    return _porteurs_versant(versant)
 
 
 def _liens_sains(systeme: Systeme) -> Dict[str, str]:

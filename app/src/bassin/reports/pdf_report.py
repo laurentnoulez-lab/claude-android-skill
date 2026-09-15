@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..core import hydro, rainfall
 from ..core.model import LIBELLES_SCENARIOS
+from ..formats import duree_h
 from . import charts, schema as mod_schema
 from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau, synthese_scenarios,
                       synthese_simulation_systeme, synthese_versants)
@@ -602,7 +603,7 @@ def _sections_ouvrage(pdf, dossier, L, titre, sous_titre):
              ["Durée de pluie", f"{sim.duree_pluie_min:.0f} min", "Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
              ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm", "Taux de remplissage", f"{sim.taux_remplissage * 100:.0f} %"],
              ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³", "Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
-             ["Temps de vidange", f"{sim.temps_vidange_h:.1f} h", "Statut", sim.statut]],
+             ["Temps de vidange", duree_h(sim.temps_vidange_h), "Statut", sim.statut]],
             [0.27 * L, 0.23 * L, 0.27 * L, 0.23 * L], taille=8.5,
             fonds={(4, 3): ROUGE_PALE if sim.debordement else VERT_PALE},
         )

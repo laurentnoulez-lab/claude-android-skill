@@ -98,17 +98,23 @@ class Canevas:
         self.px = bytearray(bytes(fond) * (largeur * hauteur))
 
     def point(self, x: int, y: int, c: Couleur) -> None:
+        if not _dessinable(x, y):
+            return
         if 0 <= x < self.w and 0 <= y < self.h:
             i = (y * self.w + x) * 3
             self.px[i:i + 3] = bytes(c)
 
     def disque(self, x: int, y: int, r: int, c: Couleur) -> None:
+        if not _dessinable(x, y):
+            return
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
                 if dx * dx + dy * dy <= r * r:
                     self.point(x + dx, y + dy, c)
 
     def rectangle(self, x0: int, y0: int, x1: int, y1: int, c: Couleur, plein: bool = True) -> None:
+        if not _dessinable(x0, y0, x1, y1):
+            return
         x0, x1 = sorted((x0, x1))
         y0, y1 = sorted((y0, y1))
         for y in range(y0, y1 + 1):
@@ -118,6 +124,8 @@ class Canevas:
 
     def ligne(self, x0: float, y0: float, x1: float, y1: float, c: Couleur,
               epaisseur: int = 1, pointilles: bool = False) -> None:
+        if not _dessinable(x0, y0, x1, y1):
+            return
         x0, y0, x1, y1 = int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1))
         dx, dy = abs(x1 - x0), -abs(y1 - y0)
         sx = 1 if x0 < x1 else -1
@@ -143,6 +151,8 @@ class Canevas:
             n += 1
 
     def texte(self, x: int, y: int, texte: str, c: Couleur = NOIR, echelle: int = 1) -> None:
+        if not _dessinable(x, y):
+            return
         cx = x
         for ch in texte:
             glyphe = _FONT.get(ch)
@@ -175,11 +185,30 @@ class Canevas:
                 + bloc(b"IDAT", zlib.compress(bytes(brut), 9)) + bloc(b"IEND", b""))
 
 
+def _dessinable(*coordonnees: float) -> bool:
+    """Ces coordonnées désignent-elles un endroit du dessin ?
+
+    Une grandeur infinie ou indéterminée n'a pas de place sur une image : la
+    convertir en pixel lève ``ValueError``, et tout le dossier tombait avec elle.
+    Ce qui n'a pas de position ne se dessine pas ; le reste de la figure, ses
+    axes et sa légende, restent lisibles, et c'est l'alerte du moteur qui dit à
+    l'utilisateur ce qui cloche dans sa saisie.
+    """
+    return all(isinstance(v, (int, float)) and math.isfinite(v) for v in coordonnees)
+
+
 # ---------------------------------------------------------------------------
 # Echelles et graduations
 # ---------------------------------------------------------------------------
 def graduations(vmin: float, vmax: float, n: int = 5) -> List[float]:
-    """Graduations "rondes" couvrant l'intervalle."""
+    """Graduations "rondes" couvrant l'intervalle.
+
+    Un projet relu d'un fichier peut porter une grandeur infinie ou
+    indéterminée : l'axe n'a alors pas de graduation, mais le tracé ne doit pas
+    faire tomber l'application — le reste de la page, lui, reste lisible.
+    """
+    if not (math.isfinite(vmin) and math.isfinite(vmax)):
+        return [vmin] if math.isfinite(vmin) else []
     if vmax <= vmin:
         return [vmin]
     brut = (vmax - vmin) / max(n, 1)

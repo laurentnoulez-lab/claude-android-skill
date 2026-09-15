@@ -484,7 +484,8 @@ def _ecarts_ouvrage_encode(projet: Projet, res: Resultat, scenario: str) -> List
 
 
 def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
-    from .model import DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE
+    from .model import (DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE,
+                        valeurs_hors_domaine)
 
     if not projet.a_un_apport:
         res.conforme = False
@@ -524,6 +525,12 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
                 "La surface d'infiltration atteint déjà 10 % de la surface de référence : "
                 "le GTI admet ce cas comme un maximum raisonnable (rejet complémentaire a prévoir)."
             )
+    for message in valeurs_hors_domaine(projet):
+        # Une grandeur hors de son domaine physique n'est pas une hypothèse
+        # audacieuse : c'est une saisie fausse, et le résultat qui en découle
+        # n'a pas de sens. Elle est dite, et le dimensionnement non conforme.
+        res.conforme = False
+        res.alertes.append(message)
     if projet.bassin.ajutage_au_dessus_du_trop_plein:
         res.conforme = False
         res.alertes.append(

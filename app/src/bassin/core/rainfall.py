@@ -178,6 +178,29 @@ def commune_par_ins(ins: str) -> Optional[Commune]:
 # --------------------------------------------------------------------------
 # Montana
 # --------------------------------------------------------------------------
+class PluieIndisponible(LookupError):
+    """La pluie de projet demandée ne figure pas dans les données du GTI.
+
+    Levée plutôt que laissée filer en ``KeyError`` : un projet relu depuis un
+    fichier retouché à la main peut nommer une commune inconnue ou une
+    récurrence hors table, et l'application doit le dire au lieu de s'arrêter.
+    :meth:`Systeme.normaliser_pluie` répare en amont, si bien que cette
+    exception ne remonte qu'à un appel direct du moteur.
+    """
+
+
+def defaut_de_pluie(ins: str, periode_retour: int) -> Optional[str]:
+    """Ce qui empêche d'établir la pluie de projet, ou ``None`` si tout y est."""
+    if not a_donnees_montana(ins) and not a_donnees_qdf(ins):
+        return (f"Aucune donnée de pluie du GTI pour la commune INS {ins or '(vide)'} : "
+                "ni coefficients de Montana, ni tables QDF.")
+    if int(periode_retour) not in RETURN_PERIODS:
+        disponibles = ", ".join(str(t) for t in RETURN_PERIODS)
+        return (f"Période de retour de {periode_retour} ans absente du GTI : "
+                f"les récurrences tabulées sont {disponibles} ans.")
+    return None
+
+
 def montana_coeffs(ins: str, periode_retour: int) -> Tuple[float, float, float, float, float, float]:
     """(a1, b1, a2, b2, a3, b3) pour une commune et une période de retour."""
     try:
@@ -256,6 +279,9 @@ class SourcePluie:
     """Fournit la hauteur de pluie [mm] pour une commune / récurrence / durée."""
 
     def __init__(self, ins: str, periode_retour: int, source: str = SOURCE_MONTANA):
+        defaut = defaut_de_pluie(ins, periode_retour)
+        if defaut is not None:
+            raise PluieIndisponible(defaut)
         if source == SOURCE_QDF and not a_donnees_qdf(ins):
             source = SOURCE_MONTANA
         if source == SOURCE_MONTANA and not a_donnees_montana(ins):

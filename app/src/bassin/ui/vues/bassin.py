@@ -43,14 +43,17 @@ class VueBassin(Vue):
             [
                 theme.champ_nombre("Volume tampon total", b.volume_total_m3, maj("volume_total_m3"),
                                    "m³", "jusqu'au trop-plein", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                                   col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="volume_total_m3"),
                 theme.champ_nombre("Volume sous l'ajutage", b.volume_sous_ajutage_m3,
                                    maj("volume_sous_ajutage_m3"), "m³", "volume mort",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="volume_sous_ajutage_m3"),
                 theme.champ_nombre("Surface d'infiltration", b.surface_dispersion_m2,
                                    maj("surface_dispersion_m2"), "m²",
                                    "fond infiltrant de l'ouvrage construit",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="surface_dispersion_m2"),
                 *theme.champs_convertis(
                     "Débit d'ajutage", "l/s", b.debit_ajutage_ls,
                     "soit", "l/s/ha",
@@ -59,7 +62,7 @@ class VueBassin(Vue):
                     aide_a="orifice calibré",
                     aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés",
                     indisponible_b="encodez d'abord les surfaces incidentes",
-                    decimales_a=3, decimales_b=2,
+                    decimales_a=3, decimales_b=2, domaine="debit_ajutage_ls",
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 *theme.champs_convertis(
                     "Vitesse d'infiltration K", "m/s", p.k_bassin_ms,
@@ -67,11 +70,12 @@ class VueBassin(Vue):
                     aide_a=("essai en fond de fouille" if b.k_propre else
                             "repris du dimensionnement · 0 pour y revenir"),
                     aide_b="équivalent, modifiable aussi",
-                    decimales_a=8, decimales_b=2,
+                    decimales_a=8, decimales_b=2, domaine="k_infiltration_ms",
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge sur l'ajutage", p.hauteur_charge_m, maj_charge, "m",
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                                   col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="hauteur_charge_m"),
             ],
             spacing=12,
             run_spacing=12,
@@ -93,28 +97,28 @@ class VueBassin(Vue):
         # une contrevérité affichée à l'utilisateur.
         if b.ajutage_au_dessus_du_trop_plein:
             volumes = theme.etiquette(
-                f"Volume sous l'ajutage {b.volume_sous_ajutage_m3:.1f} m³ supérieur au "
-                f"volume tampon total {b.volume_total_m3:.1f} m³ : orifice au-dessus "
-                "du trop-plein",
+                f"Volume sous l'ajutage {theme.nombre(b.volume_sous_ajutage_m3, 1)} m³ "
+                f"supérieur au volume tampon total {theme.nombre(b.volume_total_m3, 1)} m³ : "
+                "orifice au-dessus du trop-plein",
                 theme.ROUGE, theme.ROUGE_CLAIR, ft.Icons.ERROR)
         else:
             volumes = theme.etiquette(
-                f"Volume tampon total {b.volume_total_m3:.1f} m³ = "
-                f"{b.volume_sous_ajutage_m3:.1f} m³ sous l'ajutage + "
-                f"{b.volume_tampon_m3:.1f} m³ au-dessus",
+                f"Volume tampon total {theme.nombre(b.volume_total_m3, 1)} m³ = "
+                f"{theme.nombre(b.volume_sous_ajutage_m3, 1)} m³ sous l'ajutage + "
+                f"{theme.nombre(b.volume_tampon_m3, 1)} m³ au-dessus",
                 theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART)
         entete = ft.Row(
             [
                 volumes,
-                theme.etiquette(f"Q infiltration = {q_inf:.3f} l/s", theme.VERT, theme.VERT_CLAIR,
+                theme.etiquette(f"Q infiltration = {theme.nombre(q_inf, 3)} l/s", theme.VERT, theme.VERT_CLAIR,
                                 ft.Icons.WATER_DROP),
                 # Un orifice au-dessus du trop-plein ne débite jamais : l'annoncer
                 # dans le débit total contredirait, sur la même ligne, le bandeau
                 # rouge qui vient de le dire, et surtout le calcul.
                 theme.etiquette(
-                    (f"Q total = {q_inf:.3f} l/s · ajutage hors service"
+                    (f"Q total = {theme.nombre(q_inf, 3)} l/s · ajutage hors service"
                      if b.ajutage_au_dessus_du_trop_plein
-                     else f"Q total = {q_inf + b.debit_ajutage_ls:.3f} l/s"),
+                     else f"Q total = {theme.nombre(q_inf + b.debit_ajutage_ls, 3)} l/s"),
                     theme.GRIS, theme.GRIS_CLAIR, ft.Icons.CALL_MERGE),
             ],
             wrap=True,
@@ -137,7 +141,8 @@ class VueBassin(Vue):
                                          couleur, ft.Icons.WATER), col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(f"{sim.taux_remplissage * 100:.0f}", "Taux de remplissage", "%",
                                          couleur, ft.Icons.PERCENT), col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(theme.nombre(sim.temps_vidange_h, 1), "Temps de vidange après la pluie", "h",
+                ft.Container(theme.tuile(theme.duree_h(sim.temps_vidange_h).removesuffix(" h"),
+                                         "Temps de vidange après la pluie", "h",
                                          theme.ARDOISE, ft.Icons.TIMELAPSE,
                                          f"maximum admis : {p.temps_vidange_max_h:.0f} h"),
                              col={"xs": 12, "sm": 6, "md": 3}),
@@ -189,8 +194,8 @@ class VueBassin(Vue):
                 "de réserve.", "succes"))
         if sim.temps_vidange_h > p.temps_vidange_max_h:
             avis.append(theme.message(
-                f"Temps de vidange de {sim.temps_vidange_h:.1f} h supérieur au maximum admis "
-                f"({p.temps_vidange_max_h:.0f} h).", "alerte"))
+                f"Temps de vidange de {theme.duree_h(sim.temps_vidange_h)} supérieur au "
+                f"maximum admis ({p.temps_vidange_max_h:.0f} h).", "alerte"))
 
         return [
             entete,

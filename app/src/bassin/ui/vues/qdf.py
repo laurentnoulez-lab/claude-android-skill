@@ -83,7 +83,7 @@ class VueTableQDF(Vue):
                                 f"Pluie : {c.hauteur_mm:.1f} mm\n"
                                 f"Volume requis : {c.volume_requis_m3:.1f} m³ / "
                                 f"{c.capacite_m3:.1f} m³\n"
-                                f"Vidange : {c.temps_vidange_h:.1f} h"),
+                                f"Vidange : {theme.duree_h(c.temps_vidange_h)}"),
                         )
                     )
                 )

@@ -294,8 +294,8 @@ class VueReseau(Vue):
         if amonts:
             entrees.append(f"{len(amonts)} bassin(s) amont")
         return theme.fr(
-            f"{ouvrage.etude.bassin.volume_total_m3:.1f} m³ · "
-            f"ajutage {ouvrage.etude.bassin.debit_ajutage_ls:.2f} l/s · "
+            f"{theme.nombre(ouvrage.etude.bassin.volume_total_m3, 1)} m³ · "
+            f"ajutage {theme.nombre(ouvrage.etude.bassin.debit_ajutage_ls, 2)} l/s · "
             + (", ".join(entrees) if entrees else "aucun apport")
             + " → " + (aval.nom if aval is not None else "exutoire"))
 

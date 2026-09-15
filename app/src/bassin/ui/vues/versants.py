@@ -81,12 +81,14 @@ class VueVersants(Vue):
                                  padding=ft.padding.only(bottom=2)),
                     ft.Container(
                         theme.champ_nombre("Coefficient", surface.coefficient, maj_coef,
-                                           on_valide=rafraichir_ligne, compact=True),
+                                           on_valide=rafraichir_ligne, compact=True,
+                                           domaine="coefficient"),
                         col={"xs": 5, "md": 2},
                     ),
                     ft.Container(
                         theme.champ_nombre("Surface", surface.aire_m2, maj_aire, "m²",
-                                           on_valide=rafraichir_ligne, compact=True),
+                                           on_valide=rafraichir_ligne, compact=True,
+                                           domaine="aire_m2"),
                         col={"xs": 7, "md": 3},
                     ),
                     ft.Container(
@@ -191,7 +193,8 @@ class VueVersants(Vue):
                 ft.Container(
                     theme.champ_nombre("Surface de référence", versant.surface_reference_m2,
                                        maj_reference, "m²", "parcelle concernée",
-                                       on_valide=self.maj_resultats),
+                                       on_valide=self.maj_resultats,
+                                       domaine="surface_reference_m2"),
                     col={"xs": 12, "md": 4},
                 ),
             ],

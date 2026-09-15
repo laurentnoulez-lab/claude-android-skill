@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+import math
+
+from ..formats import fr, nombre
 
 #: Coefficients de ruissellement du GTI par type d'occupation du sol.
 TYPES_SURFACES = (
@@ -51,6 +55,129 @@ class SurfaceIncidente:
         return self.coefficient * self.aire_m2
 
 
+@dataclass(frozen=True)
+class Domaine:
+    """Bornes physiques d'une grandeur encodée, et la raison de ces bornes.
+
+    Déclarées **une fois**, elles servent au moteur — qui annonce toute valeur
+    qui en sort —, à l'interface — qui refuse la saisie — et au classeur — qui
+    pose la même contrainte sur la cellule. Énumérer les cas absurdes au fil des
+    signalements ne marche pas : il en reste toujours un.
+    """
+
+    libelle: str
+    unite: str = ""
+    mini: Optional[float] = None
+    maxi: Optional[float] = None
+    raison: str = ""
+    decimales: int = 3
+    #: La borne basse est-elle exclue ? Une charge nulle n'est pas une charge.
+    mini_exclu: bool = False
+
+    def ecart(self, valeur: float) -> Optional[str]:
+        """En quoi cette valeur sort-elle du domaine ? ``None`` si elle y est."""
+        try:
+            v = float(valeur)
+        except (TypeError, ValueError):
+            return "valeur illisible"
+        if v != v or v in (float("inf"), float("-inf")):
+            return "valeur non numérique"
+        if self.mini is not None:
+            if self.mini_exclu and v <= self.mini:
+                return f"doit être strictement supérieur à {self.mini:g}"
+            if not self.mini_exclu and v < self.mini:
+                return f"ne peut pas être inférieur à {self.mini:g}"
+        if self.maxi is not None and v > self.maxi:
+            return f"ne peut pas dépasser {self.maxi:g}"
+        return None
+
+
+#: Domaine physique de chaque grandeur encodée, par nom d'attribut.
+DOMAINES: Dict[str, Domaine] = {
+    "surface_reference_m2": Domaine(
+        "Surface de référence", "m²", mini=0.0, decimales=1,
+        raison="une surface ne peut pas être négative"),
+    "aire_m2": Domaine(
+        "Surface incidente", "m²", mini=0.0, decimales=1,
+        raison="une surface ne peut pas être négative"),
+    "coefficient": Domaine(
+        "Coefficient de ruissellement", "", mini=0.0, maxi=1.0, decimales=2,
+        raison="c'est la fraction de la pluie qui ruisselle"),
+    "coef_ruissellement": Domaine(
+        "Coefficient de ruissellement", "", mini=0.0, maxi=1.0, decimales=2,
+        raison="c'est la fraction de la pluie qui ruisselle"),
+    "k_infiltration_ms": Domaine(
+        "Vitesse d'infiltration K", "m/s", mini=0.0, maxi=1e-2, decimales=8,
+        raison="au-delà de 1e-2 m/s (36 000 mm/h) il ne s'agit plus d'un sol"),
+    "coef_securite_infiltration": Domaine(
+        "Coefficient de sécurité sur l'infiltration", "", mini=1.0, decimales=2,
+        raison="il minore le débit d'infiltration, il ne le majore pas"),
+    "surface_infiltration_m2": Domaine(
+        "Surface d'infiltration", "m²", mini=0.0, decimales=1,
+        raison="une surface ne peut pas être négative"),
+    "surface_dispersion_m2": Domaine(
+        "Surface d'infiltration", "m²", mini=0.0, decimales=1,
+        raison="une surface ne peut pas être négative"),
+    "surface_bv_m2": Domaine(
+        "Surface du bassin versant amont", "m²", mini=0.0, decimales=1,
+        raison="une surface ne peut pas être négative"),
+    "debit_ajutage_ls": Domaine(
+        "Débit d'ajutage", "l/s", mini=0.0,
+        raison="un ajutage évacue de l'eau, il n'en apporte pas"),
+    "debit_ajutage_specifique_ls_ha": Domaine(
+        "Débit d'ajutage spécifique", "l/(s·ha)", mini=0.0, decimales=2,
+        raison="un ajutage évacue de l'eau, il n'en apporte pas"),
+    "temps_vidange_max_h": Domaine(
+        "Temps de vidange maximum admis", "h", mini=0.0, mini_exclu=True, decimales=1,
+        raison="une vidange doit disposer d'un délai"),
+    "volume_total_m3": Domaine(
+        "Volume tampon total", "m³", mini=0.0, decimales=1,
+        raison="un volume ne peut pas être négatif"),
+    "volume_sous_ajutage_m3": Domaine(
+        "Volume sous l'axe de l'ajutage", "m³", mini=0.0, decimales=1,
+        raison="un volume ne peut pas être négatif"),
+    "volume_temporisation_m3": Domaine(
+        "Volume de temporisation du bassin amont", "m³", mini=0.0, decimales=1,
+        raison="un volume ne peut pas être négatif"),
+    "hauteur_charge_m": Domaine(
+        "Charge sur l'ajutage", "m", mini=0.0, mini_exclu=True, decimales=2,
+        raison="sans charge, la formule de Torricelli ne donne aucun débit"),
+    "coef_debit_orifice": Domaine(
+        "Coefficient de débit de l'orifice", "", mini=0.0, maxi=1.0, mini_exclu=True,
+        decimales=2,
+        raison="un orifice ne débite jamais plus que la vitesse théorique"),
+}
+
+
+def _hors_domaine(objet, champs: Tuple[str, ...], ou: str = "") -> List[str]:
+    """Grandeurs d'un objet qui sortent de leur domaine, dites en clair."""
+    messages: List[str] = []
+    for champ in champs:
+        domaine = DOMAINES.get(champ)
+        valeur = getattr(objet, champ, None)
+        if domaine is None or valeur is None:
+            continue
+        ecart = domaine.ecart(valeur)
+        if ecart is None:
+            continue
+        precision = f" {ou}" if ou else ""
+        # La valeur fautive est citée telle qu'elle a été saisie — mais lisible :
+        # « inf » n'est pas un nombre que l'utilisateur reconnaîtra.
+        try:
+            brut = float(valeur)
+        except (TypeError, ValueError):
+            chiffre = str(valeur)
+        else:
+            chiffre = (nombre(brut, domaine.decimales) if not math.isfinite(brut)
+                       else f"{brut:.{domaine.decimales}f}".rstrip("0").rstrip(".") or "0")
+        messages.append(fr(
+            f"{domaine.libelle}{precision} : {chiffre} {domaine.unite}".rstrip()
+            + f" — {ecart}"
+            + (f" ({domaine.raison})." if domaine.raison else ".")
+        ))
+    return messages
+
+
 @dataclass
 class Bassin:
     """Ouvrage encodé par l'utilisateur (vérification / simulation)."""
@@ -89,6 +216,97 @@ class Bassin:
     def k_propre(self) -> bool:
         """Le bassin construit a-t-il sa propre vitesse d'infiltration ?"""
         return self.k_infiltration_ms is not None and self.k_infiltration_ms > 0
+
+
+#: Objets porteurs de grandeurs, et les champs à surveiller sur chacun.
+def _porteurs(projet):
+    yield projet, ("surface_reference_m2", "k_infiltration_ms",
+                   "coef_securite_infiltration", "surface_infiltration_m2",
+                   "debit_ajutage_ls", "debit_ajutage_specifique_ls_ha",
+                   "temps_vidange_max_h", "hauteur_charge_m", "coef_debit_orifice")
+    yield projet.bassin, ("volume_total_m3", "volume_sous_ajutage_m3",
+                          "surface_dispersion_m2", "debit_ajutage_ls", "k_infiltration_ms")
+    yield projet.amont, ("surface_bv_m2", "coef_ruissellement", "debit_ajutage_ls",
+                         "surface_dispersion_m2", "k_infiltration_ms",
+                         "volume_temporisation_m3")
+    for surface in projet.surfaces:
+        yield surface, ("aire_m2", "coefficient")
+
+
+def assainir_valeurs(projet) -> List[str]:
+    """Remplace les valeurs non numériques, et dit lesquelles.
+
+    L'infini et le NaN ne sont pas des grandeurs : on ne peut ni les comparer,
+    ni les tracer, ni les écrire. Un fichier retouché à la main en apporte, et
+    tout ce qui vient ensuite — courbes, tuiles, dossier — s'effondre ou affiche
+    « inf m³ ». Ils sont donc ramenés à la borne basse de leur domaine **dès
+    l'entrée**, une bonne fois, plutôt que rattrapés à chaque endroit qui les
+    affiche : il y en a trop pour les tenir tous.
+
+    Une valeur simplement hors domaine — un volume négatif, un coefficient de
+    1,8 — n'est en revanche pas touchée : c'est un chiffre, l'utilisateur doit
+    le revoir lui-même et :func:`valeurs_hors_domaine` le lui dit.
+    """
+    corrections: List[str] = []
+    for porteur, champs in _porteurs(projet):
+        corrections += _assainir(porteur, champs)
+    return corrections
+
+
+def _assainir(porteur, champs: Tuple[str, ...]) -> List[str]:
+    """Ramène à sa borne basse toute grandeur qui n'est pas un nombre."""
+    corrections: List[str] = []
+    for champ in champs:
+        domaine = DOMAINES.get(champ)
+        valeur = getattr(porteur, champ, None)
+        if domaine is None or valeur is None:
+            continue
+        try:
+            brut = float(valeur)
+        except (TypeError, ValueError):
+            brut = float("nan")
+        if math.isfinite(brut):
+            continue
+        repli = domaine.mini if domaine.mini is not None else 0.0
+        setattr(porteur, champ, repli)
+        corrections.append(fr(
+            f"{domaine.libelle} : valeur non numérique ({nombre(brut, 0)}) dans le fichier "
+            f"du projet, ramenée à {repli:g} {domaine.unite}".rstrip() + "."))
+    return corrections
+
+
+def _porteurs_versant(versant) -> List[str]:
+    """Assainit un bassin versant : sa surface de référence et ses surfaces."""
+    messages = _assainir(versant, ("surface_reference_m2",))
+    for surface in versant.surfaces:
+        messages += _assainir(surface, ("aire_m2", "coefficient"))
+    return messages
+
+
+def valeurs_hors_domaine(projet) -> List[str]:
+    """Toutes les grandeurs d'un projet qui sortent de leur domaine physique.
+
+    Un seul balayage, sur la table :data:`DOMAINES` : ajouter une grandeur au
+    modèle sans lui donner de domaine est la seule façon de lui échapper, et
+    c'est visible à la lecture de la table.
+    """
+    messages = _hors_domaine(projet, (
+        "surface_reference_m2", "k_infiltration_ms", "coef_securite_infiltration",
+        "surface_infiltration_m2", "debit_ajutage_ls", "debit_ajutage_specifique_ls_ha",
+        "temps_vidange_max_h", "hauteur_charge_m", "coef_debit_orifice"))
+    messages += _hors_domaine(projet.bassin, (
+        "volume_total_m3", "volume_sous_ajutage_m3", "surface_dispersion_m2",
+        "debit_ajutage_ls", "k_infiltration_ms"), "de l'ouvrage encodé")
+    if projet.amont.actif:
+        messages += _hors_domaine(projet.amont, (
+            "surface_bv_m2", "coef_ruissellement", "debit_ajutage_ls",
+            "surface_dispersion_m2", "k_infiltration_ms", "volume_temporisation_m3"),
+            "du bassin amont")
+    for surface in projet.surfaces:
+        for message in _hors_domaine(surface, ("aire_m2", "coefficient"),
+                                     f"« {surface.libelle} »"):
+            messages.append(message)
+    return messages
 
 
 @dataclass
