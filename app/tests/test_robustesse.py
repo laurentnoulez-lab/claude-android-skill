@@ -216,6 +216,142 @@ class TestPluieHorsDonnees(unittest.TestCase):
             rainfall.SourcePluie("63013", 1000)
 
 
+#: Fichiers de projet abîmés : (libellé, façon de l'abîmer).
+def fichiers_abimes():
+    def poser(chemin, valeur):
+        def abimer(data):
+            cible = data
+            for pas in chemin[:-1]:
+                cible = cible[pas]
+            cible[chemin[-1]] = valeur
+        return abimer
+
+    yield "volume = texte", poser(("systeme", "ouvrages", 0, "etude", "bassin",
+                                   "volume_total_m3"), "beaucoup")
+    yield "volume = null", poser(("systeme", "ouvrages", 0, "etude", "bassin",
+                                  "volume_total_m3"), None)
+    yield "volume = liste", poser(("systeme", "ouvrages", 0, "etude", "bassin",
+                                   "volume_total_m3"), [1, 2])
+    yield "coefficient = texte", poser(("systeme", "bassins_versants", 0, "surfaces", 0,
+                                        "coefficient"), "un")
+    yield "nom d'ouvrage = nombre", poser(("systeme", "ouvrages", 0, "nom"), 12345)
+    yield "aval inconnu", poser(("systeme", "ouvrages", 0, "aval_id"), "fantome")
+    yield "ouvrage aval de lui-même", poser(("systeme", "ouvrages", 0, "aval_id"), "bo1")
+    yield "versant raccordé à rien", poser(("systeme", "bassins_versants", 0,
+                                            "bassin_id"), "nulle-part")
+    yield "scénario inconnu", poser(("systeme", "ouvrages", 0, "scenario"), "magique")
+    yield "ouvrage courant inconnu", poser(("systeme", "ouvrage_courant"), "fantome")
+    yield "champ inattendu", poser(("systeme", "chose_inconnue"), 42)
+    yield "aucun ouvrage", poser(("systeme", "ouvrages"), [])
+
+    def boucle(data):
+        data["systeme"]["ouvrages"][0]["aval_id"] = "bo2"
+        data["systeme"]["ouvrages"][1]["aval_id"] = "bo1"
+    yield "raccordement circulaire", boucle
+
+    def memes_identifiants(data):
+        data["systeme"]["ouvrages"][1]["id"] = data["systeme"]["ouvrages"][0]["id"]
+    yield "deux ouvrages, un identifiant", memes_identifiants
+
+    def sans_bassin(data):
+        data["systeme"]["ouvrages"][0]["etude"].pop("bassin")
+    yield "ouvrage sans bassin encodé", sans_bassin
+
+    def sans_etude(data):
+        data["systeme"]["ouvrages"][0].pop("etude")
+    yield "ouvrage sans étude", sans_etude
+
+
+def projet_sur_disque():
+    """Le système sain, tel qu'il s'enregistre."""
+    import json
+
+    from bassin.ui.state import EtatApplication
+
+    etat = EtatApplication()
+    etat.systeme = systeme_sain()
+    etat.systeme.ouvrages.append(mod_reseau.Ouvrage(id="bo2", nom="Aval", aval_id=""))
+    etat.systeme.ouvrages[0].id = "bo1"
+    etat.systeme.ouvrages[0].aval_id = "bo2"
+    etat.systeme.bassins_versants[0].bassin_id = "bo1"
+    etat.systeme.ouvrage_courant = "bo1"
+    etat.systeme.synchroniser()
+    return json.loads(etat.to_json())
+
+
+class TestFichierAbime(unittest.TestCase):
+    """Un fichier de projet retouché, tronqué ou écrit par une autre version.
+
+    Rien n'oblige un fichier ``.json`` à rester cohérent entre deux sessions :
+    il s'édite, il se copie, il se génère. Chacun de ces cas doit **soit** se
+    charger en disant ce qui cloche, **soit** être refusé par un message clair.
+    Une exception nue, elle, laisse l'utilisateur devant un écran vide.
+    """
+
+    def test_aucun_fichier_abime_ne_fait_tomber_l_application(self):
+        import copy
+        import json
+
+        from bassin.reports import docx_report, pdf_report, xlsx_report
+        from bassin.ui.state import EtatApplication
+
+        sain = projet_sur_disque()
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_fichier_")
+        try:
+            for libelle, abimer in fichiers_abimes():
+                with self.subTest(fichier=libelle):
+                    data = copy.deepcopy(sain)
+                    abimer(data)
+                    etat = EtatApplication()
+                    try:
+                        etat.importer_texte(json.dumps(data))
+                    except ValueError:
+                        continue          # refus net, avec un message : c'est correct
+                    systeme = etat.systeme
+                    systeme.anomalies()
+                    mod_reseau.dimensionner(systeme, avec_minima=False)
+                    mod_reseau.simuler_evenement_critique(systeme)
+                    dossier = mod_dossier.construire(systeme.courant.etude, systeme=systeme)
+                    for ecrivain, ext in ((pdf_report, "pdf"), (docx_report, "docx"),
+                                          (xlsx_report, "xlsx")):
+                        ecrivain.ecrire(dossier, os.path.join(repertoire, f"essai.{ext}"))
+                    textes_affiches(systeme)
+        finally:
+            import shutil
+            shutil.rmtree(repertoire, ignore_errors=True)
+
+    def test_un_reseau_abime_dit_ce_qui_cloche(self):
+        """Les défauts de construction se nomment, ils ne se devinent pas."""
+        import copy
+        import json
+
+        from bassin.ui.state import EtatApplication
+
+        sain = projet_sur_disque()
+        attendus = {
+            "aval inconnu": "se déverse dans un bassin qui n'existe plus",
+            "ouvrage aval de lui-même": "se déverse dans lui-même",
+            "versant raccordé à rien": "n'est raccordé à aucun bassin d'orage",
+            "raccordement circulaire": "Raccordement circulaire",
+            "deux ouvrages, un identifiant": "portent l'identifiant",
+            "scénario inconnu": "inconnu, le scénario mixte a été retenu",
+            "volume = null": "valeur non numérique",
+            "volume = texte": "valeur non numérique",
+            "coefficient = texte": "valeur non numérique",
+        }
+        for libelle, abimer in fichiers_abimes():
+            if libelle not in attendus:
+                continue
+            with self.subTest(fichier=libelle):
+                data = copy.deepcopy(sain)
+                abimer(data)
+                etat = EtatApplication()
+                etat.importer_texte(json.dumps(data))
+                anomalies = etat.systeme.anomalies()
+                self.assertTrue(any(attendus[libelle] in a for a in anomalies),
+                                f"défaut passé sous silence ; anomalies = {anomalies}")
+
+
 class TestTraceDefensif(unittest.TestCase):
     """Le tracé est la dernière barrière : il ne tombe pas, même mal nourri.
 

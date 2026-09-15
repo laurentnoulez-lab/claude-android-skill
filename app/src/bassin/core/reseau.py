@@ -40,6 +40,7 @@ from . import hydro, rainfall, simulation
 from .model import (
     assainir_valeurs,
     Bassin,
+    LIBELLES_SCENARIOS,
     BassinAmont,
     COEF_SECURITE_INFILTRATION,
     Projet,
@@ -48,6 +49,7 @@ from .model import (
     SCENARIO_TEMPORISATION,
     SurfaceIncidente,
     TEMPS_VIDANGE_LIMITE_H,
+    texte_si_besoin,
     debit_infiltration_ls,
 )
 from .simulation import Apport
@@ -285,6 +287,18 @@ class Systeme:
             if n > 1 and nom:
                 messages.append(f"{n} bassins d'orage portent le nom « {nom} » : "
                                 "renommez-les pour pouvoir les distinguer.")
+        vus: Dict[str, int] = {}
+        for o in self.ouvrages:
+            vus[o.id] = vus.get(o.id, 0) + 1
+        for identifiant, combien in vus.items():
+            if combien > 1:
+                # Deux ouvrages sous le même identifiant : tous les
+                # raccordements qui le citent en désignent un au hasard. Sans
+                # ce message, le réseau se décrivait « déversé dans lui-même ».
+                messages.append(
+                    f"{combien} bassins d'orage portent l'identifiant « {identifiant} » : "
+                    "les raccordements qui le citent sont ambigus. Le fichier du projet "
+                    "est à reprendre.")
         for o in self.ouvrages:
             if o.aval_id and self.ouvrage(o.aval_id) is None:
                 messages.append(f"« {o.nom} » se déverse dans un bassin qui n'existe plus.")
@@ -394,8 +408,15 @@ class Systeme:
         """
         retenues: Dict[str, Tuple[object, str]] = getattr(self, "_substitutions_pluie", {})
         # Une substitution que l'utilisateur a depuis remplacée n'a plus à être dite.
+        def tient_encore(champ: str, valeur) -> bool:
+            """La substitution vaut-elle encore, ou l'utilisateur a-t-il choisi ?"""
+            if champ.startswith("scenario:"):
+                ouvrage = self.ouvrage(valeur[0])
+                return ouvrage is not None and ouvrage.scenario == valeur[1]
+            return getattr(self, champ) == valeur
+
         retenues = {champ: (valeur, message) for champ, (valeur, message) in retenues.items()
-                    if getattr(self, champ) == valeur}
+                    if tient_encore(champ, valeur)}
 
         if (not rainfall.a_donnees_montana(self.commune_ins)
                 and not rainfall.a_donnees_qdf(self.commune_ins)):
@@ -421,6 +442,13 @@ class Systeme:
             retenues["source_pluie"] = (self.source_pluie, (
                 f"Source de pluie « {ancienne} » inconnue : les formules de Montana du GTI "
                 "ont été retenues."))
+        for ouvrage in self.ouvrages:
+            if ouvrage.scenario not in LIBELLES_SCENARIOS:
+                ancienne = ouvrage.scenario
+                ouvrage.scenario = SCENARIO_MIXTE
+                retenues[f"scenario:{ouvrage.id}"] = ((ouvrage.id, ouvrage.scenario), (
+                    f"« {ouvrage.nom} » : scénario « {ancienne} » inconnu, le scénario "
+                    "mixte a été retenu. Vérifiez le dispositif d'évacuation."))
         self._substitutions_pluie = retenues
         return [message for _valeur, message in retenues.values()]
 
@@ -511,10 +539,15 @@ class Systeme:
 
 
 def _connus(classe, data: Dict) -> Dict:
-    """Filtre un dictionnaire enregistré sur les champs actuels d'une dataclasse."""
-    champs = set(classe.__dataclass_fields__)
-    return {k: v for k, v in dict(data).items() if k in champs and k != "surfaces"
-            and k != "etude"}
+    """Filtre un dictionnaire enregistré sur les champs actuels d'une dataclasse.
+
+    Les champs de texte sont ramenés à du texte : un nom d'ouvrage arrivé sous
+    forme de nombre faisait tomber l'application bien plus loin, au premier
+    ``.strip()``.
+    """
+    champs = classe.__dataclass_fields__
+    return {k: texte_si_besoin(champs[k], v) for k, v in dict(data).items()
+            if k in champs and k not in ("surfaces", "etude")}
 
 
 def _assainir_versant(versant: BassinVersant) -> List[str]:

@@ -220,17 +220,26 @@ class Bassin:
 
 #: Objets porteurs de grandeurs, et les champs à surveiller sur chacun.
 def _porteurs(projet):
+    """(objet, grandeurs surveillées, grandeurs qui ont le droit d'être vides).
+
+    Une grandeur « vide » a un sens pour deux d'entre elles seulement : le sol
+    propre du bassin construit (vide = on reprend celui du dimensionnement) et
+    l'ajutage spécifique (vide = c'est le débit absolu qui fait foi). Partout
+    ailleurs, un ``null`` dans le fichier est une donnée perdue, pas un choix.
+    """
     yield projet, ("surface_reference_m2", "k_infiltration_ms",
                    "coef_securite_infiltration", "surface_infiltration_m2",
                    "debit_ajutage_ls", "debit_ajutage_specifique_ls_ha",
-                   "temps_vidange_max_h", "hauteur_charge_m", "coef_debit_orifice")
+                   "temps_vidange_max_h", "hauteur_charge_m",
+                   "coef_debit_orifice"), ("debit_ajutage_specifique_ls_ha",)
     yield projet.bassin, ("volume_total_m3", "volume_sous_ajutage_m3",
-                          "surface_dispersion_m2", "debit_ajutage_ls", "k_infiltration_ms")
+                          "surface_dispersion_m2", "debit_ajutage_ls",
+                          "k_infiltration_ms"), ("k_infiltration_ms",)
     yield projet.amont, ("surface_bv_m2", "coef_ruissellement", "debit_ajutage_ls",
                          "surface_dispersion_m2", "k_infiltration_ms",
-                         "volume_temporisation_m3")
+                         "volume_temporisation_m3"), ()
     for surface in projet.surfaces:
-        yield surface, ("aire_m2", "coefficient")
+        yield surface, ("aire_m2", "coefficient"), ()
 
 
 def assainir_valeurs(projet) -> List[str]:
@@ -248,21 +257,23 @@ def assainir_valeurs(projet) -> List[str]:
     le revoir lui-même et :func:`valeurs_hors_domaine` le lui dit.
     """
     corrections: List[str] = []
-    for porteur, champs in _porteurs(projet):
-        corrections += _assainir(porteur, champs)
+    for porteur, champs, optionnels in _porteurs(projet):
+        corrections += _assainir(porteur, champs, optionnels)
     return corrections
 
 
-def _assainir(porteur, champs: Tuple[str, ...]) -> List[str]:
+def _assainir(porteur, champs: Tuple[str, ...], optionnels: Tuple[str, ...] = ()) -> List[str]:
     """Ramène à sa borne basse toute grandeur qui n'est pas un nombre."""
     corrections: List[str] = []
     for champ in champs:
         domaine = DOMAINES.get(champ)
-        valeur = getattr(porteur, champ, None)
-        if domaine is None or valeur is None:
+        if domaine is None:
             continue
+        valeur = getattr(porteur, champ, None)
+        if valeur is None and champ in optionnels:
+            continue                       # vide a un sens pour cette grandeur-là
         try:
-            brut = float(valeur)
+            brut = float(valeur)           # ``None`` lève ici, et c'est voulu
         except (TypeError, ValueError):
             brut = float("nan")
         if math.isfinite(brut):
@@ -534,11 +545,11 @@ class Projet:
     @classmethod
     def from_dict(cls, data: Dict) -> "Projet":
         data = dict(data)
-        surfaces = [SurfaceIncidente(**s) for s in data.pop("surfaces", [])]
+        surfaces = [SurfaceIncidente(**_champs_connus(SurfaceIncidente, s))
+                    for s in data.pop("surfaces", [])]
         bassin = Bassin(**_champs_connus(Bassin, data.pop("bassin", {})))
         amont = BassinAmont(**_champs_connus(BassinAmont, data.pop("amont", {})))
-        champs = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
-        propre = {k: v for k, v in data.items() if k in champs}
+        propre = _champs_connus(cls, data)
         return cls(surfaces=surfaces, bassin=bassin, amont=amont, **propre)
 
 
@@ -546,10 +557,20 @@ def _champs_connus(classe, data: Dict) -> Dict:
     """Filtre un dictionnaire enregistré sur les champs actuels d'une dataclasse.
 
     Un projet enregistré par une version antérieure ne connaît pas les champs
-    ajoutés depuis : il doit pouvoir se recharger malgré tout.
+    ajoutés depuis : il doit pouvoir se recharger malgré tout. Les champs de
+    texte sont ramenés à du texte : un nom d'ouvrage arrivé sous forme de nombre
+    faisait tomber l'application au premier ``.strip()``, bien loin du
+    chargement — et le message n'aurait rien appris à personne.
     """
-    champs = set(classe.__dataclass_fields__)
-    return {k: v for k, v in dict(data).items() if k in champs}
+    champs = classe.__dataclass_fields__
+    return {k: texte_si_besoin(champs[k], v) for k, v in dict(data).items() if k in champs}
+
+
+def texte_si_besoin(champ, valeur):
+    """Ramène à du texte ce qui est déclaré comme tel dans le modèle."""
+    if str(champ.type).strip("'\"") != "str" or isinstance(valeur, str):
+        return valeur
+    return "" if valeur is None else str(valeur)
 
 
 def debit_infiltration_ls(surface_m2: float, k_ms: float, coef_securite: float = COEF_SECURITE_INFILTRATION) -> float:
