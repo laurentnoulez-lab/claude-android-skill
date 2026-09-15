@@ -254,3 +254,78 @@ class TestClasseurGTI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRegleDesDixPourCent(unittest.TestCase):
+
+    """`Calcul!H4` : au-delà de 10 % de la surface de référence, le GTI considère
+    la surface infiltrante comme un maximum raisonnable. La constante était
+    vérifiée, son effet ne l'était pas."""
+
+    def _projet(self, s_inf: float, k: float):
+        from bassin.core.model import Projet, SurfaceIncidente
+
+        p = Projet(commune_ins="62063", commune_nom="Liège", periode_retour=25,
+                   surfaces=[SurfaceIncidente("Toitures", 1.0, 6000.0)],
+                   surface_reference_m2=6000.0)
+        p.k_infiltration_ms = k
+        p.surface_infiltration_m2 = s_inf
+        p.debit_ajutage_ls = 0.0
+        return p
+
+    def test_sous_dix_pour_cent_on_demande_d_agrandir(self):
+        res = hydro.dimensionner(self._projet(150.0, 1e-5), "dispersion")
+        alertes = " ".join(res.alertes)
+        self.assertIn("supérieur au maximum admis", alertes)
+        self.assertIn("surface d'infiltration doit être augmentée", alertes)
+        self.assertIn("possibilités techniques", alertes)
+        self.assertFalse(any("10 %" in m for m in res.messages))
+
+    def test_a_dix_pour_cent_le_GTI_admet_le_maximum(self):
+        """Sans quoi l'application demanderait d'agrandir sans fin."""
+        res = hydro.dimensionner(self._projet(600.0, 1e-7), "dispersion")
+        self.assertTrue(any("10 %" in m for m in res.messages),
+                        "la règle des 10 % ne se manifeste pas")
+        self.assertTrue(any("maximum raisonnable" in m for m in res.messages))
+
+
+class TestMillesimeDesDonnees(unittest.TestCase):
+
+    """Le millésime annoncé doit correspondre aux données embarquées.
+
+    La fiche GTI demande de vérifier qu'on travaille sur la dernière version
+    parue ; un dossier signé doit donc dire de quelle édition il sort. Annoncer
+    un millésime qui ne serait plus celui du fichier serait pire que de n'en
+    annoncer aucun.
+    """
+
+    #: Relevés dans GTI_infiltration_retention_calcul_2023_11 (T = 25 ans).
+    TEMOINS = {
+        "62063": (295.0, 0.4604, 797.9, 0.7695, 136.7, 0.5667),   # Liège
+        "81001": (298.7, 0.4403, 832.9, 0.7588, 109.5, 0.5256),   # Arlon
+    }
+
+    def test_le_millesime_est_renseigne_et_bien_forme(self):
+        self.assertRegex(rainfall.MILLESIME_GTI, r"^\d{4}-\d{2}$")
+
+    def test_les_coefficients_sont_ceux_de_l_edition_annoncee(self):
+        """C'est ce qui rattache le millésime aux données, et non à une croyance."""
+        self.assertEqual(rainfall.MILLESIME_GTI, "2023-11",
+                         "millésime changé : mettez à jour les témoins ci-dessus")
+        for ins, attendus in self.TEMOINS.items():
+            with self.subTest(commune=ins):
+                for obtenu, attendu in zip(rainfall.montana_coeffs(ins, 25), attendus):
+                    self.assertAlmostEqual(obtenu, attendu, places=4)
+
+    def test_le_denombrement_annonce_est_exact(self):
+        """Le diagnostic annonçait 574 communes sans dire ce qu'elles portent."""
+        communes = rainfall.communes()
+        self.assertEqual(len(communes), 574)
+        self.assertEqual(sum(1 for c in communes if c.a_montana), 563)
+        self.assertEqual(sum(1 for c in communes if c.a_qdf), 262)
+        # Les 11 communes sans Montana doivent avoir une table QDF, sinon elles
+        # n'auraient aucune pluie.
+        for c in communes:
+            if not c.a_montana:
+                with self.subTest(commune=c.nom):
+                    self.assertTrue(c.a_qdf)

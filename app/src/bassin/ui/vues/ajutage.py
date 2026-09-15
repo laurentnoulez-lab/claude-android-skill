@@ -9,6 +9,7 @@ import flet as ft
 from ...core import orifice
 from ...reports import charts
 from .. import graphiques, theme
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
@@ -57,7 +58,8 @@ class VueAjutage(Vue):
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge h", p.hauteur_charge_m, maj_charge, "m",
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                                   col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="hauteur_charge_m"),
                 theme.selecteur("Coefficient de débit Cd", str(p.coef_debit_orifice),
                                 [(str(v), theme.fr(f"{v:.2f} — {lib}")) for lib, v in orifice.COEFFICIENTS_DEBIT],
                                 maj_cd, col={"xs": 12, "md": 6}),
@@ -157,6 +159,7 @@ class VueAjutage(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Données de l'orifice",
                 ft.Column(

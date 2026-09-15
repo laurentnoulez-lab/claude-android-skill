@@ -27,6 +27,9 @@ jobs:
         working-directory: app
         env:
           HYDROBASSIN_TEST_FORMULES: "1"
+          # Campagne courte contre le modèle de référence du réseau : assez
+          # rapide pour tourner à chaque poussée, assez large pour mordre.
+          HYDROBASSIN_CAMPAGNE_RESEAU: "40"
         run: python -m unittest discover -s tests -v
 
       - name: Génération des rapports de démonstration

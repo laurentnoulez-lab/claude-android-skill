@@ -16,7 +16,7 @@ from ...core.model import (
 )
 from ...reports.dossier import ORDRE_SCENARIOS
 from .. import graphiques, theme
-from ..composants import panneau_amont
+from ..composants import barre_ouvrage
 from .base import Vue
 
 DESCRIPTIONS = {
@@ -45,6 +45,44 @@ SOLS = (
 
 MM_H = 3.6e6  # 1 m/s = 3 600 000 mm/h
 
+#: Au-delà, la fiche GTI affiche « /!\ Valeur à vérifier » ('Infiltration seule'!E30).
+K_A_VERIFIER_MS = 1e-4
+
+#: Sentinelle du sélecteur : un K saisi à la main ne correspond à aucun sol listé.
+SOL_PERSONNALISE = "__personnalise__"
+
+
+def _tuile_minimum(valeur, decimales, res, projet, libelle, unite, couleur, icone,
+                   autre_organe: str) -> ft.Control:
+    """Tuile d'un minimum, qui dit pourquoi il vaut zéro.
+
+    Un « 0,0 m² » sous un scénario « infiltration + orifice » se lit comme
+    « pas d'infiltration nécessaire » alors qu'il signifie « l'autre organe
+    vidange déjà à lui seul dans le délai ». C'est exact, et trompeur.
+    """
+    if valeur is None:
+        return theme.tuile("—", libelle, unite, couleur, icone,
+                           "sans objet pour ce scénario")
+    if valeur <= 0:
+        return theme.tuile("—", libelle, unite, couleur, icone,
+                           theme.fr(f"{autre_organe} seul vidange en "
+                                    f"{res.temps_vidange_hm}"))
+    return theme.tuile(theme.fr(f"{valeur:.{decimales}f}"), libelle, unite, couleur, icone,
+                       f"minimum pour vidanger en {projet.temps_vidange_max_h:.0f} h")
+
+
+def _sol_de(k_ms: float) -> str:
+    """Clé du sol correspondant à K, ou la sentinelle « valeur personnalisée ».
+
+    Le sélecteur affichait un sol dont le K n'était plus celui du projet : le
+    dossier aurait annoncé une nature de sol incompatible avec la perméabilité
+    utilisée. Quand K ne correspond à aucun sol listé, il faut le dire.
+    """
+    for cle, _, valeur in SOLS:
+        if abs(valeur - k_ms) < valeur * 0.01:
+            return cle
+    return SOL_PERSONNALISE
+
 
 class VueDimensionnement(Vue):
     titre = "Dimensionnement"
@@ -62,8 +100,15 @@ class VueDimensionnement(Vue):
             return _f
 
         def maj_k(v: float) -> None:
+            # Redessiner, et pas seulement recalculer : le libellé « Nature du
+            # sol » et l'avertissement sur K dépendent de la valeur saisie. Sans
+            # cela le sélecteur restait sur le sol précédent, et le dossier
+            # aurait annoncé une nature de sol incompatible avec le K utilisé.
+            ancien = p.k_infiltration_ms
             p.k_infiltration_ms = max(v, 0.0)
             self.etat.invalider()
+            if _sol_de(ancien) != _sol_de(p.k_infiltration_ms):
+                self.rafraichir()
 
         def maj_seuil(v: float) -> None:
             """Volume situé sous l'axe de l'ajutage (scénario à orifice surélevé)."""
@@ -81,6 +126,8 @@ class VueDimensionnement(Vue):
             self.etat.invalider()
 
         def choisir_sol(e: ft.ControlEvent) -> None:
+            if e.control.value == SOL_PERSONNALISE:
+                return  # entrée d'état, pas un choix : K se saisit dans son champ
             for cle, _, valeur in SOLS:
                 if cle == e.control.value:
                     p.k_infiltration_ms = valeur
@@ -94,7 +141,7 @@ class VueDimensionnement(Vue):
             "Vitesse d'infiltration K", "m/s", p.k_infiltration_ms,
             "soit", "mm/h", MM_H, maj_k, on_valide=self.maj_resultats,
             aide_a="essai in situ · 1e-5 ou 0,00001",
-            aide_b="équivalent, modifiable aussi",
+            aide_b="équivalent, modifiable aussi", domaine="k_infiltration_ms",
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
@@ -110,45 +157,54 @@ class VueDimensionnement(Vue):
             aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés"
                    f" · maximum GTI : 5 l/s/ha",
             indisponible_b="encodez d'abord les surfaces incidentes",
-            decimales_a=3, decimales_b=2,
+            decimales_a=3, decimales_b=2, domaine="debit_ajutage_ls",
             col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3},
         )
 
+        # L'alerte sur K figure déjà dans les résultats, mais un dossier se
+        # remplit champ par champ : elle doit se lire là où la valeur se tape.
+        avis: List[ft.Control] = []
+        if p.k_infiltration_ms > K_A_VERIFIER_MS:
+            avis.append(theme.message(
+                f"K = {p.k_infiltration_ms:.0e} m/s dépasse "
+                f"{K_A_VERIFIER_MS:.0e} m/s : valeur à vérifier, à justifier par un essai in "
+                "situ (le GTI signale ce seuil).", "alerte"))
+        elif p.k_infiltration_ms <= 0 and p.surface_infiltration_m2 > 0:
+            avis.append(theme.message(
+                "K nul : la surface d'infiltration encodée n'infiltre rien. Encodez la "
+                "perméabilité du fond, ou ramenez la surface d'infiltration à zéro.", "alerte"))
+
+        sol = _sol_de(p.k_infiltration_ms)
+        options = [(c, t) for c, t, _ in SOLS]
+        if sol == SOL_PERSONNALISE:
+            options.append((SOL_PERSONNALISE, "Valeur personnalisée (essai in situ)"))
+
         return ft.Column(
-            [
+            avis
+            + [
                 ft.ResponsiveRow(
                     [
                         theme.selecteur(
                             "Nature du sol (valeur indicative)",
-                            next((c for c, _, v in SOLS
-                                  if abs(v - p.k_infiltration_ms) < v * 0.01), None),
-                            [(c, t) for c, t, _ in SOLS], choisir_sol,
+                            sol, options, choisir_sol,
                             col={"xs": 12, "md": 6},
                         ),
                         champs_k[0],
                         champs_k[1],
-                        theme.champ_nombre("Coefficient de sécurité sur K",
-                                           p.coef_securite_infiltration,
-                                           maj("coef_securite_infiltration"), "—", "GTI : 2",
-                                           on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
                         theme.champ_nombre("Surface d'infiltration", p.surface_infiltration_m2,
                                            maj("surface_infiltration_m2"), "m²",
                                            "fond du dispositif", on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
+                                           col={"xs": 12, "sm": 6, "md": 3},
+                                           domaine="surface_infiltration_m2"),
                         champs_ajutage[0],
                         champs_ajutage[1],
                         theme.champ_nombre(
                             "Volume sous l'ajutage", p.bassin.volume_sous_ajutage_m3,
                             maj_seuil, "m³",
-                            "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin",
+                            "orifice surélevé · scénario 4 · partagé avec l'onglet Bassin réel",
                             on_valide=self.maj_resultats,
-                            col={"xs": 12, "sm": 6, "md": 3}),
-                        theme.champ_nombre("Temps de vidange maximum", p.temps_vidange_max_h,
-                                           maj("temps_vidange_max_h"), "h",
-                                           "après la pluie · GTI : 48 h",
-                                           on_valide=self.maj_resultats,
-                                           col={"xs": 12, "sm": 6, "md": 3}),
+                            col={"xs": 12, "sm": 6, "md": 3},
+                            domaine="volume_sous_ajutage_m3"),
                     ],
                     spacing=12,
                     run_spacing=12,
@@ -170,7 +226,7 @@ class VueDimensionnement(Vue):
         details = [
             ("Durée critique", res.duree_critique_hm),
             ("Pluie", f"{res.hauteur_pluie_mm:.1f} mm"),
-            ("Intensité", f"{res.intensite_ls_ha:.0f} l/s/ha"),
+            ("Intensité", theme.fr(f"{res.intensite_ls_ha:.1f} l/s/ha")),
             ("Débit entrant", f"{res.debit_entrant_ls:.1f} l/s"),
             ("Débit de sortie", f"{res.debit_sortant_ls:.2f} l/s"),
             ("Vidange après la pluie", res.temps_vidange_hm),
@@ -274,15 +330,15 @@ class VueDimensionnement(Vue):
                                          "Durée de pluie critique", "",
                                          theme.ARDOISE, ft.Icons.TIMER),
                              col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(
-                    "—" if res.surface_infiltration_min_m2 is None else f"{res.surface_infiltration_min_m2:.1f}",
+                ft.Container(_tuile_minimum(
+                    res.surface_infiltration_min_m2, 1, res, p,
                     "Surface d'infiltration minimale", "m²", theme.VERT, ft.Icons.GRASS,
-                    f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
+                    "l'ajutage"),
                     col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(
-                    "—" if res.debit_ajutage_min_ls is None else f"{res.debit_ajutage_min_ls:.3f}",
+                ft.Container(_tuile_minimum(
+                    res.debit_ajutage_min_ls, 3, res, p,
                     "Débit d'ajutage minimal", "l/s", theme.ORANGE, ft.Icons.TUNE,
-                    f"pour vidanger en {p.temps_vidange_max_h:.0f} h"),
+                    "l'infiltration"),
                     col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12,
@@ -297,18 +353,19 @@ class VueDimensionnement(Vue):
 
         alertes = [theme.message(a, "alerte") for a in res.alertes]
         alertes += [theme.message(m, "info") for m in res.messages]
-        if res.amont_pris_en_compte:
+        amonts = self.etat.systeme.amonts_directs(self.etat.ouvrage.id)
+        if res.amont_pris_en_compte and amonts:
             # Sans le dire, l'utilisateur ne peut pas savoir que ces volumes
-            # comprennent l'apport d'un ouvrage déclaré plus bas.
-            amont = p.amont
-            res_amont = hydro.dimensionner_amont(p)
+            # comprennent l'apport d'ouvrages déclarés dans l'onglet Réseau.
+            noms = ", ".join(f"« {o.nom} »" for o in amonts)
+            restitue = sum(o.debit_sortant_ls() for o in amonts)
             alertes.insert(0, theme.message(
-                f"Ces volumes comprennent l'apport du bassin d'orage amont : "
-                f"{theme.nombre(amont.surface_bv_m2, 0)} m² de bassin versant à "
-                f"{theme.nombre(amont.coef_ruissellement, 2)}, restituant "
-                f"{theme.nombre(res_amont.debit_sortant_ls, 3)} l/s. Son apport varie dans le "
-                f"temps et se poursuit après l'averse : le volume est obtenu par intégration "
-                f"exacte, et non par la formule fermée.", "info"))
+                theme.fr(
+                    f"Ces volumes comprennent l'apport des bassins d'orage amont ({noms}) : "
+                    f"{self.etat.systeme.aire_ponderee_amont_m2(self.etat.ouvrage.id):.0f} m² "
+                    f"actifs en amont, restituant jusqu'à {restitue:.3f} l/s au fil de l'eau. "
+                    f"Cet apport varie dans le temps et se poursuit après l'averse : le volume "
+                    f"est obtenu par intégration exacte, et non par la formule fermée."), "info"))
 
         return [
             info_debits,
@@ -337,8 +394,9 @@ class VueDimensionnement(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
-                "Sol, exutoire et contraintes",
+                "Sol et exutoire de cet ouvrage",
                 ft.Column(
                     [
                         self._formulaire(),
@@ -350,9 +408,6 @@ class VueDimensionnement(Vue):
                 ft.Icons.TERRAIN,
                 "Q_infiltration = 1000 × S × K / coefficient de sécurité",
             ),
-            theme.section(
-                "Bassin d'orage amont", panneau_amont(self), ft.Icons.MERGE,
-                "Son apport entre dans le volume à mettre en œuvre ci-dessous"),
             self.zone,
         ]
 

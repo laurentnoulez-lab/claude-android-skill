@@ -64,6 +64,19 @@ def _data_path() -> str:
 
 
 #: Renseigne d'où proviennent effectivement les données (diagnostic).
+#: Édition de la fiche GTI dont sont extraites les pluies embarquées.
+#:
+#: La fiche officielle demande de cocher « J'ai vérifié que la présente fiche
+#: correspond bien à la dernière version disponible » : un dossier doit donc
+#: pouvoir dire sur quelle édition il s'appuie. Le millésime est établi par
+#: l'accord exact des coefficients de Montana embarqués avec ceux de
+#: ``GTI_infiltration_retention_calcul_2023_11`` (un test le vérifie sur Liège
+#: et Arlon). **À mettre à jour en même temps que le fichier de données.**
+MILLESIME_GTI = "2023-11"
+
+#: Où vérifier qu'une édition plus récente n'est pas parue.
+SOURCE_GTI_URL = "https://inondations.wallonie.be"
+
 SOURCE_DONNEES = {"origine": "inconnue"}
 
 
@@ -165,6 +178,29 @@ def commune_par_ins(ins: str) -> Optional[Commune]:
 # --------------------------------------------------------------------------
 # Montana
 # --------------------------------------------------------------------------
+class PluieIndisponible(LookupError):
+    """La pluie de projet demandée ne figure pas dans les données du GTI.
+
+    Levée plutôt que laissée filer en ``KeyError`` : un projet relu depuis un
+    fichier retouché à la main peut nommer une commune inconnue ou une
+    récurrence hors table, et l'application doit le dire au lieu de s'arrêter.
+    :meth:`Systeme.normaliser_pluie` répare en amont, si bien que cette
+    exception ne remonte qu'à un appel direct du moteur.
+    """
+
+
+def defaut_de_pluie(ins: str, periode_retour: int) -> Optional[str]:
+    """Ce qui empêche d'établir la pluie de projet, ou ``None`` si tout y est."""
+    if not a_donnees_montana(ins) and not a_donnees_qdf(ins):
+        return (f"Aucune donnée de pluie du GTI pour la commune INS {ins or '(vide)'} : "
+                "ni coefficients de Montana, ni tables QDF.")
+    if int(periode_retour) not in RETURN_PERIODS:
+        disponibles = ", ".join(str(t) for t in RETURN_PERIODS)
+        return (f"Période de retour de {periode_retour} ans absente du GTI : "
+                f"les récurrences tabulées sont {disponibles} ans.")
+    return None
+
+
 def montana_coeffs(ins: str, periode_retour: int) -> Tuple[float, float, float, float, float, float]:
     """(a1, b1, a2, b2, a3, b3) pour une commune et une période de retour."""
     try:
@@ -243,6 +279,9 @@ class SourcePluie:
     """Fournit la hauteur de pluie [mm] pour une commune / récurrence / durée."""
 
     def __init__(self, ins: str, periode_retour: int, source: str = SOURCE_MONTANA):
+        defaut = defaut_de_pluie(ins, periode_retour)
+        if defaut is not None:
+            raise PluieIndisponible(defaut)
         if source == SOURCE_QDF and not a_donnees_qdf(ins):
             source = SOURCE_MONTANA
         if source == SOURCE_MONTANA and not a_donnees_montana(ins):
@@ -289,6 +328,25 @@ class SourcePluie:
     @property
     def libelle_source(self) -> str:
         return "Montana (formule continue)" if self.source == SOURCE_MONTANA else "QDF (valeurs tabulées)"
+
+    @property
+    def titre_tableau_hauteurs(self) -> str:
+        """Intitulé d'un tableau de hauteurs, qui doit nommer sa vraie source.
+
+        Un tableau de valeurs issues de Montana présenté sous le titre « Tables
+        QDF » est indéfendable dans une note de calcul : à 6 h et T = 25 ans,
+        l'écart atteint 5 % sur Liège. Les deux sources ne sont pas
+        interchangeables et le titre doit dire laquelle a servi.
+        """
+        if self.source == SOURCE_MONTANA:
+            return "Hauteurs de pluie — formule de Montana"
+        return "Tables QDF (IRM) — valeurs tabulées"
+
+    @property
+    def titre_tableau_volumes(self) -> str:
+        """Idem pour le tableau des volumes requis par l'ouvrage."""
+        origine = "Montana" if self.source == SOURCE_MONTANA else "tables QDF"
+        return f"Volumes requis — source : {origine}"
 
 
 def table_qdf_mm(ins: str, source: str = SOURCE_QDF) -> List[List[Optional[float]]]:
