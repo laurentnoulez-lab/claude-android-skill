@@ -5,7 +5,12 @@ on:
   push:
     branches: ["claude/**"]
     paths:
-      - "app/src/bassin/ui/**"
+      # Le rendu ne dépend pas que des vues : un message d'alerte, un format de
+      # nombre ou une durée viennent du moteur et des rapports, et se lisent à
+      # l'écran. Restreint aux seules vues, ce filet laissait passer sans
+      # capture des changements qui modifient bel et bien ce que l'utilisateur
+      # voit — et la relecture du rendu réel, à chaque tour, cessait en silence.
+      - "app/src/bassin/**"
       - "app/src/main.py"
       - "app/tools/captures_ui.py"
       - "app/tools/controle_captures.py"
