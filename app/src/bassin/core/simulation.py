@@ -581,7 +581,12 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     # ne sont pas ceux de l'ouvrage encodé.
     q_inf, q_aj = debits if debits is not None else _debits(projet, bassin)
     v_cap = bassin.volume_total_m3
-    v_sous = min(bassin.volume_sous_ajutage_m3, v_cap) if v_cap > 0 else bassin.volume_sous_ajutage_m3
+    # Le volume mort se lit tel qu'il est encodé, sans rabotage : le raboter à
+    # la capacité posait l'axe de l'orifice pile au trop-plein, où l'ajutage se
+    # met en service — alors que le routage du réseau, qui ne rabote pas, le
+    # laisse fermé. Une même averse donnait donc deux surverses pour un même
+    # ouvrage. ``_controles`` signale cette géométrie impossible.
+    v_sous = bassin.volume_sous_ajutage_m3
 
     res = ResultatSimulation(
         duree_pluie_min=duree_pluie_min,

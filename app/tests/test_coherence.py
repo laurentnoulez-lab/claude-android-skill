@@ -117,6 +117,14 @@ def configurations():
                          [_versant("v", "Versant", "a", 2000.0)])))
     cas.append(("aucun bassin versant",
                 _systeme([_ouvrage("a", "Orphelin")], [])))
+    # Géométrie impossible relevée sur un projet réel : le volume mort dépasse
+    # le volume tampon total. L'application en donnait deux lectures — l'ajutage
+    # débitait dans la simulation de l'ouvrage, pas dans le routage du réseau.
+    am, av = _serie()
+    av.etude.bassin.volume_total_m3 = 8.1
+    av.etude.bassin.volume_sous_ajutage_m3 = 10.0
+    cas.append(("ajutage au-dessus du trop-plein",
+                _systeme([am, av], [_versant("v1", "Versant amont", "am", 2000.0)])))
     return cas
 
 
@@ -189,6 +197,85 @@ class TestCoherenceDesConfigurations(unittest.TestCase):
                         any("ne correspond pas aux hypothèses" in a for a in alertes),
                         f"bandeau {bandeau:.1f} m³ contre table {requis:.1f} m³, "
                         f"sans que rien ne l'explique")
+
+    def test_ce_qu_un_ouvrage_restitue_est_ce_que_le_reseau_lui_fait_restituer(self):
+        """Un ouvrage n'a qu'une sortie, elle ne peut pas avoir deux valeurs.
+
+        La simulation de l'ouvrage et le routage du réseau intègrent la même
+        averse par deux chemins. Sur un projet réel, ils divergeaient : la
+        simulation rabotait le volume mort à la capacité — posant l'axe de
+        l'orifice pile au trop-plein, où l'ajutage se met en service — quand le
+        routage ne le rabotait pas et le laissait fermé. Le même ouvrage
+        annonçait 21,8 m³ de surverse et en envoyait 37,4 m³ à l'aval.
+        """
+        for nom, systeme in configurations():
+            sim = mod_reseau.simuler_evenement_critique(systeme)
+            noeuds = systeme.noeuds()
+            for ouvrage, res in sim.resultats:
+                if ouvrage.etude.bassin.volume_total_m3 <= 0:
+                    # Volume non encodé : les deux conventions diffèrent à
+                    # dessein — le balayage y voit une capacité illimitée, le
+                    # routage un simple passage. Rien n'est encore construit,
+                    # il n'y a pas de sortie à réconcilier.
+                    continue
+                ajute = sum(b.q_ajutage_ls * (b.t_min - a.t_min) * 60.0 / 1000.0
+                            for a, b in zip(res.pas, res.pas[1:]))
+                attendu = ajute + (res.volume_debordement_m3
+                                   if ouvrage.surverse_vers_aval else 0.0)
+                routage = mod_reseau.restitution(noeuds[ouvrage.id], sim.hauteur_mm,
+                                                 sim.duree_min).volume_m3
+                with self.subTest(configuration=nom, ouvrage=ouvrage.nom):
+                    self.assertAlmostEqual(
+                        routage, attendu, delta=max(attendu * 0.005, 0.05),
+                        msg=f"la simulation restitue {attendu:.2f} m³ et le réseau "
+                            f"en route {routage:.2f} m³")
+
+    def test_une_geometrie_impossible_est_annoncee(self):
+        """Volume mort supérieur au volume total : l'utilisateur doit le savoir."""
+        for nom, systeme in configurations():
+            for fiche in mod_reseau.dimensionner(systeme, avec_minima=False):
+                bassin = fiche.ouvrage.etude.bassin
+                if not bassin.ajutage_au_dessus_du_trop_plein:
+                    continue
+                with self.subTest(configuration=nom, ouvrage=fiche.nom):
+                    self.assertTrue(
+                        any("au-dessus du trop-plein" in a for a in fiche.resultat.alertes),
+                        "aucune alerte sur un orifice placé au-dessus du trop-plein")
+                    self.assertFalse(fiche.resultat.conforme)
+
+    def test_le_classeur_affiche_les_nombres_a_la_francaise(self):
+        """Une cellule de texte ne montre jamais un point décimal.
+
+        Les tableaux et les formules portent des nombres, mis en forme par
+        Excel ; mais les phrases — alertes du moteur, entête de la simulation —
+        sont formatées en Python et arrivaient telles quelles : « 2.50 l/s »
+        dans le classeur en face de « 2,50 l/s » à l'écran et au dossier.
+        """
+        import re
+
+        from bassin.reports import xlsx_report
+        import openpyxl
+
+        point = re.compile(r"(?<=\d)\.(?=\d)")
+        repertoire = tempfile.mkdtemp(prefix="hydrobassin_virgule_")
+        try:
+            for nom, systeme in configurations():
+                chemin = os.path.join(repertoire, "essai.xlsx")
+                xlsx_report.ecrire(
+                    mod_dossier.construire(systeme.courant.etude, systeme=systeme), chemin)
+                classeur = openpyxl.load_workbook(chemin)
+                for feuille in classeur:
+                    for ligne in feuille.iter_rows():
+                        for cellule in ligne:
+                            valeur = cellule.value
+                            if not isinstance(valeur, str) or valeur.startswith("="):
+                                continue      # une formule s'écrit en syntaxe Excel
+                            with self.subTest(configuration=nom, feuille=feuille.title,
+                                              cellule=cellule.coordinate):
+                                self.assertIsNone(point.search(valeur), valeur[:120])
+        finally:
+            import shutil
+            shutil.rmtree(repertoire, ignore_errors=True)
 
     def test_la_synthese_totalise_bien_ses_ouvrages(self):
         for nom, systeme in configurations():

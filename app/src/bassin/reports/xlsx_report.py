@@ -26,6 +26,7 @@ from ..core.model import (
     SCENARIO_SEUIL,
     SCENARIO_TEMPORISATION,
 )
+from ..formats import fr
 from . import schema as mod_schema
 from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau,
                       synthese_simulation_systeme, synthese_versants)
@@ -1188,7 +1189,10 @@ def _feuille_scenarios(wb: Workbook, dossier: Dossier, ancrage: _Ancrage,
         ws.cell(row=ligne, column=1, value="Observations").font = Font(bold=True, color="B45309")
         ligne += 1
         for a in alertes:
-            ws.cell(row=ligne, column=1, value=a).fill = PatternFill("solid", fgColor=ORANGE_PALE)
+            # Les alertes du moteur sont formatées en Python : sans ``fr`` elles
+            # arrivent dans le classeur avec un point décimal, là où l'écran, le
+            # PDF et le Word affichent une virgule.
+            ws.cell(row=ligne, column=1, value=fr(a)).fill = PatternFill("solid", fgColor=ORANGE_PALE)
             ligne += 1
 
 
@@ -1600,8 +1604,8 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
         _titre(ws, f"A{ligne}", "5. Simulation du système complet", 12)
         ligne += 1
         ws.cell(row=ligne, column=1,
-                value=(f"Averse la plus défavorable : {sim.hauteur_mm:.1f} mm en "
-                       f"{sim.duree_min:.0f} min, T = {sim.periode_retour} ans"))
+                value=fr(f"Averse la plus défavorable : {sim.hauteur_mm:.1f} mm en "
+                         f"{sim.duree_min:.0f} min, T = {sim.periode_retour} ans"))
         ligne += 1
         couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
         fonds = {i: couleurs[res.statut] for i, (_o, res) in enumerate(sim.resultats, start=1)}

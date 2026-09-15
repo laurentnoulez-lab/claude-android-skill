@@ -524,6 +524,14 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
                 "La surface d'infiltration atteint déjà 10 % de la surface de référence : "
                 "le GTI admet ce cas comme un maximum raisonnable (rejet complémentaire a prévoir)."
             )
+    if projet.bassin.ajutage_au_dessus_du_trop_plein:
+        res.conforme = False
+        res.alertes.append(
+            f"Volume sous l'axe de l'ajutage ({projet.bassin.volume_sous_ajutage_m3:.1f} m³) "
+            f"supérieur au volume tampon total ({projet.bassin.volume_total_m3:.1f} m³) : "
+            "l'orifice serait au-dessus du trop-plein. L'ouvrage encodé ne peut se vidanger "
+            "que par infiltration, et tout ce qu'il reçoit au-delà part au trop-plein."
+        )
     for ecart in _ecarts_ouvrage_encode(projet, res, scenario):
         res.alertes.append(ecart)
     if scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL) and res.debit_ajutage_ls > 0:

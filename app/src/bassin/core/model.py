@@ -73,6 +73,19 @@ class Bassin:
         return max(self.volume_total_m3 - self.volume_sous_ajutage_m3, 0.0)
 
     @property
+    def ajutage_au_dessus_du_trop_plein(self) -> bool:
+        """Le volume mort dépasse-t-il le volume tampon total ?
+
+        Géométriquement impossible : l'axe de l'orifice serait au-dessus du
+        trop-plein, et l'ouvrage ne pourrait évacuer que par son fond. Tant que
+        personne ne le dit, l'application doit au moins en donner **une** seule
+        lecture : le niveau ne peut jamais atteindre l'axe, donc l'ajutage ne
+        débite pas — c'est ce que fait le routage du réseau, et la simulation
+        s'y range.
+        """
+        return self.volume_total_m3 > 0 and self.volume_sous_ajutage_m3 > self.volume_total_m3
+
+    @property
     def k_propre(self) -> bool:
         """Le bassin construit a-t-il sa propre vitesse d'infiltration ?"""
         return self.k_infiltration_ms is not None and self.k_infiltration_ms > 0

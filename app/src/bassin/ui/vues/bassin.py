@@ -88,17 +88,34 @@ class VueBassin(Vue):
         b = self.etat.bassin
         q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_bassin_ms,
                                                  p.coef_securite_infiltration)
+        # Le bandeau doit rester une addition juste : quand le volume mort dépasse
+        # le volume total, « 8,1 = 10,0 + 0,0 » n'est pas une approximation, c'est
+        # une contrevérité affichée à l'utilisateur.
+        if b.ajutage_au_dessus_du_trop_plein:
+            volumes = theme.etiquette(
+                f"Volume sous l'ajutage {b.volume_sous_ajutage_m3:.1f} m³ supérieur au "
+                f"volume tampon total {b.volume_total_m3:.1f} m³ : orifice au-dessus "
+                "du trop-plein",
+                theme.ROUGE, theme.ROUGE_CLAIR, ft.Icons.ERROR)
+        else:
+            volumes = theme.etiquette(
+                f"Volume tampon total {b.volume_total_m3:.1f} m³ = "
+                f"{b.volume_sous_ajutage_m3:.1f} m³ sous l'ajutage + "
+                f"{b.volume_tampon_m3:.1f} m³ au-dessus",
+                theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART)
         entete = ft.Row(
             [
-                theme.etiquette(
-                    f"Volume tampon total {b.volume_total_m3:.1f} m³ = "
-                    f"{b.volume_sous_ajutage_m3:.1f} m³ sous l'ajutage + "
-                    f"{b.volume_tampon_m3:.1f} m³ au-dessus",
-                                theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART),
+                volumes,
                 theme.etiquette(f"Q infiltration = {q_inf:.3f} l/s", theme.VERT, theme.VERT_CLAIR,
                                 ft.Icons.WATER_DROP),
-                theme.etiquette(f"Q total = {q_inf + b.debit_ajutage_ls:.3f} l/s", theme.GRIS,
-                                theme.GRIS_CLAIR, ft.Icons.CALL_MERGE),
+                # Un orifice au-dessus du trop-plein ne débite jamais : l'annoncer
+                # dans le débit total contredirait, sur la même ligne, le bandeau
+                # rouge qui vient de le dire, et surtout le calcul.
+                theme.etiquette(
+                    (f"Q total = {q_inf:.3f} l/s · ajutage hors service"
+                     if b.ajutage_au_dessus_du_trop_plein
+                     else f"Q total = {q_inf + b.debit_ajutage_ls:.3f} l/s"),
+                    theme.GRIS, theme.GRIS_CLAIR, ft.Icons.CALL_MERGE),
             ],
             wrap=True,
             spacing=8,
