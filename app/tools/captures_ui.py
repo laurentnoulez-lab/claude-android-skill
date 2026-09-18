@@ -39,19 +39,38 @@ def servir(racine: str, port: int) -> socketserver.TCPServer:
     return serveur
 
 
-def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str) -> None:
-    """Capture aussi le bas de la page : les débordements y sont fréquents."""
+def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str,
+                        largeur: int, hauteur: int, haut: bytes,
+                        journal: list[str]) -> None:
+    """Capture aussi le bas de la page : les débordements y sont fréquents.
+
+    La molette agit là où se trouve le pointeur. Posé à x = 200, il tombait sur
+    la barre de navigation du format bureau, qui ne défile pas : neuf des dix
+    captures « bas » étaient l'exacte copie de celle du haut, et le bas de ces
+    écrans n'a jamais été photographié. Le pointeur est désormais au milieu du
+    contenu, et une capture « bas » identique à celle du haut est **dite** —
+    sans quoi le contrôle se croit fait alors qu'il ne l'est pas.
+    """
+    chemin = os.path.join(sortie, f"{nom_format}_{index}_{nom}_bas.png")
     try:
-        page.mouse.move(200, 400)
+        page.mouse.move(largeur * 0.6, hauteur * 0.6)
         for _ in range(3):
             page.mouse.wheel(0, 900)
             page.wait_for_timeout(600)
-        page.screenshot(path=os.path.join(sortie, f"{nom_format}_{index}_{nom}_bas.png"))
+        bas = page.screenshot(path=chemin)
         for _ in range(4):
             page.mouse.wheel(0, -900)
         page.wait_for_timeout(600)
     except Exception as exc:  # pragma: no cover
         print(f"  ! défilement impossible ({nom_format}/{nom}) : {str(exc)[:80]}")
+        journal.append(f"[{nom_format}] {nom} : défilement impossible ({str(exc)[:120]})")
+        return
+    if bas == haut:
+        message = (f"[{nom_format}] {nom} : la capture du bas est identique à celle du "
+                   "haut — le défilement n'a rien changé, le bas de cet écran n'est pas "
+                   "vérifié.")
+        print("  ! " + message)
+        journal.append(message)
 
 
 def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
@@ -96,8 +115,9 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             # à la vérification.
             page.keyboard.press("Control+e")
             page.wait_for_timeout(4000)
-            page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
-            defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
+            haut = page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
+            defiler_et_capturer(page, sortie, nom_format, 0, "Projet",
+                                largeur, hauteur, haut, erreurs)
             # L'application lit elle-même l'adresse du navigateur : Flet ne
             # transmet pas le chemin de l'URL dans la version web, et l'arbre
             # d'accessibilité de Flutter reste vide sans interaction humaine.
@@ -113,8 +133,10 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                     page.keyboard.press("Escape")   # aucun dialogue ne doit masquer l'écran
                     page.keyboard.press(f"Control+{touche}")
                     page.wait_for_timeout(3000)
-                    page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
-                    defiler_et_capturer(page, sortie, nom_format, i, nom)
+                    haut = page.screenshot(
+                        path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
+                    defiler_et_capturer(page, sortie, nom_format, i, nom,
+                                        largeur, hauteur, haut, erreurs)
                 except Exception as exc:  # pragma: no cover - dépend du rendu
                     print(f"  ! {nom_format} / {vue} : {str(exc)[:120]}")
                     erreurs.append(f"[{nom_format}] {vue} : {str(exc)[:200]}")
