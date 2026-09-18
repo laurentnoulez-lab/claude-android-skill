@@ -252,7 +252,8 @@ def section_reseau(pdf: Pdf, dossier: Dossier, numero: int) -> None:
         colonnes = len(lignes[0]) - 1
         fonds = {}
         for i, (_ouvrage, res) in enumerate(sim.resultats, start=1):
-            fonds.update({(i, j): _COULEURS_STATUT[res.statut] for j in range(len(lignes[0]))})
+            fonds.update({(i, j): _COULEURS_STATUT.get(res.statut, GRIS_CLAIR)
+                          for j in range(len(lignes[0]))})
         pdf.tableau(lignes, [0.24 * L] + [(0.76 / colonnes) * L] * colonnes, taille=7.5,
                     fonds=fonds, alignements=["left"] + ["center"] * colonnes)
         pdf.encadre(
@@ -630,7 +631,7 @@ def _sections_ouvrage(pdf, dossier, L, titre, sous_titre):
             for j in range(len(table.periodes_retour)):
                 c = table.cellules[i][j]
                 ligne.append(f"{c.volume_requis_m3:.1f}")
-                fonds[(i + 1, j + 1)] = _COULEURS_STATUT[c.statut]
+                fonds[(i + 1, j + 1)] = _COULEURS_STATUT.get(c.statut, GRIS_CLAIR)
             lignes.append(ligne)
         largeur_col = (L - 0.10 * L) / len(table.periodes_retour)
         pdf.tableau(lignes, [0.10 * L] + [largeur_col] * len(table.periodes_retour), taille=7.0,

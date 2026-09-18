@@ -62,7 +62,7 @@ class VueTableQDF(Vue):
                                             weight=ft.FontWeight.W_600))]
             for j in range(len(table.periodes_retour)):
                 c = table.cellules[i][j]
-                couleur, fond = theme.COULEURS_STATUT[c.statut]
+                couleur, fond = theme.COULEURS_STATUT.get(c.statut, (theme.GRIS, theme.GRIS_CLAIR))
                 if mode == "volume":
                     texte = f"{c.volume_requis_m3:.1f}"
                 elif mode == "taux":

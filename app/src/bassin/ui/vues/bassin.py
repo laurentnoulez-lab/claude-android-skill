@@ -383,7 +383,7 @@ class VueBassin(Vue):
         """Tableau comparatif des durées simulées, puis courbe de la plus défavorable."""
         lignes = []
         for duree, hauteur, res in resultats:
-            couleur, fond = theme.COULEURS_STATUT[res.statut]
+            couleur, fond = theme.COULEURS_STATUT.get(res.statut, (theme.GRIS, theme.GRIS_CLAIR))
             lignes.append(
                 ft.DataRow(cells=[
                     ft.DataCell(ft.Text(hydro.formater_duree(duree), size=12,

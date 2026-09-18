@@ -60,6 +60,11 @@ def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str
         for _ in range(3):
             page.mouse.wheel(0, 900)
             page.wait_for_timeout(600)
+        # Le pointeur est au milieu du contenu pour que la molette agisse ; l'y
+        # laisser ouvrait une infobulle qui masquait quatre cellules de la table
+        # QDF. On le gare dans le coin bas-gauche, sans contrôle, avant le cliché.
+        page.mouse.move(6, hauteur - 6)
+        page.wait_for_timeout(500)
         bas = page.screenshot(path=chemin)
         for _ in range(4):
             page.mouse.wheel(0, -900)

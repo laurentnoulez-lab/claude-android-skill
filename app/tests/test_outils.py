@@ -32,6 +32,10 @@ class PageFactice:
         #: Défilement le plus bas atteint : c'est là que la capture est prise,
         #: le retour vers le haut qui suit n'y change rien.
         self.molette_max = 0
+        #: Où se trouvait le pointeur au moment du cliché, et à la molette :
+        #: les deux moments demandent des positions opposées.
+        self.position_au_cliche = None
+        self.position_a_la_molette = None
 
     class _Souris:
         def __init__(self, page):
@@ -41,6 +45,8 @@ class PageFactice:
             self.page.position = (x, y)
 
         def wheel(self, _dx, dy):
+            if self.page.position_a_la_molette is None:
+                self.page.position_a_la_molette = self.page.position
             # Seul un pointeur posé sur le contenu fait défiler la page.
             if self.page.position[0] > PageFactice.RAIL_PX:
                 self.page.molette += dy
@@ -54,6 +60,7 @@ class PageFactice:
         pass
 
     def screenshot(self, path):
+        self.position_au_cliche = self.position
         contenu = b"BAS" if (self.defile and self.molette > 0) else b"HAUT"
         with open(path, "wb") as fh:
             fh.write(contenu)
@@ -72,10 +79,22 @@ class TestCapturesInterface(unittest.TestCase):
     def test_la_molette_agit_sur_le_contenu_pas_sur_la_barre_de_navigation(self):
         page = PageFactice()
         self._defiler(page)
-        self.assertGreater(page.position[0], PageFactice.RAIL_PX,
+        self.assertGreater(page.position_a_la_molette[0], PageFactice.RAIL_PX,
                            "le pointeur retombe sur la barre de navigation : "
                            "la molette ne défilera rien")
         self.assertGreater(page.molette_max, 0, "aucun défilement n'a eu lieu")
+
+    def test_le_pointeur_est_gare_avant_le_cliche(self):
+        """Posé sur le contenu, il ouvre une infobulle qui masque la capture.
+
+        Relevé sur la table QDF : l'infobulle d'une cellule recouvrait quatre
+        valeurs voisines dans chaque capture du bas.
+        """
+        page = PageFactice()
+        self._defiler(page)
+        self.assertIsNotNone(page.position_au_cliche)
+        self.assertLessEqual(page.position_au_cliche[0], PageFactice.RAIL_PX,
+                             "le pointeur survole encore le contenu au moment du cliché")
 
     def test_la_page_qui_bouge_est_distinguee_de_celle_qui_ne_bouge_pas(self):
         page = PageFactice(defile=True)

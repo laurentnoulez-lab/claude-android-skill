@@ -190,7 +190,7 @@ class VueSynthese(Vue):
         systeme = self.etat.systeme
         lignes = []
         for ouvrage, res in sim.resultats:
-            couleur, fond = theme.COULEURS_STATUT[res.statut]
+            couleur, fond = theme.COULEURS_STATUT.get(res.statut, (theme.GRIS, theme.GRIS_CLAIR))
             lignes.append(ft.DataRow(cells=[
                 ft.DataCell(ft.Text(ouvrage.nom, size=12, weight=ft.FontWeight.W_600)),
                 ft.DataCell(ft.Text(theme.nombre(res.volume_max_m3, 1), size=12)),
