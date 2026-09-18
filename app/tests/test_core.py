@@ -340,6 +340,21 @@ class TestMethodeRationnelle(unittest.TestCase):
         self.assertEqual(hydro.formater_duree(150), "2 h 30")
         self.assertEqual(hydro.formater_duree(2880), "2 j")
 
+    def test_une_duree_de_plusieurs_jours_garde_sa_precision(self):
+        """« 1,0 j » était moins précis que le « 3 h 15 » de la ligne voisine.
+
+        Une durée critique de 1 460 min vaut 1 j 0 h 20 : l'arrondi au dixième
+        de jour la rendait impossible à recouper.
+        """
+        self.assertEqual(hydro.formater_duree(1440), "1 j")
+        self.assertEqual(hydro.formater_duree(1460), "1 j 0 h 20")
+        self.assertEqual(hydro.formater_duree(2900), "2 j 0 h 20")
+        self.assertEqual(hydro.formater_duree(4380), "3 j 1 h")
+        for minutes in (1441, 1500, 2000, 5000, 40000):
+            with self.subTest(minutes=minutes):
+                self.assertNotIn(",", hydro.formater_duree(minutes),
+                                 "plus de dixième de jour : la durée s'écrit j h min")
+
 
 class _AvecBassin(unittest.TestCase):
     """Fabrique commune aux tests de simulation."""
@@ -800,7 +815,10 @@ class TestBassinAmont(unittest.TestCase):
         """Le balayage utilise une version allegee de l'integrateur : meme resultat."""
         p = self.projet_butgenbach()
         q_inf, q_aj = hydro.debits_scenario(p, SCENARIO_MIXTE)
-        illimite = Bassin(volume_total_m3=0.0,
+        # « Sans plafond » s'exprime par une capacité hors d'atteinte, pas par
+        # zéro : une capacité nulle veut dire qu'il n'y a pas d'ouvrage, et la
+        # simulation la traite désormais comme telle — un simple passage.
+        illimite = Bassin(volume_total_m3=1e12,
                           volume_sous_ajutage_m3=p.bassin.volume_sous_ajutage_m3,
                           surface_dispersion_m2=p.bassin.surface_dispersion_m2,
                           debit_ajutage_ls=p.bassin.debit_ajutage_ls)

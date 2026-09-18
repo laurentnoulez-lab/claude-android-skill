@@ -108,6 +108,8 @@ class Pdf:
         self.y = 0.0
         self.numero = 0
         self.pied: str = ""
+        #: Images placées dans le document, dans l'ordre de leur première pose.
+        self._images: List[Tuple[str, bytes, dict]] = []
         self.nouvelle_page()
 
     # -- structure ---------------------------------------------------------
@@ -175,7 +177,7 @@ class Pdf:
     # -- flux de contenu ---------------------------------------------------
     def texte(self, texte: str, taille: float = 9.5, gras: bool = False, italique: bool = False,
               couleur: Couleur = NOIR, x: Optional[float] = None, interligne: float = 1.45,
-              apres: float = 2.0, centre: bool = False) -> None:
+              apres: float = 2.0, centre: bool = False, souligne: bool = False) -> None:
         x = self.marge if x is None else x
         for ligne in self._decouper(texte, self.largeur_utile - (x - self.marge), taille, gras):
             self.besoin(taille * interligne + 2)
@@ -183,8 +185,71 @@ class Pdf:
             if centre:
                 xx = self.marge + (self.largeur_utile - largeur_texte(ligne, taille, gras)) / 2
             self._texte_brut(xx, self.y + taille, ligne, taille, couleur, gras, italique)
+            if souligne:
+                # Helvetica n'a pas de variante soulignée : le trait se dessine,
+                # un peu sous la ligne de base, sur la largeur réelle du texte.
+                largeur = largeur_texte(ligne, taille, gras)
+                base = self.y + taille + taille * 0.14
+                self.ligne(xx, base, xx + largeur, base, couleur, max(taille / 14.0, 0.5))
             self.y += taille * interligne
         self.y += apres
+
+    # -- images ------------------------------------------------------------
+    def image(self, donnees: bytes, largeur_pt: Optional[float] = None,
+              centre: bool = True, apres: float = 8.0) -> bool:
+        """Pose une image dans le flux. Renvoie si elle a pu être affichée.
+
+        Le PDF affiche le JPEG tel quel ; un PNG doit d'abord être ramené à ses
+        échantillons. Un fichier illisible ne fait rien apparaître — et rien
+        tomber : l'appelant dit alors à l'utilisateur que son image n'a pas pu
+        être reprise, plutôt que de laisser un dossier muet sur le sujet.
+        """
+        from . import images as mod_images
+
+        decrite = mod_images.lire(donnees)
+        if decrite is None:
+            return False
+        if decrite.format == "jpeg":
+            # Le JPEG est affiché sans être décodé : l'espace de couleur annoncé
+            # doit être le sien. Une photo en niveaux de gris déclarée en RVB
+            # s'affichait en bandes noircies. La quadrichromie, elle, demande un
+            # rendu que ce module ne sait pas produire honnêtement : elle est
+            # refusée plutôt que déformée.
+            espace = {1: "/DeviceGray", 3: "/DeviceRGB"}.get(decrite.canaux)
+            if espace is None:
+                return False
+            corps, extra = donnees, {
+                "/Filter": "/DCTDecode", "/ColorSpace": espace,
+                "/BitsPerComponent": "8", "/Width": str(decrite.largeur),
+                "/Height": str(decrite.hauteur)}
+        else:
+            brut = mod_images.png_en_brut(donnees)
+            if brut is None:
+                return False
+            corps, extra = zlib.compress(brut.octets, 9), {
+                "/Filter": "/FlateDecode",
+                "/ColorSpace": "/DeviceGray" if brut.canaux == 1 else "/DeviceRGB",
+                "/BitsPerComponent": "8", "/Width": str(brut.largeur),
+                "/Height": str(brut.hauteur)}
+
+        nom = f"Im{len(self._images) + 1}"
+        self._images.append((nom, corps, extra))
+
+        largeur = min(largeur_pt or self.largeur_utile, self.largeur_utile)
+        hauteur = largeur * decrite.hauteur / decrite.largeur
+        # Une image plus haute qu'une page entière est ramenée à la page.
+        maximum = self.hauteur - 2 * self.marge - 24
+        if hauteur > maximum:
+            largeur *= maximum / hauteur
+            hauteur = maximum
+        self.besoin(hauteur + 6)
+        x = self.marge + (self.largeur_utile - largeur) / 2 if centre else self.marge
+        bas = self.hauteur - (self.y + hauteur)
+        self._flux.append(
+            f"q {self._c(largeur)} 0 0 {self._c(hauteur)} {self._c(x)} {self._c(bas)} cm "
+            f"/{nom} Do Q")
+        self.y += hauteur + apres
+        return True
 
     def puce(self, texte: str, taille: float = 9.5, couleur: Couleur = NOIR) -> None:
         self.besoin(taille * 1.6)
@@ -293,7 +358,16 @@ class Pdf:
             ids_polices[cle] = ajouter(
                 b"<< /Type /Font /Subtype /Type1 /BaseFont " + nom + b" /Encoding /WinAnsiEncoding >>"
             )
-        ressources = ("<< /Font << " + " ".join(f"/{c} {ids_polices[c]} 0 R" for c in polices) + " >> >>").encode()
+        ids_images = {}
+        for nom, corps, extra in self._images:
+            entetes = " ".join(f"{cle} {valeur}" for cle, valeur in extra.items())
+            ids_images[nom] = ajouter(
+                ("<< /Type /XObject /Subtype /Image " + entetes
+                 + f" /Length {len(corps)} >>\nstream\n").encode() + corps + b"\nendstream")
+        xobjets = ("" if not ids_images else
+                   " /XObject << " + " ".join(f"/{n} {i} 0 R" for n, i in ids_images.items()) + " >>")
+        ressources = ("<< /Font << " + " ".join(f"/{c} {ids_polices[c]} 0 R" for c in polices)
+                      + " >>" + xobjets + " >>").encode()
 
         id_pages = ajouter(b"")  # reserve
         ids_pages: List[int] = []

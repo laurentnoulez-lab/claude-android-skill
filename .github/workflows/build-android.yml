@@ -49,12 +49,13 @@ jobs:
         working-directory: app
         run: |
           flet build apk \
-            --project HydroBassin \
-            --product HydroBassin \
+            --project HydroBassinPlus \
+            --product "HydroBassin+" \
             --org be.hydrobassin \
+            --bundle-id be.hydrobassin.hydrobassinplus \
             --company HydroBassin \
             --copyright "HydroBassin" \
-            --build-version 2.0.0 \
+            --build-version 3.0.0 \
             --build-number ${{ github.run_number }} \
             --verbose
 
@@ -62,12 +63,43 @@ jobs:
         working-directory: app
         run: |
           mkdir -p ../livrables
-          find build -name "*.apk" -exec cp {} ../livrables/HydroBassin-2.0.0.apk \;
+          find build -name "*.apk" -exec cp {} ../livrables/HydroBassinPlus-3.0.0.apk \;
           ls -la ../livrables
+
+      # L'identifiant du paquet ne se relit nulle part ailleurs : ni le journal
+      # de compilation ni l'application ne le montrent. C'est pourtant lui qui
+      # décide si le téléphone propose d'installer HydroBassin+ ou de mettre à
+      # jour HydroBassin. On le relit donc dans l'APK produit.
+      - name: Vérifier l'identité du paquet
+        run: |
+          set -euo pipefail
+          aapt=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" \
+                      -name aapt2 -type f 2>/dev/null | sort -V | tail -1)
+          if [ -z "$aapt" ]; then
+            echo "::error::aapt2 introuvable : l'identité du paquet n'a pas pu être vérifiée."
+            exit 1
+          fi
+          badging=$("$aapt" dump badging livrables/HydroBassinPlus-3.0.0.apk)
+          echo "$badging" | head -3
+          # Exiger l'identifiant attendu suffit : un paquet n'en a qu'un, donc
+          # celui de la 2.0.0 est exclu du même coup. Le nommer ici n'ajouterait
+          # rien et le ferait réapparaître dans les réglages.
+          attendu="be.hydrobassin.hydrobassinplus"
+          if ! echo "$badging" | grep -qF "package: name='$attendu'"; then
+            echo "::error::identifiant inattendu — HydroBassin+ doit s'installer à côté de la 2.0.0, pas la remplacer."
+            echo "$badging" | grep "^package:" || true
+            exit 1
+          fi
+          if ! echo "$badging" | grep -qF "application-label:'HydroBassin+'"; then
+            echo "::error::le nom affiché ne distingue pas les deux applications sur l'écran d'accueil."
+            echo "$badging" | grep "application-label" || true
+            exit 1
+          fi
+          echo "Identité vérifiée : $attendu, affiché « HydroBassin+ »."
 
       - uses: actions/upload-artifact@v4
         with:
-          name: HydroBassin-apk
+          name: HydroBassinPlus-apk
           path: livrables/*.apk
           if-no-files-found: error
 

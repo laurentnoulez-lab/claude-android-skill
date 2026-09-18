@@ -9,14 +9,14 @@ import flet as ft
 from ...core import hydro, rainfall, simulation
 from ...reports import charts
 from .. import graphiques, theme
-from ..composants import panneau_amont
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
 class VueBassin(Vue):
-    titre = "Bassin"
+    titre = "Bassin réel"
     icone = ft.Icons.WATER_DAMAGE
-    sous_titre = "Ouvrage encodé et simulation"
+    sous_titre = "Ouvrage tel qu'il sera construit · simulation"
 
     # ------------------------------------------------------------ formulaire
     def _formulaire(self) -> ft.Control:
@@ -33,17 +33,27 @@ class VueBassin(Vue):
             p.hauteur_charge_m = v
             self.etat.invalider()
 
+        def maj_k(v: float) -> None:
+            # Zéro (ou champ vidé) rend la main au dimensionnement : reprendre
+            # son hypothèse doit rester possible sans être imposé.
+            b.k_infiltration_ms = v if v > 0 else None
+            self.etat.invalider()
+
         return ft.ResponsiveRow(
             [
                 theme.champ_nombre("Volume tampon total", b.volume_total_m3, maj("volume_total_m3"),
                                    "m³", "jusqu'au trop-plein", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                                   col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="volume_total_m3"),
                 theme.champ_nombre("Volume sous l'ajutage", b.volume_sous_ajutage_m3,
                                    maj("volume_sous_ajutage_m3"), "m³", "volume mort",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
-                theme.champ_nombre("Surface de dispersion", b.surface_dispersion_m2,
-                                   maj("surface_dispersion_m2"), "m²", "fond infiltrant",
-                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3}),
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="volume_sous_ajutage_m3"),
+                theme.champ_nombre("Surface d'infiltration", b.surface_dispersion_m2,
+                                   maj("surface_dispersion_m2"), "m²",
+                                   "fond infiltrant de l'ouvrage construit",
+                                   on_valide=self.maj_resultats, col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="surface_dispersion_m2"),
                 *theme.champs_convertis(
                     "Débit d'ajutage", "l/s", b.debit_ajutage_ls,
                     "soit", "l/s/ha",
@@ -52,11 +62,20 @@ class VueBassin(Vue):
                     aide_a="orifice calibré",
                     aide_b=f"rapporté aux {p.aire_raccordee_m2:.0f} m² raccordés",
                     indisponible_b="encodez d'abord les surfaces incidentes",
-                    decimales_a=3, decimales_b=2,
+                    decimales_a=3, decimales_b=2, domaine="debit_ajutage_ls",
+                    col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
+                *theme.champs_convertis(
+                    "Vitesse d'infiltration K", "m/s", p.k_bassin_ms,
+                    "soit", "mm/h", 3600000.0, maj_k, on_valide=self.maj_resultats,
+                    aide_a=("essai en fond de fouille" if b.k_propre else
+                            "repris du dimensionnement · 0 pour y revenir"),
+                    aide_b="équivalent, modifiable aussi",
+                    decimales_a=8, decimales_b=2, domaine="k_infiltration_ms",
                     col_a={"xs": 12, "sm": 6, "md": 3}, col_b={"xs": 12, "sm": 6, "md": 3}),
                 theme.champ_nombre("Charge sur l'ajutage", p.hauteur_charge_m, maj_charge, "m",
                                    "axe de l'orifice → trop-plein", on_valide=self.maj_resultats,
-                                   col={"xs": 12, "sm": 6, "md": 3}),
+                                   col={"xs": 12, "sm": 6, "md": 3},
+                                   domaine="hauteur_charge_m"),
             ],
             spacing=12,
             run_spacing=12,
@@ -71,19 +90,36 @@ class VueBassin(Vue):
     def resultats(self) -> List[ft.Control]:
         p = self.etat.projet
         b = self.etat.bassin
-        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_infiltration_ms,
+        q_inf = simulation.debit_infiltration_ls(b.surface_dispersion_m2, p.k_bassin_ms,
                                                  p.coef_securite_infiltration)
+        # Le bandeau doit rester une addition juste : quand le volume mort dépasse
+        # le volume total, « 8,1 = 10,0 + 0,0 » n'est pas une approximation, c'est
+        # une contrevérité affichée à l'utilisateur.
+        if b.ajutage_au_dessus_du_trop_plein:
+            volumes = theme.etiquette(
+                f"Volume sous l'ajutage {theme.nombre(b.volume_sous_ajutage_m3, 1)} m³ "
+                f"supérieur au volume tampon total {theme.nombre(b.volume_total_m3, 1)} m³ : "
+                "orifice au-dessus du trop-plein",
+                theme.ROUGE, theme.ROUGE_CLAIR, ft.Icons.ERROR)
+        else:
+            volumes = theme.etiquette(
+                f"Volume tampon total {theme.nombre(b.volume_total_m3, 1)} m³ = "
+                f"{theme.nombre(b.volume_sous_ajutage_m3, 1)} m³ sous l'ajutage + "
+                f"{theme.nombre(b.volume_tampon_m3, 1)} m³ au-dessus",
+                theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART)
         entete = ft.Row(
             [
-                theme.etiquette(
-                    f"Volume tampon total {b.volume_total_m3:.1f} m³ = "
-                    f"{b.volume_sous_ajutage_m3:.1f} m³ sous l'ajutage + "
-                    f"{b.volume_tampon_m3:.1f} m³ au-dessus",
-                                theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STACKED_LINE_CHART),
-                theme.etiquette(f"Q infiltration = {q_inf:.3f} l/s", theme.VERT, theme.VERT_CLAIR,
+                volumes,
+                theme.etiquette(f"Q infiltration = {theme.nombre(q_inf, 3)} l/s", theme.VERT, theme.VERT_CLAIR,
                                 ft.Icons.WATER_DROP),
-                theme.etiquette(f"Q total = {q_inf + b.debit_ajutage_ls:.3f} l/s", theme.GRIS,
-                                theme.GRIS_CLAIR, ft.Icons.CALL_MERGE),
+                # Un orifice au-dessus du trop-plein ne débite jamais : l'annoncer
+                # dans le débit total contredirait, sur la même ligne, le bandeau
+                # rouge qui vient de le dire, et surtout le calcul.
+                theme.etiquette(
+                    (f"Q total = {theme.nombre(q_inf, 3)} l/s · ajutage hors service"
+                     if b.ajutage_au_dessus_du_trop_plein
+                     else f"Q total = {theme.nombre(q_inf + b.debit_ajutage_ls, 3)} l/s"),
+                    theme.GRIS, theme.GRIS_CLAIR, ft.Icons.CALL_MERGE),
             ],
             wrap=True,
             spacing=8,
@@ -103,9 +139,10 @@ class VueBassin(Vue):
             [
                 ft.Container(theme.tuile(f"{sim.volume_max_m3:.1f}", "Volume stocké maximum", "m³",
                                          couleur, ft.Icons.WATER), col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(f"{sim.taux_remplissage * 100:.0f}", "Taux de remplissage", "%",
+                ft.Container(theme.tuile(sim.taux_remplissage_texte, "Taux de remplissage", "%",
                                          couleur, ft.Icons.PERCENT), col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(theme.nombre(sim.temps_vidange_h, 1), "Temps de vidange après la pluie", "h",
+                ft.Container(theme.tuile(theme.duree_h(sim.temps_vidange_h).removesuffix(" h"),
+                                         "Temps de vidange après la pluie", "h",
                                          theme.ARDOISE, ft.Icons.TIMELAPSE,
                                          f"maximum admis : {p.temps_vidange_max_h:.0f} h"),
                              col={"xs": 12, "sm": 6, "md": 3}),
@@ -134,6 +171,15 @@ class VueBassin(Vue):
         )
 
         avis: List[ft.Control] = []
+        amonts = self.etat.systeme.amonts_directs(self.etat.ouvrage.id)
+        if amonts:
+            avis.append(theme.message(
+                theme.fr(
+                    "Apport des bassins d'orage amont ("
+                    + ", ".join(f"« {o.nom} »" for o in amonts)
+                    + f") : {sim.volume_amont_m3:.1f} m³, pointe "
+                      f"{sim.q_amont_max_ls:.2f} l/s. " + sim.commentaire_amont
+                      + " Les raccordements se règlent dans l'onglet « Réseau »."), "info"))
         if sim.debordement:
             avis.append(theme.message(
                 f"Le bassin déborde de {sim.volume_debordement_m3:.2f} m³ pour la pluie de projet "
@@ -148,8 +194,8 @@ class VueBassin(Vue):
                 "de réserve.", "succes"))
         if sim.temps_vidange_h > p.temps_vidange_max_h:
             avis.append(theme.message(
-                f"Temps de vidange de {sim.temps_vidange_h:.1f} h supérieur au maximum admis "
-                f"({p.temps_vidange_max_h:.0f} h).", "alerte"))
+                f"Temps de vidange de {theme.duree_h(sim.temps_vidange_h)} supérieur au "
+                f"maximum admis ({p.temps_vidange_max_h:.0f} h).", "alerte"))
 
         return [
             entete,
@@ -166,8 +212,6 @@ class VueBassin(Vue):
                               ],
                               spacing=10),
                           ft.Icons.SHOW_CHART),
-            theme.section("Bassin d'orage amont", self._panneau_amont(), ft.Icons.MERGE,
-                          "Ouvrage situé en amont qui se déverse dans celui-ci"),
             theme.section("Simuler une ou plusieurs pluies", self._simulateur_manuel(), ft.Icons.TUNE,
                           "Cochez les durées à comparer, puis lancez la simulation"),
         ]
@@ -175,6 +219,7 @@ class VueBassin(Vue):
     def construire(self) -> List[ft.Control]:
         self.zone.controls = self.resultats()
         return [
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Caractéristiques de l'ouvrage",
                 ft.Column(
@@ -229,10 +274,6 @@ class VueBassin(Vue):
         g.reperes.append(charts.Repere(sim.duree_pluie_min, "Fin de la pluie", charts.GRIS,
                                        vertical=True))
         return g
-
-    # ------------------------------------------------- bassin d'orage amont
-    def _panneau_amont(self) -> ft.Control:
-        return panneau_amont(self)
 
     # ----------------------------------------------------- simulation manuelle
     def _durees_choisies(self) -> List[float]:
@@ -342,14 +383,14 @@ class VueBassin(Vue):
         """Tableau comparatif des durées simulées, puis courbe de la plus défavorable."""
         lignes = []
         for duree, hauteur, res in resultats:
-            couleur, fond = theme.COULEURS_STATUT[res.statut]
+            couleur, fond = theme.COULEURS_STATUT.get(res.statut, (theme.GRIS, theme.GRIS_CLAIR))
             lignes.append(
                 ft.DataRow(cells=[
                     ft.DataCell(ft.Text(hydro.formater_duree(duree), size=12,
                                         weight=ft.FontWeight.W_600)),
                     ft.DataCell(ft.Text(theme.nombre(hauteur, 1), size=12)),
                     ft.DataCell(ft.Text(theme.nombre(res.volume_max_m3, 1), size=12)),
-                    ft.DataCell(ft.Text(theme.nombre(res.taux_remplissage * 100, 0), size=12)),
+                    ft.DataCell(ft.Text(res.taux_remplissage_texte, size=12)),
                     ft.DataCell(ft.Text(theme.nombre(res.volume_debordement_m3, 2), size=12,
                                         color=theme.ROUGE if res.debordement else None)),
                     ft.DataCell(ft.Text(res.temps_vidange_h_texte, size=12)),
@@ -376,7 +417,7 @@ class VueBassin(Vue):
         amont = pire[2].volume_amont_m3
         if amont > 0:
             controles.append(theme.etiquette(
-                f"Apport du bassin amont : {theme.nombre(amont, 1)} m³ "
+                f"Apport des bassins d'orage amont : {theme.nombre(amont, 1)} m³ "
                 f"(pointe {theme.nombre(pire[2].q_amont_max_ls, 2)} l/s)",
                 theme.BLEU, theme.BLEU_CLAIR, ft.Icons.MERGE))
         controles.append(ft.Text(

@@ -60,9 +60,12 @@ class DocxBuilder:
                                    espace_avant=200, espace_apres=80, convertir=False))
 
     def paragraphe(self, texte: str = "", gras: bool = False, italique: bool = False,
-                   taille: int = 20, couleur: str = "0F172A", puce: bool = False) -> None:
+                   taille: int = 20, couleur: str = "0F172A", puce: bool = False,
+                   souligne: bool = False, alignement: str = "left") -> None:
         self._corps.append(self._p(("- " if puce else "") + texte, taille=taille, gras=gras,
-                                   italique=italique, couleur=couleur, retrait=360 if puce else 0))
+                                   italique=italique, couleur=couleur,
+                                   retrait=360 if puce else 0, souligne=souligne,
+                                   alignement=alignement))
 
     def encadre(self, texte: str, fond: str = "DBEAFE", couleur: str = "0F172A") -> None:
         self._corps.append(self._p(texte, taille=20, gras=True, couleur=couleur, fond=fond,
@@ -107,12 +110,23 @@ class DocxBuilder:
         self._corps.append(self._p("", taille=8))
 
     def image(self, png: bytes, largeur_cm: float = 16.0, hauteur_cm: Optional[float] = None,
-              legende: str = "") -> None:
-        largeur_px, hauteur_px = _dimensions_png(png)
+              legende: str = "") -> bool:
+        """Pose une image (PNG ou JPEG). Renvoie si elle a pu être reprise.
+
+        Les graphiques que l'application dessine sont des PNG ; une photo de
+        terrain apportée par l'utilisateur est le plus souvent un JPEG. Un
+        fichier d'un autre format ne fait rien apparaître, et l'appelant le dit.
+        """
+        from . import images as mod_images
+
+        decrite = mod_images.lire(png)
+        if decrite is None:
+            return False
+        largeur_px, hauteur_px = decrite.largeur, decrite.hauteur
         if hauteur_cm is None:
             hauteur_cm = largeur_cm * hauteur_px / max(largeur_px, 1)
         idx = len(self._images) + 1
-        nom = f"image{idx}.png"
+        nom = f"image{idx}.{'jpeg' if decrite.format == 'jpeg' else 'png'}"
         self._images.append((nom, png))
         rid = f"rIdImg{idx}"
         cx, cy = int(largeur_cm * EMU_PAR_CM), int(hauteur_cm * EMU_PAR_CM)
@@ -130,13 +144,14 @@ class DocxBuilder:
         if legende:
             self._corps.append(self._p(legende, taille=16, italique=True, couleur="475569",
                                        alignement="center", espace_apres=160))
+        return True
 
     # -- primitives --------------------------------------------------------
     @staticmethod
     def _p(texte: str, taille: int = 20, gras: bool = False, italique: bool = False,
            couleur: str = "0F172A", fond: Optional[str] = None, alignement: str = "left",
            espace_avant: int = 0, espace_apres: int = 60, retrait: int = 0,
-           bordure_bas: bool = False, convertir: bool = True) -> str:
+           bordure_bas: bool = False, convertir: bool = True, souligne: bool = False) -> str:
         # convertir=False pour les titres : la numérotation « 1.1 » garde son point.
         props = [f'<w:spacing w:before="{espace_avant}" w:after="{espace_apres}"/>']
         if alignement != "left":
@@ -148,7 +163,9 @@ class DocxBuilder:
         if bordure_bas:
             props.append('<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="2" w:color="BFDBFE"/></w:pBdr>')
         rpr = f'<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="{taille}"/>'\
-              f'<w:color w:val="{couleur}"/>' + ("<w:b/>" if gras else "") + ("<w:i/>" if italique else "") + "</w:rPr>"
+              f'<w:color w:val="{couleur}"/>' + ("<w:b/>" if gras else "") \
+              + ("<w:i/>" if italique else "") \
+              + ('<w:u w:val="single"/>' if souligne else "") + "</w:rPr>"
         contenu = ""
         for i, morceau in enumerate(texte.split("\n")):
             if i:
@@ -177,6 +194,7 @@ class DocxBuilder:
                  '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
                  '<Default Extension="xml" ContentType="application/xml"/>'
                  '<Default Extension="png" ContentType="image/png"/>'
+                 '<Default Extension="jpeg" ContentType="image/jpeg"/>'
                  '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.'
                  'wordprocessingml.document.main+xml"/>'
                  '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.'

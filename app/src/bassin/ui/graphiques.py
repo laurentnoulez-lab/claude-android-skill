@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 import flet as ft
 
+from ..core.hydro import formater_duree
 from ..reports import charts
 from . import theme
 
@@ -16,7 +17,7 @@ def _couleur(c: charts.Couleur) -> str:
 
 
 def _etiquettes_x(g: charts.Graphique, xmin: float, xmax: float, log: bool) -> List[ft.ChartAxisLabel]:
-    duree = g.axe_x.lower().startswith(("durée", "duree", "temps"))
+    duree = charts.axe_est_temporel(g.axe_x)
     valeurs: List[float] = []
     if log:
         d = 10 ** math.floor(math.log10(max(10 ** xmin, 1e-9)))
@@ -28,9 +29,10 @@ def _etiquettes_x(g: charts.Graphique, xmin: float, xmax: float, log: bool) -> L
             d *= 10
     else:
         valeurs = charts.graduations(xmin, xmax, 5)
+    libelles = (charts.etiquettes_de_temps(valeurs) if duree
+                else [charts.format_nombre(v) for v in valeurs])
     etiquettes = []
-    for v in valeurs:
-        texte = charts.format_duree_courte(v) if duree else charts.format_nombre(v)
+    for v, texte in zip(valeurs, libelles):
         etiquettes.append(
             ft.ChartAxisLabel(
                 value=math.log10(v) if log else v,
@@ -40,9 +42,26 @@ def _etiquettes_x(g: charts.Graphique, xmin: float, xmax: float, log: bool) -> L
     return etiquettes
 
 
-def _bulle(nom: str, valeur: float) -> str:
-    """Info-bulle d'un point de courbe, à la française."""
-    return f"{nom} : {theme.nombre(valeur, 2)}"
+def _intitule_et_unite(axe_x: str) -> Tuple[str, str]:
+    """« Charge [m] » → (« Charge », « m ») ; « Durée de pluie » → (idem, «  »)."""
+    intitule, _, reste = axe_x.partition("[")
+    return intitule.strip(), reste.rstrip("]").strip()
+
+
+def _bulle(nom: str, x: float, y: float, axe_x: str) -> str:
+    """Info-bulle d'un point : son ordonnée, et l'abscisse qui lui correspond.
+
+    Lire une valeur sur une courbe ne sert à rien sans savoir à quel instant
+    elle se produit : le pic de remplissage d'un bassin s'interprète par l'heure
+    où il tombe. L'abscisse d'un axe de temps se donne en min, h ou j plutôt
+    qu'en minutes brutes, comme partout ailleurs dans l'application.
+    """
+    intitule, unite = _intitule_et_unite(axe_x)
+    if charts.axe_est_temporel(axe_x):
+        abscisse = formater_duree(x)
+    else:
+        abscisse = f"{charts.format_nombre(x)} {unite}".strip()
+    return theme.fr(f"{nom} : {theme.nombre(y, 2)} — {intitule} : {abscisse}")
 
 
 def construire(g: charts.Graphique, hauteur: int = 300) -> ft.Control:
@@ -69,7 +88,7 @@ def construire(g: charts.Graphique, hauteur: int = 300) -> ft.Control:
                 # Sans info-bulle explicite, Flet affiche la valeur brute, avec un
                 # point décimal.
                 data_points=[
-                    ft.LineChartDataPoint(tx(x), round(y, 3), tooltip=_bulle(s.nom, y))
+                    ft.LineChartDataPoint(tx(x), round(y, 3), tooltip=_bulle(s.nom, x, y, g.axe_x))
                     for x, y in s.points
                 ],
                 color=_couleur(s.couleur),

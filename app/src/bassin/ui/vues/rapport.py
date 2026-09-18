@@ -12,8 +12,10 @@ import flet as ft
 from ...core.model import LIBELLES_SCENARIOS
 from ...reports import docx_report, pdf_report, xlsx_report
 from .. import theme
+from ..composants import barre_ouvrage
 from ..state import destination_utilisable, diagnostic_stockage, repertoire_documents
 from .base import Vue
+from .plan_rapport import EditeurPlan
 
 FORMATS = (
     ("xlsx", "Classeur Excel", "Feuilles de calcul vivantes : les formules de la méthode "
@@ -38,14 +40,17 @@ class VueRapport(Vue):
         self.produits: List[str] = []
         self.erreurs: List[str] = []
         self.selecteur_fichier: Optional[ft.FilePicker] = None
+        self.selecteur_dossier: Optional[ft.FilePicker] = None
+        self.editeur = EditeurPlan(self)
 
     # ------------------------------------------------------------ génération
     def _generer(self, formats: List[str]) -> None:
         etat = self.etat
         self.erreurs = []
-        if etat.projet.aire_ponderee_m2 <= 0:
+        if etat.systeme.aire_ponderee_m2 <= 0:
             self.erreurs.append("Aucune surface incidente encodée : encodez au moins une surface "
-                                "dans l'onglet « Projet » avant de générer un rapport.")
+                                "dans l'onglet « Bassins versants » avant de générer un "
+                                "rapport.")
             self.maj_resultats()
             return
 
@@ -56,7 +61,7 @@ class VueRapport(Vue):
             self.maj_resultats()
             return
 
-        destination = repertoire_documents()
+        destination = self.destination()
         produits: List[str] = []
         for fmt in formats:
             chemin = os.path.join(destination, os.path.basename(etat.nom_fichier(fmt)))
@@ -78,6 +83,42 @@ class VueRapport(Vue):
             self.notifier(f"{len(produits)} fichier(s) écrit(s) dans {destination}", "succes")
         elif self.erreurs:
             self.notifier("La génération a échoué — voir le détail dans la page.", "erreur")
+
+    # ------------------------------------------------------------ destination
+    def destination(self) -> str:
+        """Dossier où sont écrits les livrables.
+
+        Trois fichiers sont produits d'un coup : une boîte « Enregistrer sous »
+        par fichier serait pénible. Le dossier se choisit donc une fois, et il
+        s'affiche — l'utilisateur ne découvrait jusqu'ici sa destination que
+        dans le message de succès.
+        """
+        choisi = getattr(self.etat, "dossier_livrables", "")
+        if choisi and os.path.isdir(choisi):
+            return choisi
+        return repertoire_documents()
+
+    def _choisir_destination(self, _=None) -> None:
+        if self.selecteur_dossier is None:
+            def _resultat(e: ft.FilePickerResultEvent) -> None:
+                chemin = getattr(e, "path", None)
+                if not chemin:
+                    return                      # annulation : rien ne change
+                if not destination_utilisable(os.path.join(chemin, "test")):
+                    self.notifier("Ce dossier n'est pas accessible en écriture directe.", "alerte")
+                    return
+                self.etat.dossier_livrables = chemin
+                self.notifier(f"Les livrables seront écrits dans {chemin}", "succes")
+                self.rafraichir()
+
+            self.selecteur_dossier = ft.FilePicker(on_result=_resultat)
+            self.page.overlay.append(self.selecteur_dossier)
+            self.page.update()
+        try:
+            self.selecteur_dossier.get_directory_path(dialog_title="Dossier des livrables")
+        except Exception:
+            self.notifier("Le sélecteur de dossiers n'est pas disponible ici ; "
+                          f"les livrables restent écrits dans {self.destination()}.", "alerte")
 
     def _enregistrer_sous(self, chemin: str) -> None:
         """Propose de copier un rapport ailleurs (sélecteur du système)."""
@@ -123,6 +164,22 @@ class VueRapport(Vue):
             lignes = [f"{'accessible' if ok else 'inaccessible'} — {chemin}"
                       for chemin, ok in diagnostic_stockage()]
             blocs.append(theme.message("Répertoires testés :\n" + "\n".join(lignes), "info"))
+
+        blocs.append(ft.Row(
+            [
+                ft.Icon(ft.Icons.FOLDER_OUTLINED, size=18, color=theme.GRIS),
+                ft.Column(
+                    [
+                        ft.Text("Dossier des livrables", size=11, color=theme.GRIS),
+                        ft.Text(self.destination(), size=12, selectable=True, no_wrap=False),
+                    ],
+                    spacing=0, expand=True,
+                ),
+                theme.bouton_secondaire("Changer…", ft.Icons.DRIVE_FOLDER_UPLOAD,
+                                        self._choisir_destination),
+            ],
+            spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ))
 
         if self.produits:
             blocs.append(ft.Text("Fichiers générés", size=13, weight=ft.FontWeight.W_700))
@@ -172,11 +229,21 @@ class VueRapport(Vue):
                     ]
                 )
                 for k, v in [
-                    ("Projet", p.nom_projet or "—"),
-                    ("Commune", f"{p.commune_nom} (INS {p.commune_ins})"),
-                    ("Période de retour", f"{p.periode_retour} ans"),
-                    ("Surface active pondérée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
-                    ("Scénario retenu", LIBELLES_SCENARIOS[etat.scenario_principal]),
+                    ("Projet", etat.systeme.nom_projet or "—"),
+                    ("Commune", f"{etat.systeme.commune_nom} (INS {etat.systeme.commune_ins})"),
+                    ("Période de retour", f"{etat.systeme.periode_retour} ans"),
+                    ("Bassins versants", str(len(etat.systeme.bassins_versants))),
+                    ("Bassins d'orage", str(len(etat.systeme.ouvrages))),
+                    ("Surface active du système",
+                     theme.nombre(etat.systeme.aire_ponderee_m2, 1, "m²")),
+                    # Le dossier porte sur l'étude entière : annoncer ici un
+                    # « ouvrage détaillé » laissait croire qu'il s'arrête à lui.
+                    ("Portée du dossier",
+                     f"les {len(etat.systeme.ouvrages)} bassins d'orage, un chapitre chacun"
+                     if len(etat.systeme.ouvrages) > 1 else "le bassin d'orage du projet"),
+                    ("Ouvrage affiché à l'écran", etat.ouvrage.nom),
+                    ("Surface active raccordée", theme.nombre(p.aire_ponderee_m2, 1, "m²")),
+                    ("Scénario de cet ouvrage", LIBELLES_SCENARIOS[etat.scenario_principal]),
                     ("Volume de temporisation",
                      theme.nombre(res.volume_m3, 1, "m³") if res.dimensionnable
                      else "— (aucun débit de sortie)"),
@@ -218,7 +285,16 @@ class VueRapport(Vue):
         )
 
         return [
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section("Récapitulatif du dossier", recap, ft.Icons.FACT_CHECK),
+            theme.section(
+                "Composition du dossier",
+                self.editeur.carte(),
+                ft.Icons.LIST_ALT,
+                "Décochez ce qui ne sert pas à cette étude, ajoutez vos propres rubriques — "
+                "texte mis en forme, intertitres, images — et ordonnez l'ensemble. Le plan "
+                "s'enregistre avec le projet.",
+            ),
             theme.section(
                 "Générer les livrables",
                 ft.Column(
@@ -234,7 +310,7 @@ class VueRapport(Vue):
                     spacing=14,
                 ),
                 ft.Icons.SHARE,
-                "Le rapport reprend les données d'entrée, les quatre scénarios, la simulation, "
-                "la table QDF et l'ajutage.",
+                "Le PDF et le Word suivent la composition ci-dessus ; le classeur Excel "
+                "reprend l'étude entière, rubriques décochées comprises.",
             ),
         ]

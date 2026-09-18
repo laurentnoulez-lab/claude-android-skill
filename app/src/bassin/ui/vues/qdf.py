@@ -8,6 +8,7 @@ import flet as ft
 
 from ...core import rainfall
 from .. import theme
+from ..composants import barre_ouvrage
 from .base import Vue
 
 
@@ -19,11 +20,13 @@ class VueTableQDF(Vue):
     def construire(self) -> List[ft.Control]:
         if not self.etat.bassin_valide:
             return [theme.message(
-                "Encodez d'abord un bassin (onglet « Bassin ») pour construire la table QDF.", "info")]
+                "Encodez d'abord un bassin (onglet « Bassin réel ») pour construire la table QDF.",
+                "info")]
 
         table = self.etat.table_acceptation
         assert table is not None
         p = self.etat.projet
+        src = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie)
         mode = getattr(self, "_mode", "volume")
 
         def changer_mode(e: ft.ControlEvent) -> None:
@@ -59,7 +62,7 @@ class VueTableQDF(Vue):
                                             weight=ft.FontWeight.W_600))]
             for j in range(len(table.periodes_retour)):
                 c = table.cellules[i][j]
-                couleur, fond = theme.COULEURS_STATUT[c.statut]
+                couleur, fond = theme.COULEURS_STATUT.get(c.statut, (theme.GRIS, theme.GRIS_CLAIR))
                 if mode == "volume":
                     texte = f"{c.volume_requis_m3:.1f}"
                 elif mode == "taux":
@@ -80,7 +83,7 @@ class VueTableQDF(Vue):
                                 f"Pluie : {c.hauteur_mm:.1f} mm\n"
                                 f"Volume requis : {c.volume_requis_m3:.1f} m³ / "
                                 f"{c.capacite_m3:.1f} m³\n"
-                                f"Vidange : {c.temps_vidange_h:.1f} h"),
+                                f"Vidange : {theme.duree_h(c.temps_vidange_h)}"),
                         )
                     )
                 )
@@ -114,8 +117,21 @@ class VueTableQDF(Vue):
                 f"Aucun débordement pour la récurrence de projet ({p.periode_retour} ans), "
                 "quelle que soit la durée de pluie.", "succes")
 
+        # Le bandeau de sélection annonce le volume du *dimensionnement*, qui
+        # raisonne sur un scénario ; cette table décrit l'ouvrage **encodé**,
+        # volume mort compris. Les deux peuvent légitimement différer — sur un
+        # ajutage surélevé, notamment — et l'onglet doit donc porter son propre
+        # chiffre, sans quoi « 0,0 m³ requis » surmonte une table pleine de
+        # volumes sans que rien ne l'explique.
+        requis = table.volume_requis_max_m3(p.periode_retour)
+        exige = theme.etiquette(
+            theme.fr(f"Ouvrage encodé : {requis:.1f} m³ requis à {p.periode_retour} ans "
+                     f"pour {table.capacite_m3:.1f} m³ encodés"),
+            theme.BLEU, theme.BLEU_CLAIR, ft.Icons.STRAIGHTEN)
+
         legende = ft.Row(
             [
+                exige,
                 theme.etiquette("Absorbé", theme.VERT, theme.VERT_CLAIR, ft.Icons.CHECK_CIRCLE),
                 theme.etiquette("Limite (> 95 % de la capacité)", theme.ORANGE, theme.ORANGE_CLAIR,
                                 ft.Icons.WARNING_AMBER),
@@ -127,6 +143,7 @@ class VueTableQDF(Vue):
         )
 
         return [
+            self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section(
                 "Capacité d'absorption du bassin",
                 ft.Column([bandeau, bandeau_2, legende], spacing=12),
@@ -135,7 +152,7 @@ class VueTableQDF(Vue):
                 f"{self.etat.projet.commune_nom}",
             ),
             theme.section(
-                "Table QDF de l'ouvrage",
+                f"{src.titre_tableau_volumes} — ouvrage encodé",
                 ft.Column([selecteur, ft.Container(tableau, padding=ft.padding.only(top=8))], spacing=10),
                 ft.Icons.GRID_ON,
                 "Lignes : durée de pluie · Colonnes : période de retour",
