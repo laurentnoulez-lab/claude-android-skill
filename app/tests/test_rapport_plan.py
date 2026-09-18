@@ -49,6 +49,20 @@ def jpeg_entete(largeur: int, hauteur: int, composantes: int) -> bytes:
     return (b"\xff\xd8" + b"\xff\xc0" + struct.pack(">H", len(sof) + 2) + sof + b"\xff\xd9")
 
 
+def flux_pdf(chemin) -> str:
+    """Contenu des flux d'un PDF, décompressés — les images y sont posées."""
+    import zlib
+
+    brut = open(chemin, "rb").read()
+    morceaux = []
+    for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+        try:
+            morceaux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+        except zlib.error:
+            continue
+    return "\n".join(morceaux)
+
+
 def titres_pdf(chemin) -> list:
     from test_reports import texte_pdf
 
@@ -178,14 +192,21 @@ class TestRubriqueLibre(unittest.TestCase):
         self.assertIn("1D4ED8", contenu)
 
     def test_l_image_est_bien_dans_les_deux_fichiers(self):
-        import pymupdf
+        """L'image est un objet du PDF, et elle y est dessinée.
 
+        Le PDF est relu par ses propres octets, comme tout le reste de la suite :
+        la bibliothèque qui le rasterise ne sert qu'aux contrôles de rendu menés
+        à la main, et n'a pas à devenir une dépendance de la compilation.
+        """
         with tempfile.TemporaryDirectory() as repertoire:
             pdf, docx = ecrire(self.dossier(), repertoire)
-            images_pdf = sum(len(page.get_images()) for page in pymupdf.open(pdf))
+            octets = open(pdf, "rb").read()
+            dessinees = sorted(set(re.findall(r"/(Im\d+) Do", flux_pdf(pdf))))
             medias = [n for n in zipfile.ZipFile(docx).namelist() if "media/" in n]
         # Le dossier porte déjà les graphiques ; l'image ajoutée s'y compte en plus.
-        self.assertGreater(images_pdf, 0)
+        self.assertGreater(octets.count(b"/Subtype /Image"), 0)
+        self.assertEqual(len(dessinees), octets.count(b"/Subtype /Image"),
+                         "chaque image du fichier doit être posée dans une page")
         self.assertGreater(len(medias), 0)
 
     def test_une_image_illisible_est_annoncee_au_lieu_d_un_trou(self):
