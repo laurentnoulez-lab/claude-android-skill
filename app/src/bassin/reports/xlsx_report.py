@@ -1607,7 +1607,8 @@ def _feuille_reseau(wb: Workbook, dossier: Dossier,
                 value=fr(f"Averse la plus défavorable : {sim.hauteur_mm:.1f} mm en "
                          f"{sim.duree_min:.0f} min, T = {sim.periode_retour} ans"))
         ligne += 1
-        couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
+        couleurs = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE,
+                    "NON CONFORME": ROUGE_PALE, "NON ENCODE": GRIS_PALE}
         fonds = {i: couleurs[res.statut] for i, (_o, res) in enumerate(sim.resultats, start=1)}
         l_entete = ligne
         ligne = _tableau(ws, ligne, synthese_simulation_systeme(dossier), fonds,

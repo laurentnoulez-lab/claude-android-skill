@@ -815,7 +815,10 @@ class TestBassinAmont(unittest.TestCase):
         """Le balayage utilise une version allegee de l'integrateur : meme resultat."""
         p = self.projet_butgenbach()
         q_inf, q_aj = hydro.debits_scenario(p, SCENARIO_MIXTE)
-        illimite = Bassin(volume_total_m3=0.0,
+        # « Sans plafond » s'exprime par une capacité hors d'atteinte, pas par
+        # zéro : une capacité nulle veut dire qu'il n'y a pas d'ouvrage, et la
+        # simulation la traite désormais comme telle — un simple passage.
+        illimite = Bassin(volume_total_m3=1e12,
                           volume_sous_ajutage_m3=p.bassin.volume_sous_ajutage_m3,
                           surface_dispersion_m2=p.bassin.surface_dispersion_m2,
                           debit_ajutage_ls=p.bassin.debit_ajutage_ls)

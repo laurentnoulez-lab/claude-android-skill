@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from . import rainfall
-from .model import Bassin, Projet, debit_infiltration_ls
+from .model import Bassin, Projet, TEMPS_VIDANGE_LIMITE_H, debit_infiltration_ls
 from .hydro import formater_duree, temps_vidange_h
 
 
@@ -46,6 +46,9 @@ class ResultatSimulation:
     t_volume_max_min: float = 0.0
     t_debordement_min: Optional[float] = None
     temps_vidange_h: float = 0.0
+    #: Contrainte du projet, portée par le résultat : sans elle, le statut ne
+    #: peut pas dire si la vidange est admissible, et seule la vue le savait.
+    temps_vidange_max_h: float = TEMPS_VIDANGE_LIMITE_H
     temps_retour_a_vide_min: float = 0.0
     q_entrant_ls: float = 0.0
     q_infiltration_ls: float = 0.0
@@ -123,14 +126,46 @@ class ResultatSimulation:
 
     @property
     def taux_remplissage(self) -> float:
+        """Part de la capacité occupée à la pointe.
+
+        Sans capacité encodée il n'y a pas de taux : renvoyer 0 % laissait
+        croire à un ouvrage vide et confortable là où il n'y a pas d'ouvrage.
+        """
         if self.volume_capacite_m3 <= 0:
-            return 0.0
+            return float("inf")
         return self.volume_max_m3 / self.volume_capacite_m3
 
     @property
+    def taux_remplissage_texte(self) -> str:
+        """Taux de remplissage tel qu'il s'affiche, en pourcent.
+
+        Sans capacité encodée il n'y en a pas : « — », et non « 0 % » — qui
+        rassurait à tort — ni « ∞ % », qui ne veut rien dire.
+        """
+        if self.volume_capacite_m3 <= 0:
+            return "—"
+        return f"{self.taux_remplissage * 100:.0f}"
+
+    @property
+    def vidange_admissible(self) -> bool:
+        """L'ouvrage se vide-t-il dans le délai que le projet s'impose ?"""
+        return self.temps_vidange_h <= self.temps_vidange_max_h
+
+    @property
     def statut(self) -> str:
+        """Ce que vaut l'ouvrage pour cette averse.
+
+        Un ouvrage qui ne se vidange jamais n'est pas « OK » : il stockait
+        2 470 m³ définitivement, sous une pastille verte, parce que seule la vue
+        contrôlait le délai de vidange. Et un ouvrage sans volume encodé n'a pas
+        de statut à donner : il n'existe pas encore.
+        """
+        if self.volume_capacite_m3 <= 0:
+            return "NON ENCODE"
         if self.debordement:
             return "DEBORDEMENT"
+        if not self.vidange_admissible:
+            return "NON CONFORME"
         if self.taux_remplissage > 0.95:
             return "LIMITE"
         return "OK"
@@ -215,6 +250,7 @@ def _debits_sortants(v: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
 def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_ls: float,
              v_sous: float, v_cap: float,
              journal: Optional[List[Tuple[float, float, float, float]]] = None,
+             capacite_illimitee: bool = False,
              ) -> Tuple[float, float, float, Optional[float]]:
     """Fait évoluer le volume pendant ``duree_min`` à débit entrant constant.
 
@@ -223,10 +259,19 @@ def _avancer(v: float, duree_min: float, q_in_ls: float, q_inf_ls: float, q_aj_l
     démarre ou s'arrête, où le bassin se vide et où il atteint le trop-plein.
     Le résultat ne dépend donc pas de la finesse de l'échantillonnage.
 
+    ``capacite_illimitee`` n'a qu'un usage : le **balayage de dimensionnement**,
+    qui cherche le volume qu'il faudrait construire et laisse donc le niveau
+    monter sans limite. Partout ailleurs la capacité encodée fait foi, et une
+    capacité nulle veut dire ce qu'elle dit : **aucun stockage**, l'ouvrage
+    n'est qu'un passage. Déduire « illimité » de ``v_cap <= 0`` donnait deux
+    lectures contradictoires du même ouvrage — un bassin laissé à 0 m³ stockait
+    306 m³ sans jamais déborder, et le restituait à 5 l/s là où le routage du
+    réseau en transmettait 90.
+
     Renvoie (volume final, volume débordé, volume maximal, délai du premier
     débordement).
     """
-    illimite = v_cap <= 0
+    illimite = capacite_illimitee
     reste = duree_min
     debord = 0.0
     v_max = v
@@ -364,10 +409,12 @@ def hydrogramme_sortant(q_direct_ls: float, duree_pluie_min: float, apport: Appo
 
     ce qu'il infiltre est perdu pour l'aval dans tous les cas.
 
-    Une capacité nulle ne veut pas dire « illimitée » ici : sans volume de
+    Une capacité nulle ne veut pas dire « illimitée » : sans volume de
     temporisation, l'ouvrage est un simple passage — ce qui arrive repart
-    aussitôt, moins ce que son fond infiltre. C'est l'inverse de la convention
-    de :func:`_avancer`, utile au balayage de l'ouvrage que l'on dimensionne.
+    aussitôt, moins ce que son fond infiltre. C'est la convention de
+    :func:`_avancer`, qui traite ce cas comme n'importe quel autre ; seul le
+    balayage de dimensionnement laisse le niveau monter sans limite, et il le
+    demande explicitement.
     """
     bornes = {0.0, max(duree_pluie_min, 0.0)}
     bornes.update(b for b in apport.bornes() if b >= 0.0)
@@ -380,16 +427,10 @@ def hydrogramme_sortant(q_direct_ls: float, duree_pluie_min: float, apport: Appo
         return q
 
     segments: List[Tuple[float, float, float]] = []
+    # Sans volume, il n'y a pas de « sous l'axe de l'ajutage » : un volume mort
+    # dans un bassin de capacité nulle ne décrit rien.
     if v_cap_m3 <= 0:
-        for t0, t1 in zip(instants, instants[1:]):
-            if t1 - t0 <= 1e-12:
-                continue
-            q_in = _entrant(t0)
-            reste = max(q_in - min(q_in, q_inf_ls), 0.0)
-            q_ajute = min(reste, q_aj_ls)
-            q_deverse = reste - q_ajute
-            segments.append((t0, t1, q_ajute + (q_deverse if surverse_vers_aval else 0.0)))
-        return Apport(_fusionner(segments))
+        v_sous_m3 = 0.0
 
     v = 0.0
     t = instants[0] if instants else 0.0
@@ -488,7 +529,9 @@ def pic_volume_m3(q_direct_ls: float, duree_pluie_min: float, apport: Apport,
         q_in = apport.debit_ls(t0)
         if t0 < duree_pluie_min - 1e-9:
             q_in += q_direct_ls
-        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, 0.0)
+        # Balayage : on cherche le volume à construire, le niveau monte librement.
+        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, 0.0,
+                                  capacite_illimitee=True)
         if v_pic > v_max:
             v_max = v_pic
     return v_max
@@ -526,7 +569,8 @@ def pic_et_vidange(q_direct_ls: float, duree_pluie_min: float, apport: Apport,
             delai = temps_vidange_h(v, q_inf_ls - q_in, q_aj_ls, v_sous_m3) * 60.0
             if delai <= t1 - t0 + 1e-9:
                 t_vide = t0 + delai
-        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, v_cap_m3)
+        v, _, v_pic, _ = _avancer(v, t1 - t0, q_in, q_inf_ls, q_aj_ls, v_sous_m3, v_cap_m3,
+                                  capacite_illimitee=v_cap_m3 <= 0)
         if v_pic > v_max:
             v_max = v_pic
     if t_vide is None:
@@ -586,7 +630,9 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     # met en service — alors que le routage du réseau, qui ne rabote pas, le
     # laisse fermé. Une même averse donnait donc deux surverses pour un même
     # ouvrage. ``_controles`` signale cette géométrie impossible.
-    v_sous = bassin.volume_sous_ajutage_m3
+    # Sans volume encodé, en revanche, il n'y a pas de « sous l'axe » : l'ouvrage
+    # est un passage, comme dans le routage du réseau.
+    v_sous = bassin.volume_sous_ajutage_m3 if v_cap > 0 else 0.0
 
     res = ResultatSimulation(
         duree_pluie_min=duree_pluie_min,
@@ -595,6 +641,7 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
         volume_capacite_m3=v_cap,
         q_infiltration_ls=q_inf,
         q_ajutage_ls=q_aj,
+        temps_vidange_max_h=projet.temps_vidange_max_h,
     )
     apport = apport if apport is not None else Apport()
     v_in_total = hauteur_mm * projet.aire_ponderee_m2 / 1000.0
@@ -606,9 +653,10 @@ def simuler(projet: Projet, bassin: Bassin, hauteur_mm: float, duree_pluie_min: 
     res.q_entrant_ls = q_in
     res.q_amont_max_ls = max((q for _, _, q in apport.segments), default=0.0)
 
-    # Horizon : l'averse, puis la vidange estimée.
-    v_pointe = min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min) + apport.volume_m3,
-                   v_cap if v_cap > 0 else 1e12)
+    # Horizon : l'averse, puis la vidange estimée. Un ouvrage sans volume ne
+    # retient rien : il n'a pas de vidange à attendre.
+    v_pointe = (min(volume_necessaire(projet, bassin, hauteur_mm, duree_pluie_min)
+                    + apport.volume_m3, v_cap) if v_cap > 0 else 0.0)
     t_vid = temps_vidange_h(v_pointe, q_inf, q_aj, v_sous) * 60.0
     if t_vid == float("inf") or t_vid > 30 * 1440:
         t_vid = 30 * 1440.0

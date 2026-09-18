@@ -15,6 +15,7 @@ from .dossier import (Dossier, ORDRE_SCENARIOS, synthese_reseau, synthese_scenar
 VERT = "DCFCE7"
 ORANGE = "FEF3C7"
 ROUGE = "FEE2E2"
+GRIS = "F1F5F9"
 BLEU = "DBEAFE"
 
 
@@ -221,7 +222,8 @@ def _section_reseau(doc: DocxBuilder, dossier: Dossier, numero: int) -> None:
             f"en {sim.duree_min:.0f} min, T = {sim.periode_retour} ans. Chaque ouvrage a sa "
             f"propre durée critique ; celle retenue ici est celle qui met le plus de volume "
             f"en jeu.")
-        couleurs = {"OK": VERT, "LIMITE": ORANGE, "DEBORDEMENT": ROUGE}
+        couleurs = {"OK": VERT, "LIMITE": ORANGE, "DEBORDEMENT": ROUGE,
+                    "NON CONFORME": ROUGE, "NON ENCODE": GRIS}
         fonds = {i: couleurs[res.statut]
                  for i, (_o, res) in enumerate(sim.resultats, start=1)}
         doc.tableau(_cellules(synthese_simulation_systeme(dossier), fonds),
@@ -453,7 +455,7 @@ def _w_ouvrage(doc, dossier, titre, sous_titre):
                 ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm"],
                 ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³"],
                 ["Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
-                ["Taux de remplissage", f"{sim.taux_remplissage * 100:.0f} %"],
+                ["Taux de remplissage", f"{sim.taux_remplissage_texte} %"],
                 ["Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
                 ["Temps de vidange", duree_h(sim.temps_vidange_h)],
                 [Cellule("Statut", gras=True),

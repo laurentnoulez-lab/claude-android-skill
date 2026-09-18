@@ -139,7 +139,7 @@ class VueBassin(Vue):
             [
                 ft.Container(theme.tuile(f"{sim.volume_max_m3:.1f}", "Volume stocké maximum", "m³",
                                          couleur, ft.Icons.WATER), col={"xs": 12, "sm": 6, "md": 3}),
-                ft.Container(theme.tuile(f"{sim.taux_remplissage * 100:.0f}", "Taux de remplissage", "%",
+                ft.Container(theme.tuile(sim.taux_remplissage_texte, "Taux de remplissage", "%",
                                          couleur, ft.Icons.PERCENT), col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(theme.duree_h(sim.temps_vidange_h).removesuffix(" h"),
                                          "Temps de vidange après la pluie", "h",
@@ -390,7 +390,7 @@ class VueBassin(Vue):
                                         weight=ft.FontWeight.W_600)),
                     ft.DataCell(ft.Text(theme.nombre(hauteur, 1), size=12)),
                     ft.DataCell(ft.Text(theme.nombre(res.volume_max_m3, 1), size=12)),
-                    ft.DataCell(ft.Text(theme.nombre(res.taux_remplissage * 100, 0), size=12)),
+                    ft.DataCell(ft.Text(res.taux_remplissage_texte, size=12)),
                     ft.DataCell(ft.Text(theme.nombre(res.volume_debordement_m3, 2), size=12,
                                         color=theme.ROUGE if res.debordement else None)),
                     ft.DataCell(ft.Text(res.temps_vidange_h_texte, size=12)),

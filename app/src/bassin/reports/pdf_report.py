@@ -27,7 +27,8 @@ from .pdf_writer import (
     rgb,
 )
 
-_COULEURS_STATUT = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE}
+_COULEURS_STATUT = {"OK": VERT_PALE, "LIMITE": ORANGE_PALE, "DEBORDEMENT": ROUGE_PALE,
+                    "NON CONFORME": ROUGE_PALE, "NON ENCODE": GRIS_CLAIR}
 
 
 def _couleur(c: charts.Couleur):
@@ -601,7 +602,7 @@ def _sections_ouvrage(pdf, dossier, L, titre, sous_titre):
         pdf.tableau(
             [["Grandeur", "Valeur", "Grandeur", "Valeur"],
              ["Durée de pluie", f"{sim.duree_pluie_min:.0f} min", "Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
-             ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm", "Taux de remplissage", f"{sim.taux_remplissage * 100:.0f} %"],
+             ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm", "Taux de remplissage", f"{sim.taux_remplissage_texte} %"],
              ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³", "Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
              ["Temps de vidange", duree_h(sim.temps_vidange_h), "Statut", sim.statut]],
             [0.27 * L, 0.23 * L, 0.27 * L, 0.23 * L], taille=8.5,

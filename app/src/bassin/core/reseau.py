@@ -240,6 +240,21 @@ class Systeme:
     def volume_total_m3(self) -> float:
         return sum(o.etude.bassin.volume_total_m3 for o in self.ouvrages)
 
+    @property
+    def aire_ponderee_routee_m2(self) -> float:
+        """Surface active effectivement raccordée à un ouvrage.
+
+        :attr:`aire_ponderee_m2` décrit ce qui est encodé, orphelins compris ;
+        celle-ci décrit ce qui ruisselle vers le réseau, et c'est elle que la
+        simulation met en jeu.
+        """
+        return sum(self.aire_ponderee_de(o.id) for o in self.ouvrages)
+
+    @property
+    def aire_routee_m2(self) -> float:
+        """Surface incidente effectivement raccordée à un ouvrage."""
+        return sum(self.aire_de(o.id) for o in self.ouvrages)
+
     def aire_ponderee_amont_m2(self, identifiant: str) -> float:
         """Surface active qui transite par les ouvrages situés en amont."""
         return sum(self.aire_ponderee_de(a.id) for a in self.amonts_transitifs(identifiant))
@@ -316,6 +331,16 @@ class Systeme:
         for o in sans_versant:
             messages.append(f"« {o.nom} » ne reçoit ni bassin versant ni bassin amont : "
                             "il ne reçoit aucune eau.")
+        for o in self.ouvrages:
+            # De l'eau arrive, mais rien ne la retient : la simulation traite
+            # alors l'ouvrage en simple passage. Le dire, sans quoi la synthèse
+            # décrit un réseau dont il manque une pièce sans l'annoncer.
+            if o.etude.bassin.volume_total_m3 > 0 or o in sans_versant:
+                continue
+            messages.append(
+                f"« {o.nom} » n'a aucun volume de temporisation encodé : la simulation le "
+                "traite comme un ouvrage de transit, tout ce qu'il reçoit repart vers l'aval "
+                "sans laminage. Encodez son volume ou lancez le dimensionnement en cascade.")
         return messages
 
     def cycles(self) -> List[List[str]]:
@@ -915,9 +940,24 @@ class SimulationSysteme:
         return [o for o, r in self.resultats if r.debordement]
 
     @property
+    def ouvrages_non_encodes(self) -> List[Ouvrage]:
+        """Ouvrages dont le volume n'a pas encore été encodé."""
+        return [o for o, r in self.resultats if r.statut == "NON ENCODE"]
+
+    @property
     def statut(self) -> str:
+        """Ce que vaut le système pour cette averse.
+
+        Tant qu'un ouvrage n'est pas encodé, la simulation ne décrit pas le
+        réseau projeté : annoncer « OK » — et « aucun ouvrage ne déborde » —
+        revenait à valider un réseau dont il manque une pièce.
+        """
+        if self.ouvrages_non_encodes:
+            return "NON ENCODE"
         if self.ouvrages_en_debordement:
             return "DEBORDEMENT"
+        if any(r.statut == "NON CONFORME" for _, r in self.resultats):
+            return "NON CONFORME"
         if any(r.statut == "LIMITE" for _, r in self.resultats):
             return "LIMITE"
         return "OK"

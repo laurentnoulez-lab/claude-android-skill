@@ -72,12 +72,21 @@ class VueSynthese(Vue):
         minimal = sum(f.volume_minimal_m3 for f in fiches)
         suffisant = systeme.volume_total_m3 + 1e-6 >= minimal
         vidange = max((f.resultat.temps_vidange_h for f in fiches), default=0.0)
+        # La tuile doit porter sur ce qui est réellement routé : un bassin versant
+        # laissé sans raccordement ne ruisselle nulle part, et le compter faisait
+        # dire à la tuile 45 000 m² au-dessus d'un volume ruisselé qui n'en
+        # concernait que 18 000.
+        routee = systeme.aire_ponderee_routee_m2
+        orpheline = systeme.aire_ponderee_m2 - routee
         return ft.ResponsiveRow(
             [
                 ft.Container(theme.tuile(
-                    theme.nombre(systeme.aire_ponderee_m2, 0), "Surface active du système", "m²",
+                    theme.nombre(routee, 0), "Surface active du système", "m²",
                     theme.ARDOISE, ft.Icons.LANDSCAPE,
-                    f"sur {theme.nombre(systeme.aire_totale_m2, 0)} m² incidents"),
+                    (f"sur {theme.nombre(systeme.aire_routee_m2, 0)} m² incidents · "
+                     f"{theme.nombre(orpheline, 0)} m² non raccordés, non comptés"
+                     if orpheline > 0 else
+                     f"sur {theme.nombre(systeme.aire_routee_m2, 0)} m² incidents")),
                     col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(
                     theme.nombre(minimal, 1), "Volume minimal cumulé", "m³",
@@ -179,7 +188,7 @@ class VueSynthese(Vue):
                 ft.DataCell(ft.Text(ouvrage.nom, size=12, weight=ft.FontWeight.W_600)),
                 ft.DataCell(ft.Text(theme.nombre(res.volume_max_m3, 1), size=12)),
                 ft.DataCell(ft.Text(theme.nombre(res.volume_capacite_m3, 1), size=12)),
-                ft.DataCell(ft.Text(theme.nombre(res.taux_remplissage * 100, 0), size=12)),
+                ft.DataCell(ft.Text(res.taux_remplissage_texte, size=12)),
                 ft.DataCell(ft.Text(theme.nombre(res.volume_debordement_m3, 2), size=12,
                                     color=theme.ROUGE if res.debordement else None)),
                 ft.DataCell(ft.Text(theme.nombre(res.volume_amont_m3, 1), size=12)),
@@ -214,12 +223,25 @@ class VueSynthese(Vue):
                     theme.fr(f"Ruisselé : {sim.volume_ruissele_m3:.1f} m³"), theme.GRIS,
                     theme.GRIS_CLAIR, ft.Icons.SHOWER),
                 theme.etiquette(
-                    theme.fr(f"Stocké : {sim.volume_stocke_m3:.1f} m³"), theme.VERT,
+                    # Ce sont les pointes de chaque ouvrage, qui ne sont pas
+                    # simultanées : ce n'est pas un volume stocké à un instant donné.
+                    theme.fr(f"Somme des pointes : {sim.volume_stocke_m3:.1f} m³"), theme.VERT,
                     theme.VERT_CLAIR, ft.Icons.WATER),
             ],
             wrap=True, spacing=8, run_spacing=8,
         )
         avis: List[ft.Control] = []
+        # Un ouvrage sans volume ne retient rien : annoncer qu'aucun ne déborde
+        # reviendrait à valider un réseau dont il manque une pièce.
+        non_encodes = sim.ouvrages_non_encodes
+        if non_encodes:
+            avis.append(theme.message(
+                theme.fr(
+                    f"{len(non_encodes)} ouvrage(s) sans volume encodé : "
+                    + ", ".join(f"« {o.nom} »" for o in non_encodes)
+                    + ". La simulation les traite comme des ouvrages de transit — ce "
+                      "qu'ils reçoivent repart vers l'aval sans laminage. Cette synthèse "
+                      "ne décrit donc pas encore le réseau projeté."), "erreur"))
         debordent = sim.ouvrages_en_debordement
         if debordent:
             avis.append(theme.message(
@@ -228,7 +250,7 @@ class VueSynthese(Vue):
                     + ", ".join(f"« {o.nom} »" for o in debordent)
                     + f", pour un total de {sim.volume_debordement_m3:.1f} m³. "
                       "L'onglet Réseau propose un dimensionnement en cascade."), "erreur"))
-        else:
+        elif not non_encodes:
             avis.append(theme.message(
                 "Aucun ouvrage ne déborde pour cette averse.", "succes"))
         if sim.temps_vidange_max_h > systeme.temps_vidange_max_h:

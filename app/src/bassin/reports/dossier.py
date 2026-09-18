@@ -363,7 +363,7 @@ def synthese_simulation_systeme(dossier: Dossier) -> List[List[str]]:
             ouvrage.nom,
             f"{res.volume_max_m3:.1f}",
             f"{res.volume_capacite_m3:.1f}",
-            f"{res.taux_remplissage * 100:.0f}",
+            res.taux_remplissage_texte,
             f"{res.volume_debordement_m3:.2f}",
             f"{res.volume_amont_m3:.1f}",
             res.temps_vidange_h_texte,

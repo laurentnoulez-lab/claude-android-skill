@@ -86,8 +86,8 @@ def dimensionner_orifice(debit_ls: float, charge_m: float, coef_debit: float = 0
                          diametres: Tuple[int, ...] = DIAMETRES_COMMERCIAUX_MM) -> ResultatOrifice:
     """Dimensionne l'orifice et propose le diamètre commercial immédiatement inférieur.
 
-    On retient le diamètre commercial le plus proche par defaut afin de ne pas
-    dépasser le débit de fuite autorisé.
+    C'est bien l'immédiatement inférieur, jamais le plus proche : un diamètre
+    au-dessus laisserait passer plus que le débit de fuite autorisé.
     """
     a = section_requise_m2(debit_ls, charge_m, coef_debit)
     d = diametre_requis_mm(debit_ls, charge_m, coef_debit)

@@ -28,9 +28,12 @@ COULEURS_STATUT = {
     "OK": (VERT, VERT_CLAIR),
     "LIMITE": (ORANGE, ORANGE_CLAIR),
     "DEBORDEMENT": (ROUGE, ROUGE_CLAIR),
+    "NON CONFORME": (ROUGE, ROUGE_CLAIR),
+    "NON ENCODE": (GRIS, GRIS_CLAIR),
 }
 
-LIBELLES_STATUT = {"OK": "OK", "LIMITE": "Limite", "DEBORDEMENT": "Débordement"}
+LIBELLES_STATUT = {"OK": "OK", "LIMITE": "Limite", "DEBORDEMENT": "Débordement",
+                   "NON CONFORME": "Non conforme", "NON ENCODE": "Non encodé"}
 
 
 def appliquer_theme(page: ft.Page, sombre: bool = False) -> None:
@@ -120,7 +123,8 @@ def etiquette(texte: str, couleur: str, fond: str, icone: Optional[str] = None) 
 def etiquette_statut(statut: str) -> ft.Control:
     couleur, fond = COULEURS_STATUT.get(statut, (GRIS, GRIS_CLAIR))
     icone = {"OK": ft.Icons.CHECK_CIRCLE, "LIMITE": ft.Icons.WARNING_AMBER,
-             "DEBORDEMENT": ft.Icons.ERROR}.get(statut, ft.Icons.INFO)
+             "DEBORDEMENT": ft.Icons.ERROR, "NON CONFORME": ft.Icons.ERROR,
+             "NON ENCODE": ft.Icons.EDIT_NOTE}.get(statut, ft.Icons.INFO)
     return etiquette(LIBELLES_STATUT.get(statut, statut), couleur, fond, icone)
 
 
