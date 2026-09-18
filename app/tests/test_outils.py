@@ -77,14 +77,50 @@ class TestCapturesInterface(unittest.TestCase):
                            "la molette ne défilera rien")
         self.assertGreater(page.molette_max, 0, "aucun défilement n'a eu lieu")
 
-    def test_une_capture_du_bas_identique_a_celle_du_haut_est_signalee(self):
-        """Sans ce message, le contrôle se croit fait alors qu'il ne l'est pas."""
-        journal = self._defiler(PageFactice(defile=False))
-        self.assertTrue(any("identique" in m for m in journal),
-                        f"défilement sans effet passé sous silence : {journal}")
+    def test_la_page_qui_bouge_est_distinguee_de_celle_qui_ne_bouge_pas(self):
+        page = PageFactice(defile=True)
+        journal: list = []
+        with tempfile.TemporaryDirectory() as repertoire:
+            self.assertTrue(captures_ui.defiler_et_capturer(
+                page, repertoire, "bureau", 3, "Essai", 1440, 960, b"HAUT", journal))
+            self.assertFalse(captures_ui.defiler_et_capturer(
+                PageFactice(defile=False), repertoire, "bureau", 3, "Essai",
+                1440, 960, b"HAUT", journal))
+        self.assertEqual(journal, [], "le constat seul n'est pas une anomalie")
 
-    def test_une_capture_du_bas_qui_montre_le_bas_ne_dit_rien(self):
-        self.assertEqual(self._defiler(PageFactice(defile=True)), [])
+
+class TestAnomaliesDeDefilement(unittest.TestCase):
+    """Un contrôle qui alerte à tort finit par être ignoré."""
+
+    #: telephone 844 px < bureau 960 px < tablette 1180 px.
+    FORMATS = captures_ui.FORMATS
+
+    def test_un_ecran_court_qui_tient_dans_la_grande_fenetre_ne_dit_rien(self):
+        """Cas réel : quatre écrans ne défilent qu'en tablette, la plus haute."""
+        defilements = {("telephone", "Rapport"): True, ("bureau", "Rapport"): True,
+                       ("tablette", "Rapport"): False}
+        self.assertEqual(captures_ui.anomalies_de_defilement(defilements, self.FORMATS), [])
+
+    def test_une_grande_fenetre_qui_defile_quand_la_petite_ne_defile_pas_est_signalee(self):
+        """Le même écran est forcément plus long dans la plus petite fenêtre.
+
+        C'est la signature du défaut d'origine : le format bureau ne défilait
+        sur aucun écran, quand le téléphone défilait sur tous.
+        """
+        defilements = {("telephone", "Synthèse"): False, ("bureau", "Synthèse"): False,
+                       ("tablette", "Synthèse"): True}
+        anomalies = captures_ui.anomalies_de_defilement(defilements, self.FORMATS)
+        self.assertTrue(any("[telephone] Synthèse" in a for a in anomalies), anomalies)
+        self.assertTrue(any("[bureau] Synthèse" in a for a in anomalies), anomalies)
+
+    def test_un_ecran_qui_defile_partout_ne_dit_rien(self):
+        defilements = {(f, "Réseau"): True for f in self.FORMATS}
+        self.assertEqual(captures_ui.anomalies_de_defilement(defilements, self.FORMATS), [])
+
+    def test_un_ecran_qui_ne_defile_nulle_part_ne_dit_rien(self):
+        """Rien ne permet de trancher : aucune fenêtre n'a montré de contenu au-delà."""
+        defilements = {(f, "Ajutage"): False for f in self.FORMATS}
+        self.assertEqual(captures_ui.anomalies_de_defilement(defilements, self.FORMATS), [])
 
 
 if __name__ == "__main__":
