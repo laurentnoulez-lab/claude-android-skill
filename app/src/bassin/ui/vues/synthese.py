@@ -71,7 +71,13 @@ class VueSynthese(Vue):
         sim = self.etat.simulation_systeme
         minimal = sum(f.volume_minimal_m3 for f in fiches)
         suffisant = systeme.volume_total_m3 + 1e-6 >= minimal
-        vidange = max((f.resultat.temps_vidange_h for f in fiches), default=0.0)
+        # La tuile porte sur l'ouvrage **encodé**, comme le tableau qui la suit et
+        # comme l'alerte des 48 h. Elle montrait le maximum des fiches de
+        # dimensionnement — 12,5 h — au-dessus d'un tableau qui affichait 16 h 13
+        # pour le même réseau : deux « vidanges les plus longues » sur un écran,
+        # et rien pour les distinguer. C'est celle de l'ouvrage construit que le
+        # maître d'ouvrage doit tenir.
+        vidange = sim.temps_vidange_max_h if sim is not None else 0.0
         # La tuile doit porter sur ce qui est réellement routé : un bassin versant
         # laissé sans raccordement ne ruisselle nulle part, et le compter faisait
         # dire à la tuile 45 000 m² au-dessus d'un volume ruisselé qui n'en
@@ -104,7 +110,8 @@ class VueSynthese(Vue):
                     theme.nombre(vidange, 1), "Vidange la plus longue", "h",
                     theme.ROUGE if vidange > systeme.temps_vidange_max_h else theme.ARDOISE,
                     ft.Icons.TIMELAPSE,
-                    f"maximum admis : {systeme.temps_vidange_max_h:.0f} h"),
+                    theme.fr(f"ouvrages encodés · maximum admis : "
+                             f"{systeme.temps_vidange_max_h:.0f} h")),
                     col={"xs": 12, "sm": 6, "md": 3}),
             ],
             spacing=12, run_spacing=12,

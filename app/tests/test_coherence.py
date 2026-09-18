@@ -277,6 +277,56 @@ class TestCoherenceDesConfigurations(unittest.TestCase):
             import shutil
             shutil.rmtree(repertoire, ignore_errors=True)
 
+    def test_la_tuile_de_vidange_dit_la_meme_chose_que_son_tableau(self):
+        """Deux « vidanges les plus longues » sur un écran, rien pour les distinguer.
+
+        La tuile portait le maximum des fiches de **dimensionnement** — 12,5 h
+        sur le réseau de démonstration — juste au-dessus d'un tableau qui
+        affichait 16 h 13 pour les mêmes ouvrages, et d'une alerte qui contrôle
+        les 48 h sur cette seconde valeur. Le lecteur y voit une seule grandeur.
+        C'est celle de l'ouvrage construit qui fait foi.
+        """
+        import flet as ft
+
+        from test_ui import PageFactice
+        from bassin.core import exemple
+        from bassin.ui import theme
+        from bassin.ui.state import EtatApplication
+        from bassin.ui.vues.synthese import VueSynthese
+
+        systeme = exemple.systeme_demonstration()
+        sim = mod_reseau.simuler_evenement_critique(systeme)
+        fiches = mod_reseau.dimensionner(systeme)
+        dimensionnement = max(f.resultat.temps_vidange_h for f in fiches)
+        # Le cas n'a d'intérêt que si les deux valeurs diffèrent réellement.
+        self.assertNotAlmostEqual(dimensionnement, sim.temps_vidange_max_h, places=1)
+
+        etat = EtatApplication()
+        etat.systeme = systeme
+        etat.invalider()
+        textes, vus = [], set()
+
+        def parcourir(controle):
+            if id(controle) in vus:
+                return
+            vus.add(id(controle))
+            if isinstance(controle, ft.Text) and controle.value:
+                textes.append(controle.value)
+            for attribut in ("content", "controls", "rows", "cells", "title", "label"):
+                valeur = getattr(controle, attribut, None)
+                if valeur is None:
+                    continue
+                for enfant in (valeur if isinstance(valeur, (list, tuple)) else [valeur]):
+                    if hasattr(enfant, "__dict__"):
+                        parcourir(enfant)
+
+        for controle in VueSynthese(PageFactice(), etat).construire():
+            parcourir(controle)
+        affiche = textes[textes.index("VIDANGE LA PLUS LONGUE") + 1]
+        self.assertEqual(affiche, theme.nombre(sim.temps_vidange_max_h, 1),
+                         "la tuile ne montre pas la vidange des ouvrages encodés")
+        self.assertNotEqual(affiche, theme.nombre(dimensionnement, 1))
+
     def test_la_synthese_totalise_bien_ses_ouvrages(self):
         for nom, systeme in configurations():
             sim = mod_reseau.simuler_evenement_critique(systeme)
