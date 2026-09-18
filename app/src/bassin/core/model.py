@@ -146,6 +146,11 @@ DOMAINES: Dict[str, Domaine] = {
         "Coefficient de débit de l'orifice", "", mini=0.0, maxi=1.0, mini_exclu=True,
         decimales=2,
         raison="un orifice ne débite jamais plus que la vitesse théorique"),
+    "diametre_ajutage_mm": Domaine(
+        "Diamètre d'ajutage retenu", "mm", mini=0.0, maxi=2000.0, mini_exclu=True,
+        decimales=1,
+        raison="l'orifice doit rester petit devant la charge : au-delà de 2 m, "
+               "ce n'est plus un ajutage mais une ouverture"),
 }
 
 
@@ -222,16 +227,19 @@ class Bassin:
 def _porteurs(projet):
     """(objet, grandeurs surveillées, grandeurs qui ont le droit d'être vides).
 
-    Une grandeur « vide » a un sens pour deux d'entre elles seulement : le sol
-    propre du bassin construit (vide = on reprend celui du dimensionnement) et
-    l'ajutage spécifique (vide = c'est le débit absolu qui fait foi). Partout
-    ailleurs, un ``null`` dans le fichier est une donnée perdue, pas un choix.
+    Une grandeur « vide » a un sens pour trois d'entre elles seulement : le sol
+    propre du bassin construit (vide = on reprend celui du dimensionnement),
+    l'ajutage spécifique (vide = c'est le débit absolu qui fait foi) et le
+    diamètre d'ajutage retenu (vide = aucun diamètre n'a été choisi dans
+    l'abaque). Partout ailleurs, un ``null`` dans le fichier est une donnée
+    perdue, pas un choix.
     """
     yield projet, ("surface_reference_m2", "k_infiltration_ms",
                    "coef_securite_infiltration", "surface_infiltration_m2",
                    "debit_ajutage_ls", "debit_ajutage_specifique_ls_ha",
                    "temps_vidange_max_h", "hauteur_charge_m",
-                   "coef_debit_orifice"), ("debit_ajutage_specifique_ls_ha",)
+                   "coef_debit_orifice", "diametre_ajutage_mm"), (
+                       "debit_ajutage_specifique_ls_ha", "diametre_ajutage_mm")
     yield projet.bassin, ("volume_total_m3", "volume_sous_ajutage_m3",
                           "surface_dispersion_m2", "debit_ajutage_ls",
                           "k_infiltration_ms"), ("k_infiltration_ms",)
@@ -304,7 +312,8 @@ def valeurs_hors_domaine(projet) -> List[str]:
     messages = _hors_domaine(projet, (
         "surface_reference_m2", "k_infiltration_ms", "coef_securite_infiltration",
         "surface_infiltration_m2", "debit_ajutage_ls", "debit_ajutage_specifique_ls_ha",
-        "temps_vidange_max_h", "hauteur_charge_m", "coef_debit_orifice"))
+        "temps_vidange_max_h", "hauteur_charge_m", "coef_debit_orifice",
+        "diametre_ajutage_mm"))
     messages += _hors_domaine(projet.bassin, (
         "volume_total_m3", "volume_sous_ajutage_m3", "surface_dispersion_m2",
         "debit_ajutage_ls", "k_infiltration_ms"), "de l'ouvrage encodé")
@@ -390,6 +399,12 @@ class Projet:
     # Ajutage (Torricelli)
     hauteur_charge_m: float = 1.0
     coef_debit_orifice: float = 0.60
+    #: Retenir un diamètre de l'abaque commercial. Faux : l'ouvrage s'en tient
+    #: au diamètre théorique, que l'utilisateur percera comme il l'entend.
+    ajutage_diametre_commercial: bool = True
+    #: Diamètre choisi dans l'abaque [mm] ; vide, c'est celui que l'application
+    #: propose — le plus grand qui ne dépasse pas le débit visé.
+    diametre_ajutage_mm: Optional[float] = None
 
     # Identification
     nom_projet: str = ""

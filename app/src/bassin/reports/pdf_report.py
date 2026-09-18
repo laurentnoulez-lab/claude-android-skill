@@ -6,6 +6,7 @@ import math
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..core import hydro, rainfall
+from ..core import rapport as mod_rapport
 from ..core.model import LIBELLES_SCENARIOS
 from ..formats import duree_h
 from . import charts, schema as mod_schema
@@ -201,12 +202,13 @@ def dessiner_schema(pdf: Pdf, schema: mod_schema.Schema) -> bool:
     return True
 
 
-def section_reseau(pdf: Pdf, dossier: Dossier, numero: int) -> None:
+def section_reseau(pdf, dossier, L=None, titre=None, sous_titre=None,
+                   reseau=False, chapitres=()) -> None:
     """Synthèse du réseau : schéma, ouvrages, bassins versants, simulation."""
     systeme = dossier.systeme
     L = pdf.largeur_utile
     pdf.nouvelle_page()
-    pdf.titre1(f"{numero}. Synthèse du réseau")
+    titre("Synthèse du réseau")
     schema = mod_schema.construire(systeme, dossier.fiches, dossier.simulation_systeme)
     pdf.texte(schema.sous_titre, 9.0, gras=True, couleur=BLEU)
     if not dessiner_schema(pdf, schema):
@@ -219,14 +221,14 @@ def section_reseau(pdf: Pdf, dossier: Dossier, numero: int) -> None:
     for note in schema.notes:
         pdf.puce(note, 8.5, couleur=GRIS)
 
-    pdf.titre2(f"{numero}.1 Bassins versants")
+    sous_titre("Bassins versants")
     lignes = synthese_versants(dossier)
     colonnes = len(lignes[0]) - 1
     pdf.tableau(lignes, [0.26 * L] + [(0.74 / colonnes) * L] * colonnes, taille=7.5,
                 fonds={(len(lignes) - 1, j): BLEU_PALE for j in range(len(lignes[0]))},
                 alignements=["left", "left"] + ["right"] * (colonnes - 1))
 
-    pdf.titre2(f"{numero}.2 Dimensionnement de chaque bassin d'orage")
+    sous_titre("Dimensionnement de chaque bassin d'orage")
     pdf.texte("Chaque ouvrage est dimensionné sur ses propres bassins versants et sur ce que "
               "lui restituent les ouvrages amont, tels qu'ils sont encodés. Un ouvrage amont "
               "sous-dimensionné surverse : son trop-plein arrive sans laminage et gonfle le "
@@ -242,7 +244,7 @@ def section_reseau(pdf: Pdf, dossier: Dossier, numero: int) -> None:
 
     sim = dossier.simulation_systeme
     if sim is not None:
-        pdf.titre2(f"{numero}.3 Simulation du système complet")
+        sous_titre("Simulation du système complet")
         pdf.texte(
             f"Averse la plus défavorable pour l'ensemble du réseau : "
             f"{sim.hauteur_mm:.1f} mm en {sim.duree_min:.0f} min, T = {sim.periode_retour} ans. "
@@ -276,46 +278,12 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
                 f" - données GTI {rainfall.MILLESIME_GTI}")
     L = pdf.largeur_utile
 
-    pdf.titre("Dimensionnement d'un bassin d'orage" if not dossier.reseau_multiple
-              else "Dimensionnement d'un réseau de bassins d'orage", 18)
-    pdf.texte("Méthode rationnelle - pluies statistiques du GTI (Région wallonne)", 9.5,
-              italique=True, couleur=GRIS, apres=10)
-    pdf.tableau(
-        [
-            ["Projet", p.nom_projet or "-", "Commune", f"{p.commune_nom} ({p.commune_ins})"],
-            ["Localisation", p.localisation or "-", "Période de retour", f"{p.periode_retour} ans"],
-            ["Auteur", p.auteur or "-", "Source des pluies", dossier.source_pluies_datee],
-            ["Date", dossier.date] + dossier.derniere_ligne_identification,
-        ],
-        [0.16 * L, 0.31 * L, 0.20 * L, 0.33 * L],
-        entete=False,
-        taille=8.5,
-        fonds={(i, 0): BLEU_PALE for i in range(5)} | {(i, 2): BLEU_PALE for i in range(5)},
-    )
-    if dossier.reseau_multiple and dossier.fiches:
-        cumul = sum(f.volume_minimal_m3 for f in dossier.fiches)
-        encode_total = sum(f.volume_encode_m3 for f in dossier.fiches)
-        vidange = max((f.resultat.temps_vidange_h for f in dossier.fiches), default=0.0)
-        conforme = all(f.resultat.conforme for f in dossier.fiches)
-        pdf.encadre(
-            f"Volume minimal cumulé : {cumul:.1f} m³    |    "
-            f"Volume encodé : {encode_total:.1f} m³    |    "
-            f"Vidange la plus longue : {vidange:.1f} h",
-            fond=BLEU_PALE if conforme else ROUGE_PALE,
-        )
-    else:
-        pdf.encadre(
-            f"Volume de temporisation : {res.volume_m3:.1f} m³    |    "
-            f"Durée de pluie critique : {res.duree_critique_hm}    |    "
-            f"Vidange après la pluie : {res.temps_vidange_hm}",
-            fond=BLEU_PALE if res.conforme else ROUGE_PALE,
-        )
-
-    # Le rapport porte sur l'étude entière : chaque bassin d'orage a son
-    # chapitre, écrit par le même code. Les sections communes à tout le réseau
-    # — pluie de projet, synthèse — ne s'écrivent qu'une fois.
+    # Le rapport suit le **plan** : les rubriques retenues, dans leur ordre.
+    # Les rubriques d'ouvrage forment le bloc des chapitres, un par bassin,
+    # écrit par le même code qu'un dossier à bassin unique.
     chapitres = dossier.par_ouvrage()
     reseau = dossier.reseau_multiple and len(chapitres) > 1
+    plan = dossier.plan
     rang = {"n": 0, "sous": 0}
 
     def titre(texte: str) -> None:
@@ -327,31 +295,41 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
         rang["sous"] += 1
         pdf.titre2(f"{rang['n']}.{rang['sous']} {texte}")
 
-    def chapitre(texte: str) -> None:
-        """Titre de premier niveau d'un chapitre d'ouvrage."""
-        rang["n"] += 1
-        rang["sous"] = 0
-        pdf.titre1(f"{rang['n']}. {texte}")
+    def sans_numero(texte: str) -> None:
+        """Dans un chapitre d'ouvrage, une sous-section devient un intertitre."""
+        pdf.titre2(texte)
 
-    if reseau:
-        _section_versants(pdf, dossier, L, titre, sous_titre)
-        section_reseau(pdf, dossier, rang["n"] + 1)
-        rang["n"] += 1
-        _section_pluie(pdf, dossier, L, titre, sous_titre)
+    def bloc_des_chapitres() -> None:
         for sous in chapitres:
             pdf.nouvelle_page()
-            chapitre(sous.ouvrage_courant.nom)
-            # Dans un chapitre d'ouvrage, ce qui était une section devient une
-            # sous-section, et ce qui était une sous-section un simple intertitre.
-            def sans_numero(texte: str) -> None:
-                pdf.titre2(texte)
-            _section_donnees(pdf, sous, L, sous_titre, sans_numero)
-            _sections_ouvrage(pdf, sous, L, sous_titre, sans_numero)
-    else:
-        _section_donnees(pdf, dossier, L, titre, sous_titre)
-        _section_pluie(pdf, dossier, L, titre, sous_titre)
-        _sections_ouvrage(pdf, dossier, L, titre, sous_titre)
+            rang["n"] += 1
+            rang["sous"] = 0
+            pdf.titre1(f"{rang['n']}. {sous.ouvrage_courant.nom}")
+            for rubrique in plan.ouvrage_actives():
+                ECRIVAINS_OUVRAGE[rubrique.cle](pdf, sous, L, sous_titre, sans_numero)
 
+    index_chapitres = plan.index_des_chapitres()
+    for position, rubrique in enumerate(plan.actives()):
+        if rubrique.portee == mod_rapport.PORTEE_OUVRAGE:
+            if not reseau:
+                # Bassin unique : pas de chapitre, chaque rubrique d'ouvrage est
+                # une section du document, à la place que le plan lui donne.
+                ECRIVAINS_OUVRAGE[rubrique.cle](pdf, dossier, L, titre, sous_titre)
+            elif position == index_chapitres:
+                bloc_des_chapitres()
+            continue
+        if rubrique.libre:
+            _rubrique_libre(pdf, rubrique, L, titre)
+        elif rubrique.cle in ECRIVAINS_DOCUMENT:
+            ECRIVAINS_DOCUMENT[rubrique.cle](pdf, dossier, L, titre, sous_titre, reseau,
+                                             chapitres)
+    return pdf.enregistrer(chemin)
+
+
+def _conclusion(pdf, dossier, L, titre, sous_titre, reseau, chapitres):
+    """Conclusion du dossier : le réseau entier, ou le bassin isolé."""
+    p = dossier.projet
+    res = dossier.resultat_principal
     titre("Conclusion")
     if reseau:
         # La conclusion d'un rapport de réseau porte sur le réseau : résumer le
@@ -405,22 +383,65 @@ def ecrire(dossier: Dossier, chemin: str) -> str:
     if p.remarques:
         pdf.titre2("Remarques")
         pdf.texte(p.remarques)
+
+
+def _signature(pdf, dossier, L, titre, sous_titre, reseau, chapitres):
+    """Cartouche de lieu, de date et de signature."""
     pdf.espace(18)
     pdf.texte("Fait à ............................................., le ................................", 9.5)
     pdf.espace(14)
     pdf.texte("Titre et nom : ............................................................................", 9.5)
     pdf.espace(14)
     pdf.texte("Signature :", 9.5)
-    return pdf.enregistrer(chemin)
 
 
-def _section_versants(pdf, dossier, L, titre, sous_titre):
+def _rubrique_libre(pdf, rubrique, L, titre) -> None:
+    """Rubrique composée par l'utilisateur : titre, paragraphes, images."""
+    titre(rubrique.libelle)
+    for bloc in rubrique.blocs:
+        if bloc.est_image:
+            octets = bloc.image()
+            largeur = max(min(bloc.largeur_cm, 18.0), 1.0) * 28.3465   # cm -> points
+            if octets and pdf.image(octets, largeur_pt=largeur):
+                if bloc.legende:
+                    pdf.texte(bloc.legende, 8.5, italique=True, couleur=GRIS, centre=True)
+            else:
+                # Ne pas laisser un trou muet : le dossier dit ce qui manque.
+                pdf.texte("[image non reprise : PNG ou JPEG attendu, en couleurs ou en niveaux de gris]",
+                          8.5, italique=True, couleur=ROUGE)
+            continue
+        if not bloc.texte.strip():
+            continue
+        couleur = _couleur_texte(bloc.couleur)
+        if bloc.genre == mod_rapport.BLOC_INTERTITRE:
+            pdf.titre2(bloc.texte)
+            continue
+        pdf.texte(bloc.texte, 9.5, gras=bloc.gras, italique=bloc.italique,
+                  souligne=bloc.souligne, couleur=couleur)
+
+
+def _couleur_texte(valeur: str):
+    """Couleur « #RRGGBB » du plan, ramenée à celle du PDF ; noir par défaut."""
+    valeur = (valeur or "").strip().lstrip("#")
+    if len(valeur) != 6:
+        return NOIR
+    try:
+        return rgb(int(valeur[0:2], 16), int(valeur[2:4], 16), int(valeur[4:6], 16))
+    except ValueError:
+        return NOIR
+
+
+def _section_versants(pdf, dossier, L, titre, sous_titre, reseau=False, chapitres=()):
     """Données générales du projet et tous les bassins versants.
 
     Sur un réseau, les contraintes (commune, sécurité sur K, vidange maximale)
     valent pour tout le système : les répéter dans chaque chapitre d'ouvrage
     n'apprendrait rien. Les bassins versants, eux, se lisent d'un bloc.
     """
+    # Cette rubrique décrit le projet dans son ensemble : elle n'a de sens
+    # que sur un réseau, là où un bassin isolé a sa propre section de données.
+    if not reseau:
+        return
     p = dossier.projet
     systeme = dossier.systeme
     titre("Données d'entrée du projet")
@@ -452,7 +473,7 @@ def _section_versants(pdf, dossier, L, titre, sous_titre):
                 alignements=["left", "left", "right", "center", "right"])
 
 
-def _section_donnees(pdf, dossier, L, titre, sous_titre):
+def _section_donnees(pdf, dossier, L, titre, sous_titre, reseau=False, chapitres=()):
     """Surfaces, sol et exutoire de l'ouvrage que ce dossier décrit."""
     p = dossier.projet
     res = dossier.resultat_principal
@@ -520,7 +541,7 @@ def _section_donnees(pdf, dossier, L, titre, sous_titre):
                      f"{p.debit_fuite_admissible_ls:.3f} l/s.")
 
 
-def _section_pluie(pdf, dossier, L, titre, sous_titre):
+def _section_pluie(pdf, dossier, L, titre, sous_titre, reseau=False, chapitres=()):
     """Pluie de projet : commune à tout le réseau, écrite une seule fois."""
     p = dossier.projet
     res = dossier.resultat_principal
@@ -542,9 +563,8 @@ def _section_pluie(pdf, dossier, L, titre, sous_titre):
     pdf.puce(f"Débit ruisselé de pointe : {res.debit_entrant_ls:.1f} l/s pour une surface active de "
              f"{p.aire_ponderee_m2:.0f} m².")
 
-
-def _sections_ouvrage(pdf, dossier, L, titre, sous_titre):
-    """Scénarios, vérification, table QDF et ajutage — pour un ouvrage."""
+def _section_scenarios(pdf, dossier, L, titre, sous_titre):
+    """Comparaison des scénarios, pour un ouvrage."""
     p = dossier.projet
     res = dossier.resultat_principal
     titre("Comparaison des scénarios")
@@ -569,99 +589,189 @@ def _sections_ouvrage(pdf, dossier, L, titre, sous_titre):
         for m in res.messages:
             pdf.puce(m, couleur=GRIS)
 
-    if dossier.simulation:
-        sim = dossier.simulation
-        b = p.bassin
-        pdf.nouvelle_page()
-        titre("Vérification de l'ouvrage encodé")
-        pdf.tableau(
-            [["Caractéristique", "Valeur", "Unité"],
-             ["Volume tampon total (sous l'ajutage + au-dessus)",
-              f"{b.volume_total_m3:.1f}", "m³"],
-             ["    dont sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
-             ["    dont au-dessus de l'axe de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
-             ["Surface de dispersion (fond du bassin)", f"{b.surface_dispersion_m2:.1f}", "m²"],
-             ["Débit d'infiltration", f"{sim.q_infiltration_ls:.3f}", "l/s"],
-             ["Débit d'ajutage", f"{sim.q_ajutage_ls:.3f}", "l/s"]],
-            [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
-        )
-        amont = p.amont
-        if amont.actif:
-            sous_titre("Apport du bassin d'orage amont")
-            pdf.tableau(
-                [["Grandeur", "Valeur", "Unité"],
-                 ["Volume restitué a l'ouvrage aval", f"{sim.volume_amont_m3:.1f}", "m³"],
-                 ["Débit de pointe restitué", f"{sim.q_amont_max_ls:.3f}", "l/s"],
-                 ["Fin du déversement amont", f"{sim.t_fin_apport_amont_min:.0f}", "min"],
-                 ["Débit restitué après la fin de l'averse",
-                  f"{sim.q_amont_apres_pluie_ls:.3f}", "l/s"]],
-                [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5,
-                alignements=["left", "right", "center"],
-            )
-            pdf.puce(sim.commentaire_amont)
-        sous_titre("Événement critique simulé")
-        pdf.tableau(
-            [["Grandeur", "Valeur", "Grandeur", "Valeur"],
-             ["Durée de pluie", f"{sim.duree_pluie_min:.0f} min", "Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
-             ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm", "Taux de remplissage", f"{sim.taux_remplissage_texte} %"],
-             ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³", "Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
-             ["Temps de vidange", duree_h(sim.temps_vidange_h), "Statut", sim.statut]],
-            [0.27 * L, 0.23 * L, 0.27 * L, 0.23 * L], taille=8.5,
-            fonds={(4, 3): ROUGE_PALE if sim.debordement else VERT_PALE},
-        )
-        g = dossier.graphique_simulation()
-        if g:
-            dessiner_graphique(pdf, g, 165)
-        gd = dossier.graphique_debits()
-        if gd:
-            dessiner_graphique(pdf, gd, 140)
 
-    if dossier.table:
-        table = dossier.table
-        pdf.nouvelle_page()
-        titre("Pluies absorbées sans débordement")
-        pdf.texte(f"{dossier.titre_table_volumes}. Volume requis [m³] par pluie. Vert : absorbe "
-                  "par l'ouvrage - orange : limite (plus de 95 % de la capacité) - rouge : "
-                  "débordement.", 8.5, couleur=GRIS)
-        entete = ["Durée"] + [f"{rp} ans" for rp in table.periodes_retour]
-        lignes = [entete]
-        fonds = {}
-        for i in range(len(table.durees_min)):
-            ligne = [rainfall.QDF_DURATION_LABELS[i]]
-            for j in range(len(table.periodes_retour)):
-                c = table.cellules[i][j]
-                ligne.append(f"{c.volume_requis_m3:.1f}")
-                fonds[(i + 1, j + 1)] = _COULEURS_STATUT.get(c.statut, GRIS_CLAIR)
-            lignes.append(ligne)
-        largeur_col = (L - 0.10 * L) / len(table.periodes_retour)
-        pdf.tableau(lignes, [0.10 * L] + [largeur_col] * len(table.periodes_retour), taille=7.0,
-                    fonds=fonds, alignements=["left"] + ["center"] * len(table.periodes_retour))
-        rp_max = table.periode_retour_max_acceptee()
-        pdf.encadre(
-            f"Période de retour maximale absorbée sans débordement : {rp_max} ans" if rp_max
-            else "Le bassin déborde déjà pour la pluie de récurrence 2 ans.",
-            fond=VERT_PALE if rp_max else ROUGE_PALE,
-        )
 
-    if dossier.orifice:
-        o = dossier.orifice
-        titre("Dimensionnement de l'ajutage")
-        pdf.texte("Orifice en paroi mince - formule de Torricelli : Q = Cd x A x racine(2 g h).", 9.0)
+def _section_verification(pdf, dossier, L, titre, sous_titre):
+    """Vérification de l'ouvrage encodé : caractéristiques et simulation."""
+    if not dossier.simulation:
+        return
+    p = dossier.projet
+    sim = dossier.simulation
+    b = p.bassin
+    pdf.nouvelle_page()
+    titre("Vérification de l'ouvrage encodé")
+    pdf.tableau(
+        [["Caractéristique", "Valeur", "Unité"],
+         ["Volume tampon total (sous l'ajutage + au-dessus)",
+          f"{b.volume_total_m3:.1f}", "m³"],
+         ["    dont sous l'axe de l'ajutage", f"{b.volume_sous_ajutage_m3:.1f}", "m³"],
+         ["    dont au-dessus de l'axe de l'ajutage", f"{b.volume_tampon_m3:.1f}", "m³"],
+         ["Surface de dispersion (fond du bassin)", f"{b.surface_dispersion_m2:.1f}", "m²"],
+         ["Débit d'infiltration", f"{sim.q_infiltration_ls:.3f}", "l/s"],
+         ["Débit d'ajutage", f"{sim.q_ajutage_ls:.3f}", "l/s"]],
+        [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
+    )
+    amont = p.amont
+    if amont.actif:
+        sous_titre("Apport du bassin d'orage amont")
         pdf.tableau(
             [["Grandeur", "Valeur", "Unité"],
-             ["Débit d'ajutage visé", f"{o.debit_ls:.3f}", "l/s"],
-             ["Charge h (axe de l'orifice -> trop-plein)", f"{o.charge_m:.2f}", "m"],
-             ["Coefficient de débit Cd", f"{o.coef_debit:.2f}", "-"],
-             ["Section requise", f"{o.section_cm2:.2f}", "cm²"],
-             ["Diamètre requis", f"{o.diametre_mm:.1f}", "mm"],
-             ["Vitesse dans l'orifice", f"{o.vitesse_ms:.2f}", "m/s"],
-             ["Diamètre commercial retenu",
-              "-" if o.diametre_commercial_mm is None else f"{o.diametre_commercial_mm:.0f}", "mm"],
-             ["Débit réel du diamètre retenu",
-              "-" if o.debit_commercial_ls is None else f"{o.debit_commercial_ls:.3f}", "l/s"]],
-            [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
-            fonds={(5, 1): BLEU_PALE, (8, 1): VERT_PALE},
+             ["Volume restitué a l'ouvrage aval", f"{sim.volume_amont_m3:.1f}", "m³"],
+             ["Débit de pointe restitué", f"{sim.q_amont_max_ls:.3f}", "l/s"],
+             ["Fin du déversement amont", f"{sim.t_fin_apport_amont_min:.0f}", "min"],
+             ["Débit restitué après la fin de l'averse",
+              f"{sim.q_amont_apres_pluie_ls:.3f}", "l/s"]],
+            [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5,
+            alignements=["left", "right", "center"],
         )
-        go = dossier.graphique_orifice()
-        if go:
-            dessiner_graphique(pdf, go, 130)
+        pdf.puce(sim.commentaire_amont)
+    sous_titre("Événement critique simulé")
+    pdf.tableau(
+        [["Grandeur", "Valeur", "Grandeur", "Valeur"],
+         ["Durée de pluie", f"{sim.duree_pluie_min:.0f} min", "Volume stocké maximum", f"{sim.volume_max_m3:.1f} m³"],
+         ["Hauteur de pluie", f"{sim.hauteur_pluie_mm:.1f} mm", "Taux de remplissage", f"{sim.taux_remplissage_texte} %"],
+         ["Volume ruisselé", f"{sim.volume_ruissele_m3:.1f} m³", "Volume débordé", f"{sim.volume_debordement_m3:.2f} m³"],
+         ["Temps de vidange", duree_h(sim.temps_vidange_h), "Statut", sim.statut]],
+        [0.27 * L, 0.23 * L, 0.27 * L, 0.23 * L], taille=8.5,
+        fonds={(4, 3): ROUGE_PALE if sim.debordement else VERT_PALE},
+    )
+    g = dossier.graphique_simulation()
+    if g:
+        dessiner_graphique(pdf, g, 165)
+    gd = dossier.graphique_debits()
+    if gd:
+        dessiner_graphique(pdf, gd, 140)
+
+
+
+def _section_qdf(pdf, dossier, L, titre, sous_titre):
+    """Table des pluies absorbées sans débordement."""
+    if not dossier.table:
+        return
+    table = dossier.table
+    pdf.nouvelle_page()
+    titre("Pluies absorbées sans débordement")
+    pdf.texte(f"{dossier.titre_table_volumes}. Volume requis [m³] par pluie. Vert : absorbe "
+              "par l'ouvrage - orange : limite (plus de 95 % de la capacité) - rouge : "
+              "débordement.", 8.5, couleur=GRIS)
+    entete = ["Durée"] + [f"{rp} ans" for rp in table.periodes_retour]
+    lignes = [entete]
+    fonds = {}
+    for i in range(len(table.durees_min)):
+        ligne = [rainfall.QDF_DURATION_LABELS[i]]
+        for j in range(len(table.periodes_retour)):
+            c = table.cellules[i][j]
+            ligne.append(f"{c.volume_requis_m3:.1f}")
+            fonds[(i + 1, j + 1)] = _COULEURS_STATUT.get(c.statut, GRIS_CLAIR)
+        lignes.append(ligne)
+    largeur_col = (L - 0.10 * L) / len(table.periodes_retour)
+    pdf.tableau(lignes, [0.10 * L] + [largeur_col] * len(table.periodes_retour), taille=7.0,
+                fonds=fonds, alignements=["left"] + ["center"] * len(table.periodes_retour))
+    rp_max = table.periode_retour_max_acceptee()
+    pdf.encadre(
+        f"Période de retour maximale absorbée sans débordement : {rp_max} ans" if rp_max
+        else "Le bassin déborde déjà pour la pluie de récurrence 2 ans.",
+        fond=VERT_PALE if rp_max else ROUGE_PALE,
+    )
+
+
+
+def _section_ajutage(pdf, dossier, L, titre, sous_titre):
+    """Dimensionnement de l'orifice calibré."""
+    if not dossier.orifice:
+        return
+    o = dossier.orifice
+    titre("Dimensionnement de l'ajutage")
+    pdf.texte("Orifice en paroi mince - formule de Torricelli : Q = Cd x A x racine(2 g h).", 9.0)
+    pdf.tableau(
+        [["Grandeur", "Valeur", "Unité"],
+         ["Débit d'ajutage visé", f"{o.debit_ls:.3f}", "l/s"],
+         ["Charge h (axe de l'orifice -> trop-plein)", f"{o.charge_m:.2f}", "m"],
+         ["Coefficient de débit Cd", f"{o.coef_debit:.2f}", "-"],
+         ["Section requise", f"{o.section_cm2:.2f}", "cm²"],
+         ["Diamètre requis", f"{o.diametre_mm:.1f}", "mm"],
+         ["Vitesse dans l'orifice", f"{o.vitesse_ms:.2f}", "m/s"],
+         ["Diamètre commercial retenu",
+          "-" if o.diametre_commercial_mm is None else f"{o.diametre_commercial_mm:.0f}", "mm"],
+         ["Débit réel du diamètre retenu",
+          "-" if o.debit_commercial_ls is None else f"{o.debit_commercial_ls:.3f}", "l/s"]],
+        [0.60 * L, 0.22 * L, 0.18 * L], taille=8.5, alignements=["left", "right", "center"],
+        fonds={(5, 1): BLEU_PALE, (8, 1): VERT_PALE},
+    )
+    if o.depasse_le_debit_vise:
+        # Le diamètre proposé par l'application reste toujours sous le débit de
+        # fuite ; un diamètre retenu à la main peut le dépasser. Le dossier le
+        # dit : c'est ce débit-là qui sera constaté à la réception.
+        pdf.texte(f"Le diamètre retenu laisse passer {o.debit_commercial_ls:.3f} l/s, soit plus "
+                  f"que le débit de fuite visé de {o.debit_ls:.3f} l/s. À justifier auprès du "
+                  f"gestionnaire, ou à ramener au diamètre immédiatement inférieur.",
+                  9.0, couleur=ROUGE)
+    go = dossier.graphique_orifice()
+    if go:
+        dessiner_graphique(pdf, go, 130)
+
+
+
+def _section_reseau_plan(pdf, dossier, L, titre, sous_titre, reseau, chapitres):
+    """Synthèse du réseau : elle n'a de sens que s'il y a un réseau."""
+    if reseau:
+        section_reseau(pdf, dossier, L, titre, sous_titre)
+
+
+def _identification(pdf, dossier, L, titre, sous_titre, reseau, chapitres):
+    """Titre du document, tableau d'identification et bandeau de résultat."""
+    p = dossier.projet
+    res = dossier.resultat_principal
+    pdf.titre("Dimensionnement d'un bassin d'orage" if not dossier.reseau_multiple
+              else "Dimensionnement d'un réseau de bassins d'orage", 18)
+    pdf.texte("Méthode rationnelle - pluies statistiques du GTI (Région wallonne)", 9.5,
+              italique=True, couleur=GRIS, apres=10)
+    pdf.tableau(
+        [
+            ["Projet", p.nom_projet or "-", "Commune", f"{p.commune_nom} ({p.commune_ins})"],
+            ["Localisation", p.localisation or "-", "Période de retour", f"{p.periode_retour} ans"],
+            ["Auteur", p.auteur or "-", "Source des pluies", dossier.source_pluies_datee],
+            ["Date", dossier.date] + dossier.derniere_ligne_identification,
+        ],
+        [0.16 * L, 0.31 * L, 0.20 * L, 0.33 * L],
+        entete=False,
+        taille=8.5,
+        fonds={(i, 0): BLEU_PALE for i in range(5)} | {(i, 2): BLEU_PALE for i in range(5)},
+    )
+    if dossier.reseau_multiple and dossier.fiches:
+        cumul = sum(f.volume_minimal_m3 for f in dossier.fiches)
+        encode_total = sum(f.volume_encode_m3 for f in dossier.fiches)
+        vidange = max((f.resultat.temps_vidange_h for f in dossier.fiches), default=0.0)
+        conforme = all(f.resultat.conforme for f in dossier.fiches)
+        pdf.encadre(
+            f"Volume minimal cumulé : {cumul:.1f} m³    |    "
+            f"Volume encodé : {encode_total:.1f} m³    |    "
+            f"Vidange la plus longue : {vidange:.1f} h",
+            fond=BLEU_PALE if conforme else ROUGE_PALE,
+        )
+    else:
+        pdf.encadre(
+            f"Volume de temporisation : {res.volume_m3:.1f} m³    |    "
+            f"Durée de pluie critique : {res.duree_critique_hm}    |    "
+            f"Vidange après la pluie : {res.temps_vidange_hm}",
+            fond=BLEU_PALE if res.conforme else ROUGE_PALE,
+        )
+
+
+#: Quelle fonction écrit quelle rubrique d'origine.
+ECRIVAINS_DOCUMENT = {
+    "identification": _identification,
+    "versants": _section_versants,
+    "reseau": _section_reseau_plan,
+    "pluie": _section_pluie,
+    "conclusion": _conclusion,
+    "signature": _signature,
+}
+
+ECRIVAINS_OUVRAGE = {
+    "donnees": _section_donnees,
+    "scenarios": _section_scenarios,
+    "verification": _section_verification,
+    "qdf": _section_qdf,
+    "ajutage": _section_ajutage,
+}

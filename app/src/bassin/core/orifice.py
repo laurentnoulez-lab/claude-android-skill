@@ -51,6 +51,16 @@ class ResultatOrifice:
     def section_cm2(self) -> float:
         return self.section_m2 * 1e4
 
+    @property
+    def depasse_le_debit_vise(self) -> bool:
+        """Le diamètre retenu laisse-t-il passer plus que le débit de fuite visé ?
+
+        Le diamètre que l'application propose reste toujours en dessous ; celui
+        que l'utilisateur retient dans l'abaque peut le dépasser, et c'est ce
+        débit-là qui sera constaté à la réception de l'ouvrage.
+        """
+        return bool(self.debit_commercial_ls) and self.debit_commercial_ls > self.debit_ls * 1.001
+
 
 def section_requise_m2(debit_ls: float, charge_m: float, coef_debit: float = 0.60) -> float:
     """Section d'orifice nécessaire pour évacuer un débit sous une charge donnée."""
@@ -83,11 +93,19 @@ def vitesse_ms(charge_m: float, coef_debit: float = 0.60) -> float:
 
 
 def dimensionner_orifice(debit_ls: float, charge_m: float, coef_debit: float = 0.60,
-                         diametres: Tuple[int, ...] = DIAMETRES_COMMERCIAUX_MM) -> ResultatOrifice:
+                         diametres: Tuple[int, ...] = DIAMETRES_COMMERCIAUX_MM,
+                         commercial: bool = True,
+                         diametre_retenu_mm: Optional[float] = None) -> ResultatOrifice:
     """Dimensionne l'orifice et propose le diamètre commercial immédiatement inférieur.
 
     C'est bien l'immédiatement inférieur, jamais le plus proche : un diamètre
     au-dessus laisserait passer plus que le débit de fuite autorisé.
+
+    ``commercial`` à faux s'en tient au diamètre théorique : rien n'oblige un
+    ouvrage à être percé au calibre d'une plaque du commerce, et imposer
+    l'abaque revenait à réduire le débit sans que personne l'ait demandé.
+    ``diametre_retenu_mm`` retient un diamètre choisi dans l'abaque plutôt que
+    celui proposé.
     """
     a = section_requise_m2(debit_ls, charge_m, coef_debit)
     d = diametre_requis_mm(debit_ls, charge_m, coef_debit)
@@ -99,6 +117,12 @@ def dimensionner_orifice(debit_ls: float, charge_m: float, coef_debit: float = 0
         diametre_mm=d,
         vitesse_ms=vitesse_ms(charge_m, coef_debit),
     )
+    if not commercial:
+        return res
+    if diametre_retenu_mm:
+        res.diametre_commercial_mm = diametre_retenu_mm
+        res.debit_commercial_ls = debit_orifice_ls(diametre_retenu_mm, charge_m, coef_debit)
+        return res
     candidats = [dc for dc in diametres if dc <= d]
     if candidats:
         res.diametre_commercial_mm = candidats[-1]

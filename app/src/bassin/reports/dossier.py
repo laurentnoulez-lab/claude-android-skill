@@ -45,6 +45,19 @@ class Dossier:
     fiche: object = None
 
     @property
+    def plan(self):
+        """Composition voulue du dossier.
+
+        Portée par le système, donc enregistrée avec le projet. Un dossier
+        construit sans système — un essai, un bassin isolé monté à la main —
+        prend le plan d'origine : toutes les rubriques, dans l'ordre historique.
+        """
+        from ..core import rapport as mod_rapport
+
+        plan = getattr(self.systeme, "plan_rapport", None)
+        return plan if plan is not None else mod_rapport.plan_par_defaut()
+
+    @property
     def reseau_multiple(self) -> bool:
         """Vrai quand le dossier décrit plus d'un ouvrage ou d'un bassin versant."""
         if self.systeme is None:
@@ -249,7 +262,10 @@ def construire(projet: Projet, scenario_principal: str = SCENARIO_MIXTE,
     q_ajutage = bassin.debit_ajutage_ls or projet.debit_ajutage_ls
     res_orifice = None
     if q_ajutage > 0 and projet.hauteur_charge_m > 0:
-        res_orifice = orifice.dimensionner_orifice(q_ajutage, projet.hauteur_charge_m, projet.coef_debit_orifice)
+        res_orifice = orifice.dimensionner_orifice(
+            q_ajutage, projet.hauteur_charge_m, projet.coef_debit_orifice,
+            commercial=projet.ajutage_diametre_commercial,
+            diametre_retenu_mm=projet.diametre_ajutage_mm)
     fiches: List = []
     sim_systeme = None
     if systeme is not None and systeme.aire_ponderee_m2 > 0:

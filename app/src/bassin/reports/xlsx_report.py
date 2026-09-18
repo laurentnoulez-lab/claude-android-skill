@@ -1347,9 +1347,17 @@ def _feuille_ajutage(wb: Workbook, dossier: Dossier, ancrage: Optional[_Ancrage]
         # du plus petit diamètre, il n'y a pas de choix possible et on prend
         # celui-là. Figé, ce diamètre ne suivait ni la charge, ni le Cd, ni le
         # débit visé.
-        _label(ws, 12, "Diamètre commercial retenu (par defaut)",
-               f"=IFERROR(INDEX($A${a0}:$A${a1},MATCH($B$10,$A${a0}:$A${a1},1)),$A${a0})",
-               "mm", "0")
+        choisi = getattr(dossier.projet, "diametre_ajutage_mm", None)
+        if choisi:
+            # L'utilisateur a retenu un diamètre dans l'abaque : le classeur dit
+            # le sien, pas celui que la formule proposerait. Le débit ci-dessous
+            # se recalcule sur cette valeur, comme pour la proposition.
+            _label(ws, 12, "Diamètre commercial retenu (choisi dans l'abaque)",
+                   float(choisi), "mm", "0")
+        else:
+            _label(ws, 12, "Diamètre commercial retenu (par defaut)",
+                   f"=IFERROR(INDEX($A${a0}:$A${a1},MATCH($B$10,$A${a0}:$A${a1},1)),$A${a0})",
+                   "mm", "0")
         _label(ws, 13, "Débit réel du diamètre retenu",
                "=B6*PI()*(B12/1000)^2/4*SQRT(2*B7*B5)*1000", "l/s", "0.000", fond=VERT_PALE)
 

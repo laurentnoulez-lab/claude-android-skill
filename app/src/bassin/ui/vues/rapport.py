@@ -15,6 +15,7 @@ from .. import theme
 from ..composants import barre_ouvrage
 from ..state import destination_utilisable, diagnostic_stockage, repertoire_documents
 from .base import Vue
+from .plan_rapport import EditeurPlan
 
 FORMATS = (
     ("xlsx", "Classeur Excel", "Feuilles de calcul vivantes : les formules de la méthode "
@@ -40,6 +41,7 @@ class VueRapport(Vue):
         self.erreurs: List[str] = []
         self.selecteur_fichier: Optional[ft.FilePicker] = None
         self.selecteur_dossier: Optional[ft.FilePicker] = None
+        self.editeur = EditeurPlan(self)
 
     # ------------------------------------------------------------ génération
     def _generer(self, formats: List[str]) -> None:
@@ -286,6 +288,14 @@ class VueRapport(Vue):
             self.bloc_derive(lambda: barre_ouvrage(self)),
             theme.section("Récapitulatif du dossier", recap, ft.Icons.FACT_CHECK),
             theme.section(
+                "Composition du dossier",
+                self.editeur.carte(),
+                ft.Icons.LIST_ALT,
+                "Décochez ce qui ne sert pas à cette étude, ajoutez vos propres rubriques — "
+                "texte mis en forme, intertitres, images — et ordonnez l'ensemble. Le plan "
+                "s'enregistre avec le projet.",
+            ),
+            theme.section(
                 "Générer les livrables",
                 ft.Column(
                     [
@@ -300,7 +310,7 @@ class VueRapport(Vue):
                     spacing=14,
                 ),
                 ft.Icons.SHARE,
-                "Le rapport reprend les données d'entrée, la synthèse du réseau, les quatre "
-                "scénarios de l'ouvrage détaillé, la simulation, la table QDF et l'ajutage.",
+                "Le PDF et le Word suivent la composition ci-dessus ; le classeur Excel "
+                "reprend l'étude entière, rubriques décochées comprises.",
             ),
         ]

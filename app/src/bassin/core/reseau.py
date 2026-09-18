@@ -37,6 +37,7 @@ from functools import lru_cache
 from typing import Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from . import hydro, rainfall, simulation
+from . import rapport as mod_rapport
 from .model import (
     assainir_valeurs,
     Bassin,
@@ -160,6 +161,9 @@ class Systeme:
     ouvrages: List[Ouvrage] = field(default_factory=list)
     #: Ouvrage affiché par les onglets de détail.
     ouvrage_courant: str = ""
+    #: Composition du dossier : rubriques retenues, ajoutées, ordonnées.
+    plan_rapport: mod_rapport.PlanRapport = field(
+        default_factory=mod_rapport.plan_par_defaut)
 
     # ---- accès ----------------------------------------------------------
     def ouvrage(self, identifiant: str) -> Optional[Ouvrage]:
@@ -541,6 +545,9 @@ class Systeme:
             etude = ouvrage.get("etude", {})
             for champ in self.DERIVES:
                 etude.pop(champ, None)
+        # Le plan s'écrit par sa propre méthode : ``asdict`` en donnerait une
+        # forme dépendante des champs internes, que la relecture devrait suivre.
+        donnees["plan_rapport"] = self.plan_rapport.to_dict()
         return donnees
 
     @classmethod
@@ -558,9 +565,16 @@ class Systeme:
             Ouvrage(**{**_connus(Ouvrage, o), "etude": Projet.from_dict(o.get("etude", {}))})
             for o in data.pop("ouvrages", [])
         ]
-        systeme = cls(bassins_versants=versants, ouvrages=ouvrages, **_connus(cls, data))
+        plan = mod_rapport.PlanRapport.from_dict(data.pop("plan_rapport", None))
+        systeme = cls(bassins_versants=versants, ouvrages=ouvrages, plan_rapport=plan,
+                      **_connus(cls, data))
         systeme.synchroniser()
         return systeme
+
+
+#: Champs que :meth:`Systeme.from_dict` construit lui-même, et que le filtre
+#: générique ne doit donc pas transmettre au constructeur sous leur forme brute.
+_MONTES_A_PART = ("surfaces", "etude", "plan_rapport")
 
 
 def _connus(classe, data: Dict) -> Dict:
@@ -572,7 +586,7 @@ def _connus(classe, data: Dict) -> Dict:
     """
     champs = classe.__dataclass_fields__
     return {k: texte_si_besoin(champs[k], v) for k, v in dict(data).items()
-            if k in champs and k not in ("surfaces", "etude")}
+            if k in champs and k not in _MONTES_A_PART}
 
 
 def _assainir_versant(versant: BassinVersant) -> List[str]:

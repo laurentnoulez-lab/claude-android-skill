@@ -354,7 +354,10 @@ class EtatApplication:
         q = self.bassin.debit_ajutage_ls or self.projet.debit_ajutage_ls
         if q <= 0 or self.projet.hauteur_charge_m <= 0:
             return None
-        return orifice.dimensionner_orifice(q, self.projet.hauteur_charge_m, self.projet.coef_debit_orifice)
+        return orifice.dimensionner_orifice(
+            q, self.projet.hauteur_charge_m, self.projet.coef_debit_orifice,
+            commercial=self.projet.ajutage_diametre_commercial,
+            diametre_retenu_mm=self.projet.diametre_ajutage_mm)
 
     def dossier(self) -> Dossier:
         self.systeme.synchroniser()

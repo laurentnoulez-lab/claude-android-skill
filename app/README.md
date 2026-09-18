@@ -24,10 +24,10 @@ Livrables : **APK Android** et **installateur Windows**, à partir d'un code uni
 | **Dimensionnement** | Pour l'ouvrage choisi : vitesse d'infiltration K (en **m/s**, équivalent mm/h complété tout seul), débit d'ajutage (en **l/s** ou **l/(s·ha)**, au choix), volume sous l'ajutage pour le scénario à orifice surélevé ; comparaison des **4 scénarios** |
 | **Bassin** | Encodage de l'ouvrage choisi (volume tampon, volume sous l'ajutage, surface de dispersion, débit d'ajutage) et **simulation** d'une ou plusieurs durées de pluie à la fois |
 | **Table QDF** | Tableau récurrences × durées : quelles pluies l'ouvrage encaisse sans déborder |
-| **Ajutage** | Dimensionnement de l'orifice (Torricelli), abaque des diamètres commerciaux |
+| **Ajutage** | Dimensionnement de l'orifice (Torricelli), abaque des diamètres commerciaux — le diamètre commercial reste facultatif |
 | **Synthèse** | **Schéma du réseau** — bassins versants, bassins d'orage, raccordements, données de chaque ouvrage, pluie dimensionnante, vidange maximale admise — et **simulation du système complet** |
 | **Pluies GTI** | Tables QDF en mm et en l/s/ha, coefficients de Montana, courbes IDF |
-| **Rapport** | Génération du dossier en **Excel (avec formules vivantes)**, **Word** et **PDF**, synthèse du réseau comprise |
+| **Rapport** | Génération du dossier en **Excel (avec formules vivantes)**, **Word** et **PDF**, synthèse du réseau comprise, avec un **plan que l'on compose** (rubriques, texte, images) |
 
 ### Les quatre scénarios étudiés
 
@@ -269,6 +269,29 @@ d'entrée, pluie, scénarios, vérification, table QDF, ajutage, conclusion).
 Les deux formats sont écrits par le même découpage et se lisent donc de la même façon ;
 seule la synthèse du réseau diffère : le PDF trace le schéma au vecteur, le Word le rend
 en arbre indenté, faute d'une police vectorielle dans le rasteur embarqué.
+
+### Composer le plan du dossier
+
+Le tableau ci-dessus est le plan **par défaut** ; l'onglet **Rapport** le laisse composer,
+et le PDF comme le Word s'y conforment :
+
+- **décocher** une rubrique la retire des deux dossiers — le classeur Excel, lui, reste
+  complet : il sert de note de calcul, non de pièce écrite ;
+- les **flèches** changent l'ordre des rubriques, y compris celui des chapitres d'ouvrage
+  par rapport aux rubriques communes ;
+- **Ajouter une rubrique** crée une rubrique libre, faite de blocs : *paragraphe*,
+  *intertitre* ou *image*. Un paragraphe se met en **gras**, en *italique*, en souligné et
+  se colore ; une image PNG ou JPEG se choisit sur l'appareil, se dimensionne en centimètres
+  et porte une légende. Une rubrique d'origine ne se supprime pas : elle se décoche, sans
+  quoi le plan la réintroduirait au chargement suivant.
+
+La mise en forme porte sur le **bloc entier** : un paragraphe mêlant du gras et du romain
+s'obtient en écrivant deux blocs. C'est moins souple qu'un traitement de texte, mais tout ce
+qui est affiché reste modifiable et rien ne se cache dans un balisage à apprendre.
+
+Le plan voyage avec le projet : il est enregistré dans le fichier `.json`, images comprises.
+Un projet enregistré avant cette fonction s'ouvre avec le plan d'origine, et une rubrique
+ajoutée plus tard au logiciel apparaît dans un plan ancien, à sa place.
 
 ## Le classeur Excel
 

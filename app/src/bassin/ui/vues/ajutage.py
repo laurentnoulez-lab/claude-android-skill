@@ -41,6 +41,14 @@ class VueAjutage(Vue):
             self.etat.invalider()
             self.maj_resultats()
 
+        def basculer_commercial(e: ft.ControlEvent) -> None:
+            """Retenir un diamètre de l'abaque, ou s'en tenir au théorique."""
+            p.ajutage_diametre_commercial = bool(e.control.value)
+            if not p.ajutage_diametre_commercial:
+                p.diametre_ajutage_mm = None
+            self.etat.invalider()
+            self.rafraichir()
+
         return ft.ResponsiveRow(
             [
                 *theme.champs_convertis(
@@ -63,6 +71,19 @@ class VueAjutage(Vue):
                 theme.selecteur("Coefficient de débit Cd", str(p.coef_debit_orifice),
                                 [(str(v), theme.fr(f"{v:.2f} — {lib}")) for lib, v in orifice.COEFFICIENTS_DEBIT],
                                 maj_cd, col={"xs": 12, "md": 6}),
+                ft.Container(
+                    ft.Column(
+                        [
+                            ft.Checkbox(value=p.ajutage_diametre_commercial,
+                                        label="Retenir un diamètre commercial",
+                                        on_change=basculer_commercial),
+                            ft.Text("décoché : l'ouvrage garde le diamètre théorique · "
+                                    "coché : cliquez une ligne de l'abaque pour en choisir un autre",
+                                    size=11, color=theme.GRIS),
+                        ],
+                        spacing=2,
+                    ),
+                    col={"xs": 12, "md": 6}),
             ],
             spacing=12,
             run_spacing=12,
@@ -86,7 +107,10 @@ class VueAjutage(Vue):
                 ft.Container(theme.tuile(
                     "—" if res.diametre_commercial_mm is None else f"{res.diametre_commercial_mm:.0f}",
                     "Diamètre commercial retenu", "mm", theme.VERT, ft.Icons.BUILD,
-                    "valeur inférieure la plus proche"), col={"xs": 12, "sm": 6, "md": 3}),
+                    ("aucun · le diamètre théorique fait foi"
+                     if not p.ajutage_diametre_commercial else
+                     "choisi dans l'abaque" if p.diametre_ajutage_mm else
+                     "valeur inférieure la plus proche")), col={"xs": 12, "sm": 6, "md": 3}),
                 ft.Container(theme.tuile(
                     "—" if res.debit_commercial_ls is None else f"{res.debit_commercial_ls:.3f}",
                     "Débit réel obtenu", "l/s", theme.VERT, ft.Icons.WATER,
@@ -109,6 +133,17 @@ class VueAjutage(Vue):
             spacing=4,
         )
 
+        def choisir(diametre: int):
+            def _f(e: ft.ControlEvent) -> None:
+                # Recliquer le diamètre retenu rend la main à la proposition de
+                # l'application : le choix se défait comme il se fait.
+                p.diametre_ajutage_mm = (None if p.diametre_ajutage_mm == diametre
+                                         else float(diametre))
+                p.ajutage_diametre_commercial = True
+                self.etat.invalider()
+                self.rafraichir()
+            return _f
+
         abaque = orifice.abaque_diametres(p.hauteur_charge_m, p.coef_debit_orifice)
         tableau = theme.tableau_defilant(
             ft.DataTable(
@@ -124,6 +159,7 @@ class VueAjutage(Vue):
                                                 color=theme.VERT if q <= res.debit_ls else theme.ROUGE)),
                         ],
                         selected=d == res.diametre_commercial_mm,
+                        on_select_changed=choisir(d),
                     )
                     for d, s, q in abaque
                 ],
@@ -145,8 +181,17 @@ class VueAjutage(Vue):
             reperes=[charts.Repere(res.debit_ls, theme.nombre(res.debit_ls, 2, "l/s de projet"), charts.ROUGE)],
         )
 
+        corps = [tuiles, calcul]
+        if res.depasse_le_debit_vise:
+            # Le diamètre proposé reste sous le débit de fuite ; celui que l'on
+            # retient à la main peut le dépasser. Le dire ici, avant le dossier.
+            corps.append(theme.message(
+                theme.fr(f"Le diamètre retenu laisse passer {res.debit_commercial_ls:.3f} l/s, "
+                         f"soit plus que le débit de fuite visé de {res.debit_ls:.3f} l/s. "
+                         "Le dossier le signale."), "alerte"))
+
         return [
-            theme.section("Résultat", ft.Column([tuiles, calcul], spacing=14),
+            theme.section("Résultat", ft.Column(corps, spacing=14),
                           ft.Icons.CHECK_CIRCLE_OUTLINE),
             theme.section("Courbe de débit", graphiques.construire(g, 240), ft.Icons.SHOW_CHART,
                           "Le débit réel varie avec la charge ; le dimensionnement retient la charge "
