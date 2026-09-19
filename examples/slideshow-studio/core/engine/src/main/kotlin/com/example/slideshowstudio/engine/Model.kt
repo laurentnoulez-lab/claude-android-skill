@@ -45,6 +45,11 @@ data class PhotoRef(
      * movement. It still appears exactly once, like every other photo.
      */
     val isImportant: Boolean = false,
+    /**
+     * Photos sharing a group identifier are shown together in one scene and are never split across
+     * scenes. An important photo is alone by definition, so it ignores any group it was put in.
+     */
+    val groupId: String? = null,
 ) {
     val aspect: Float get() = widthPx.toFloat() / heightPx.toFloat()
 }
@@ -93,6 +98,24 @@ enum class PhotoOrder {
     SHUFFLE,
 }
 
+/** How the video begins. */
+enum class OpeningMode {
+    /** From an entirely black frame, fading into the first scene. */
+    FROM_BLACK,
+
+    /** From the first scene out of focus, coming sharp. */
+    FROM_BLUR,
+}
+
+/** How the video ends. */
+enum class EndingMode {
+    /** The last scene fades to an entirely black frame. */
+    TO_BLACK,
+
+    /** The last scene drifts out of focus and ends heavily blurred. */
+    TO_BLUR,
+}
+
 /** What fills the canvas behind and between the photos. */
 enum class BackgroundMode {
     /** One colour chosen by the user. */
@@ -115,6 +138,8 @@ data class SlideshowSettings(
     val photoOrder: PhotoOrder = PhotoOrder.ADAPTIVE,
     val backgroundMode: BackgroundMode = BackgroundMode.BLURRED_PHOTO,
     val backgroundColor: Int = Palette.DEFAULT_BACKGROUND,
+    val opening: OpeningMode = OpeningMode.FROM_BLACK,
+    val ending: EndingMode = EndingMode.TO_BLACK,
     val fps: Int = 30,
     val seed: Long = 0L,
 ) {
@@ -135,7 +160,16 @@ data class SlideshowSettings(
         fps = fps.coerceIn(1, 60),
     )
 
+    /**
+     * Length of the opening and closing effects. It is kept in step with the transitions the rest of
+     * the video uses, and never shorter than a second: less than that reads as a glitch rather than
+     * as an opening.
+     */
+    val openingSeconds: Float
+        get() = maxOf(OPENING_SECONDS, effectiveTransitionSeconds).coerceAtMost(sceneDurationSeconds * 0.5f)
+
     companion object {
+        const val OPENING_SECONDS = 1f
         const val MIN_SCENE_SECONDS = 2f
         const val MAX_SCENE_SECONDS = 7f
         const val MIN_TRANSITION_SECONDS = 0.5f

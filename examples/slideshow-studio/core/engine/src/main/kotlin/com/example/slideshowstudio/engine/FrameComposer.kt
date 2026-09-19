@@ -13,7 +13,7 @@ class FrameComposer(
 ) {
     private val settings = storyboard.settings
     private val canvasAspect = settings.canvasAspect
-    private val fadeDuration = minOf(FADE_SECONDS, storyboard.sceneDurationSeconds * 0.25f)
+    private val openingDuration = settings.openingSeconds
 
     val totalDurationSeconds: Float = storyboard.totalDurationSeconds
     val frameCount: Int = storyboard.frameCount
@@ -93,6 +93,7 @@ class FrameComposer(
             backdropDim = backdropDim,
             commands = commands,
             blackout = blackoutAt(t),
+            defocus = defocusAt(t),
         )
     }
 
@@ -201,17 +202,33 @@ class FrameComposer(
     private fun isOffscreen(rect: NormRect): Boolean =
         rect.right <= 0f || rect.left >= 1f || rect.bottom <= 0f || rect.top >= 1f
 
-    private fun blackoutAt(t: Float): Float {
-        if (fadeDuration <= 0f) return 0f
-        val fadeIn = if (t < fadeDuration) 1f - t / fadeDuration else 0f
-        val fadeOutStart = totalDurationSeconds - fadeDuration
-        val fadeOut = if (t > fadeOutStart) (t - fadeOutStart) / fadeDuration else 0f
-        return max(fadeIn, fadeOut).coerceIn(0f, 1f)
+    /** Opening and closing effects. Each end is independent: one may fade, the other blur. */
+    private fun blackoutAt(t: Float): Float = max(
+        if (settings.opening == OpeningMode.FROM_BLACK) openingRamp(t) else 0f,
+        if (settings.ending == EndingMode.TO_BLACK) endingRamp(t) else 0f,
+    )
+
+    private fun defocusAt(t: Float): Float = max(
+        if (settings.opening == OpeningMode.FROM_BLUR) openingRamp(t) else 0f,
+        if (settings.ending == EndingMode.TO_BLUR) endingRamp(t) else 0f,
+    )
+
+    /** 1 at the very first frame, 0 once the opening is over. */
+    private fun openingRamp(t: Float): Float {
+        if (openingDuration <= 0f || t >= openingDuration) return 0f
+        return Easing.SMOOTHER_STEP.apply(1f - t / openingDuration)
+    }
+
+    /** 0 until the closing starts, 1 on the very last frame. */
+    private fun endingRamp(t: Float): Float {
+        if (openingDuration <= 0f) return 0f
+        val start = totalDurationSeconds - openingDuration
+        if (t <= start) return 0f
+        return Easing.SMOOTHER_STEP.apply((t - start) / openingDuration)
     }
 
     private companion object {
         const val ALPHA_EPSILON = 0.002f
-        const val FADE_SECONDS = 0.5f
         const val OUT_FADE_START = 0.55f
     }
 }

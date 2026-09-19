@@ -59,6 +59,51 @@
     <string name="order_adaptive_hint">L\'ordre d\'importation, avec quelques échanges d\'une ou deux positions.</string>
     <string name="order_shuffle_hint">Mélangées une fois avant la génération.</string>
 
+    <string name="opening_title">Ouverture du diaporama</string>
+    <string name="opening_black">Depuis le noir</string>
+    <string name="opening_blur">Depuis le flou</string>
+    <string name="opening_black_hint">La première scène apparaît progressivement depuis une image noire.</string>
+    <string name="opening_blur_hint">La première scène est d\'abord floue, puis la mise au point se fait.</string>
+
+    <string name="ending_title">Fin du diaporama</string>
+    <string name="ending_black">Vers le noir</string>
+    <string name="ending_blur">Vers le flou</string>
+    <string name="ending_black_hint">La dernière scène s\'efface progressivement vers le noir.</string>
+    <string name="ending_blur_hint">La dernière scène devient progressivement floue.</string>
+
+    <string name="group_start">Grouper</string>
+    <string name="group_create">Créer le groupe</string>
+    <string name="group_cancel">Annuler</string>
+    <string name="group_selected">%1$d photo(s) sélectionnée(s)</string>
+    <string name="group_hint">Sélectionnez les photos qui doivent apparaître ensemble dans une même scène.</string>
+    <string name="group_badge">Groupe %1$s — appuyer pour la retirer</string>
+    <string name="group_summary">%1$d groupe(s) — chaque groupe occupe une scène entière</string>
+    <string name="group_needs_two">Sélectionnez au moins deux photos pour créer un groupe.</string>
+    <string name="group_too_large">Ce groupe dépasse le nombre d\'images par scène choisi.</string>
+    <string name="group_has_important">Une photo importante est affichée seule : retirez-lui ce statut ou ne l\'ajoutez pas au groupe.</string>
+    <string name="important_left_group">Photo importante : elle a été retirée de son groupe car elle est affichée seule.</string>
+    <string name="groups_dissolved">Des groupes trop grands pour ce mode ont été dissous.</string>
+    <string name="select_photo">Sélectionner la photo</string>
+
+    <string name="music_title">Musique de fond</string>
+    <string name="music_add">Ajouter une musique</string>
+    <string name="music_remove">Retirer la musique</string>
+    <string name="music_up">Avancer dans la liste</string>
+    <string name="music_down">Reculer dans la liste</string>
+    <string name="music_position">%1$d.</string>
+    <string name="music_total">Musique : %1$s — vidéo : %2$s</string>
+    <string name="music_too_short">La bande sonore ne couvre pas toute la vidéo : il manque %1$s. Ajoutez un autre morceau.</string>
+    <string name="music_covers">La bande sonore couvre toute la vidéo.</string>
+    <string name="music_transition">Enchaînement entre les morceaux</string>
+    <string name="music_cut">Coupure directe</string>
+    <string name="music_crossfade">Fondu enchaîné</string>
+    <string name="music_crossfade_duration">Durée du fondu enchaîné : %1$s s</string>
+    <string name="music_fade_in">Fondu d\'entrée</string>
+    <string name="music_fade_out">Fondu de sortie</string>
+    <string name="music_fade_duration">Durée des fondus : %1$s s</string>
+    <string name="music_volume">Volume de la musique : %1$d %%</string>
+    <string name="exporting_mixing">Mixage de la musique… %1$d %%</string>
+
     <string name="summary_scenes">%1$d scènes</string>
     <string name="summary_duration">Durée : %1$s</string>
     <string name="summary_format">%1$s · 30 fps · MP4 H.264</string>

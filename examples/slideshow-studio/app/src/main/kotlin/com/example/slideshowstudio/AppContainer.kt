@@ -1,6 +1,7 @@
 package com.example.slideshowstudio
 
 import android.content.Context
+import com.example.slideshowstudio.audio.AudioLibrary
 import com.example.slideshowstudio.data.AndroidPhotoRepository
 import com.example.slideshowstudio.data.PhotoRepository
 import com.example.slideshowstudio.export.VideoExporter
@@ -16,6 +17,7 @@ class AppContainer(context: Context) {
     private val applicationContext: Context = context.applicationContext
 
     val photoRepository: PhotoRepository = AndroidPhotoRepository(applicationContext)
+    val audioLibrary: AudioLibrary = AudioLibrary(applicationContext)
     val videoExporter: VideoExporter = VideoExporter(applicationContext, photoRepository)
     val thumbnailCache: ThumbnailCache = ThumbnailCache()
 }

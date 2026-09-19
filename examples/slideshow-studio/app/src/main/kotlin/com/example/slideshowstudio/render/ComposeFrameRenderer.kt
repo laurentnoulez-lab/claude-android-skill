@@ -47,8 +47,14 @@ fun DrawScope.drawSlideshowFrame(
     }
 
     frame.commands.forEach { command ->
-        val bitmap = image(command.photoIndex) ?: return@forEach
-        drawCommand(command, bitmap)
+        image(command.photoIndex)?.let { bitmap -> drawCommand(command, bitmap) }
+        // The opening and the ending can pull the whole scene out of focus: the blurred copy of each
+        // photo is cross faded over the sharp one, in its own place, so nothing shifts or jumps.
+        if (frame.defocus > 0f) {
+            backdrop(command.photoIndex)?.let { blurred ->
+                drawCommand(command, blurred, alphaScale = frame.defocus)
+            }
+        }
     }
 
     if (frame.blackout > 0f) {
@@ -56,14 +62,14 @@ fun DrawScope.drawSlideshowFrame(
     }
 }
 
-private fun DrawScope.drawCommand(command: DrawCommand, bitmap: ImageBitmap) {
+private fun DrawScope.drawCommand(command: DrawCommand, bitmap: ImageBitmap, alphaScale: Float = 1f) {
     drawQuad(
         bitmap = bitmap,
         src = command.src,
         dst = command.dst,
         clip = command.clip,
         rotationDeg = command.rotationDeg,
-        alpha = command.alpha,
+        alpha = command.alpha * alphaScale.coerceIn(0f, 1f),
     )
 }
 

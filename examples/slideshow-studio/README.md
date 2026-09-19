@@ -18,6 +18,10 @@ en MVVM avec flux de données unidirectionnel.
 | Mode de recadrage : jamais, intelligent, automatique | `CropMode`, `CropPlanner`, `PhotoFraming` |
 | Ordre des photos : strict, chronologique adaptable, aléatoire | `PhotoOrder`, `StoryboardBuilder` |
 | Photos importantes : toujours seules dans leur scène, mises en valeur | `PhotoRef.isImportant`, `Scene.isHighlight` |
+| Groupes de photos affichées ensemble dans la même scène | `PhotoRef.groupId`, `StoryboardBuilder` (unités d'ordonnancement) |
+| Ouverture depuis le noir ou depuis un flou, fin vers le noir ou vers un flou | `OpeningMode`, `EndingMode`, `Frame.blackout` / `Frame.defocus` |
+| Règle de composition selon l'orientation du projet et des photos | `LayoutCatalog` + choix de composition au coût dans `StoryboardBuilder` |
+| Musique de fond : plusieurs pistes, ordre, fondu enchaîné, fondus d'entrée / sortie, volume | `Soundtrack.kt` (moteur), `audio/` (décodage, mixage, remux) |
 | Durée d'affichage réglable de 2 à 7 s | `SlideshowSettings.sceneDurationSeconds`, curseur dans `ui/editor` |
 | Modes 1 / 1-2 / 1-3 / 1-4 images par scène | `ImagesPerSceneMode`, `StoryboardBuilder.chooseCount` |
 | Variation automatique du nombre d'images | `StoryboardBuilder` : deux scènes consécutives n'ont jamais le même nombre d'images quand c'est possible |
@@ -29,6 +33,7 @@ en MVVM avec flux de données unidirectionnel.
 | Recadrage intelligent, jamais de déformation | `PhotoFraming` + détection de visages (`FaceFocusDetector`) |
 | Aperçu avec lecture / pause / retour au début | `ui/preview/PreviewScreen.kt` |
 | Export 1080p MP4 H.264 | `export/VideoExporter.kt` (MediaCodec + MediaMuxer + OpenGL ES) |
+| Bande-son encodée en AAC et synchronisée à la vidéo | `audio/SoundtrackRenderer.kt`, `audio/Remuxer.kt` |
 
 ## Architecture
 
@@ -39,6 +44,7 @@ core/engine/          Kotlin pur, aucune dépendance Android — testable sur la
   Motion.kt           Mouvements Ken Burns
   Transitions.kt      Transitions entre scènes
   SmartCrop.kt        Recadrage « cover » sans déformation
+  Soundtrack.kt       Découpage de la playlist sur la durée de la vidéo
   StoryboardBuilder   Plan complet de la vidéo (scènes, photos, compositions, mouvements)
   FrameComposer       Image par image : liste de quadrilatères à dessiner
   SourceResolution    Résolution de décodage nécessaire pour chaque photo
@@ -46,6 +52,7 @@ core/engine/          Kotlin pur, aucune dépendance Android — testable sur la
 app/                  Application Android
   data/               Import, décodage, orientation EXIF, détection de visages
   render/             Rendu Compose (aperçu) et OpenGL ES 2.0 (export)
+  audio/              Lecture des métadonnées, décodage PCM, mixage, encodage AAC, remux
   export/             Encodage MediaCodec → MediaMuxer, publication dans la galerie
   ui/                 Écrans Compose, ViewModel, état d'UI
 ```
@@ -65,11 +72,13 @@ déterministe et sans dépendance Android. Cela permet de vérifier par des test
 * aucune photo n'est figée ;
 * chaque photo apparaît exactement une fois, quel que soit le mode d'ordre ;
 * une photo marquée importante n'est jamais accompagnée d'une autre dans sa scène ;
+* les photos d'un même groupe apparaissent toujours ensemble, dans une seule scène, jamais séparées ;
+* la bande-son ne dépasse jamais la durée de la vidéo et ne comporte ni trou ni saut de niveau ;
 * en ordre adaptable, aucune photo ne se déplace de plus de deux positions ;
 * les règles de variété (compositions, transitions, mouvements, nombres d'images) sont respectées.
 
 ```bash
-./gradlew :core:engine:test     # 102 tests
+./gradlew :core:engine:test     # 138 tests
 ```
 
 Ces tests, ainsi que la construction de l'APK, tournent en intégration continue
@@ -139,6 +148,35 @@ l'agrandissement bilinéaire au rendu qui produit le flou final.
 (4 photos au maximum) sont évaluées et celle qui minimise l'écart entre le format de la photo et
 celui de l'emplacement est retenue : les portraits vont dans les emplacements hauts, les paysages
 dans les larges, ce qui réduit le recadrage.
+
+**Un groupe est une unité d'ordonnancement.** Le planificateur ne travaille pas sur des photos
+mais sur des *unités* : une photo libre, un groupe, ou une photo importante. Les trois modes
+d'ordre (strict, adaptable, aléatoire) s'appliquent aux unités, si bien qu'un groupe se déplace
+d'un bloc et ne peut être ni scindé ni réutilisé. L'interdiction de grouper une photo importante est
+appliquée des deux côtés : marquer une photo la sort de son groupe, et créer un groupe refuse une
+photo marquée — avec un message dans les deux cas. Changer de mode « images par scène » dissout les
+groupes devenus trop grands plutôt que de produire une scène impossible.
+
+**L'orientation de la vidéo pilote le catalogue de compositions.** Chaque composition est choisie
+en minimisant la somme des écarts logarithmiques entre le format de chaque photo et celui de son
+emplacement, sur les catalogues propres à l'orientation : en vidéo verticale, les compositions à
+deux photos empilent au lieu de juxtaposer, si bien qu'une photo paysage garde toute la largeur ;
+en vidéo horizontale, c'est l'inverse et une photo portrait garde toute la hauteur. Aucune photo
+n'est donc réduite à une bande étroite sur le côté ou en bandeau.
+
+**Ouverture et fin sont des post-traitements de l'image.** Plutôt que d'ajouter des scènes
+fictives, le compositeur renvoie pour chaque image deux valeurs : un voile noir et un degré de flou.
+La première scène continue donc de bouger pendant que le flou se résorbe, la dernière pendant qu'il
+s'installe, et il n'existe aucune image sans contenu susceptible de produire un clignotement.
+
+**La bande-son est planifiée, pas bouclée.** Le moteur découpe la playlist en segments alignés sur
+la durée réelle de la vidéo : les pistes s'enchaînent dans l'ordre choisi, la dernière est coupée
+exactement à la fin, et rien n'est répété automatiquement — quand la musique est trop courte,
+l'interface affiche le manque et propose d'en ajouter. Les fondus enchaînés sont à puissance
+constante (`sin(p·π/2)`), donc sans creux de volume, et une rampe de 15 ms au début et à la fin de
+chaque segment supprime les clics. Le mixage se fait sur du PCM 16 bits décodé par `MediaCodec`,
+puis le résultat est encodé en AAC et remuxé avec la vidéo : un échec de la piste audio dégrade
+l'export en vidéo muette au lieu de le perdre.
 
 **Détection de visages sans dépendance.** `android.media.FaceDetector`, présent dans la plateforme,
 tourne sur une vignette et fournit la zone à préserver au recadrage. Le remplacement par ML Kit ne

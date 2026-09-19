@@ -38,6 +38,12 @@ data class Frame(
     /** Black veil over the backdrops, so the photos in front stay readable. */
     val backdropDim: Float,
     val commands: List<DrawCommand>,
-    /** 0 = normal, 1 = fully black. Used for the opening and closing fades. */
+    /** 0 = normal, 1 = fully black. Used for the opening and closing fades to black. */
     val blackout: Float = 0f,
+    /**
+     * 0 = sharp, 1 = fully out of focus. The renderer cross fades each photo with a heavily blurred
+     * copy of itself, which is how the video can open by coming into focus and end by drifting out
+     * of it.
+     */
+    val defocus: Float = 0f,
 )

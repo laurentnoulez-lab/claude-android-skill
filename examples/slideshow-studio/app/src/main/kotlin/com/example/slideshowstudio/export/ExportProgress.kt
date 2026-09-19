@@ -20,6 +20,9 @@ sealed interface ExportProgress {
         val fraction: Float get() = if (frameCount <= 0) 0f else frame.toFloat() / frameCount
     }
 
+    /** Decoding, mixing and encoding the music. */
+    data class MixingAudio(val fraction: Float) : ExportProgress
+
     /** Writing the file where the system can find it. */
     data object Saving : ExportProgress
 

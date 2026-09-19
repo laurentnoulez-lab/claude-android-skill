@@ -181,14 +181,16 @@ internal class OfflineFirstMyRepository @Inject constructor(
 
 [`examples/slideshow-studio/`](examples/slideshow-studio) is a complete Android application built
 with the patterns described in this skill: **Diaporama Studio**, which turns imported photos into an
-animated slideshow video (1920 × 1080, 30 fps, MP4 / H.264).
+animated slideshow video (1080p landscape or portrait, 30 fps, MP4 / H.264, with a background
+music playlist).
 
 It shows the skill's layering on a real feature:
 
 - `core:engine` — a pure Kotlin module holding every rendering decision (compositions, Ken Burns
-  movements, transitions, smart cropping). No Android dependency, 90 JVM unit tests.
-- `app` — Compose UI in MVVM with unidirectional data flow, photo import, live preview, and an
-  OpenGL ES + MediaCodec exporter.
+  movements, transitions, smart cropping, photo groups, opening and ending, soundtrack planning).
+  No Android dependency, 138 JVM unit tests.
+- `app` — Compose UI in MVVM with unidirectional data flow, photo import, live preview, audio
+  decoding and mixing, and an OpenGL ES + MediaCodec exporter.
 
 ```bash
 cd examples/slideshow-studio

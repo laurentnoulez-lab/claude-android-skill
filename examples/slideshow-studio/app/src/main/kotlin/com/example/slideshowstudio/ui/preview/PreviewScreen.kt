@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.dp
 import com.example.slideshowstudio.R
 import com.example.slideshowstudio.data.GalleryPhoto
 import com.example.slideshowstudio.data.PhotoRepository
+import com.example.slideshowstudio.engine.EndingMode
 import com.example.slideshowstudio.engine.FrameComposer
+import com.example.slideshowstudio.engine.OpeningMode
 import com.example.slideshowstudio.engine.PhotoRef
 import com.example.slideshowstudio.engine.SourceResolution
 import com.example.slideshowstudio.engine.Storyboard
@@ -228,11 +230,20 @@ private fun photoIndicesAround(storyboard: Storyboard, sceneIndex: Int): Set<Int
     return indices
 }
 
-/** Only the photos actually used as a backdrop are blurred, and only around the current scene. */
+/**
+ * Photos that need a blurred copy: the backdrops around the current scene, plus the first and last
+ * scenes when the video opens or closes out of focus.
+ */
 private fun backdropIndicesAround(storyboard: Storyboard, sceneIndex: Int): Set<Int> {
     val indices = mutableSetOf<Int>()
     for (offset in -1..1) {
         storyboard.scenes.getOrNull(sceneIndex + offset)?.background?.photoIndex?.let { indices += it }
+    }
+    if (storyboard.settings.opening == OpeningMode.FROM_BLUR) {
+        storyboard.scenes.firstOrNull()?.slots?.forEach { indices += it.photoIndex }
+    }
+    if (storyboard.settings.ending == EndingMode.TO_BLUR) {
+        storyboard.scenes.lastOrNull()?.slots?.forEach { indices += it.photoIndex }
     }
     return indices
 }

@@ -33,7 +33,13 @@ fun ExportDialog(
             title = { Text(stringResource(R.string.export_video)) },
             text = {
                 Column {
-                    Text(stringResource(R.string.exporting, (export.fraction * 100).roundToInt()))
+                    Text(
+                        text = if (export.stage == ExportUiState.Running.Stage.MIXING) {
+                            stringResource(R.string.exporting_mixing, (export.fraction * 100).roundToInt())
+                        } else {
+                            stringResource(R.string.exporting, (export.fraction * 100).roundToInt())
+                        },
+                    )
                     LinearProgressIndicator(
                         progress = { export.fraction.coerceIn(0f, 1f) },
                         modifier = Modifier

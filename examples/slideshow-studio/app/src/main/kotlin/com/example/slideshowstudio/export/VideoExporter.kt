@@ -9,9 +9,14 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.opengl.GLES20
 import android.util.Log
+import com.example.slideshowstudio.audio.AudioTrackInfo
+import com.example.slideshowstudio.audio.Remuxer
+import com.example.slideshowstudio.audio.SoundtrackRenderer
 import com.example.slideshowstudio.data.GalleryPhoto
 import com.example.slideshowstudio.data.PhotoRepository
 import com.example.slideshowstudio.engine.FrameComposer
+import com.example.slideshowstudio.engine.SoundtrackPlanner
+import com.example.slideshowstudio.engine.SoundtrackSettings
 import com.example.slideshowstudio.engine.SourceResolution
 import com.example.slideshowstudio.engine.Storyboard
 import com.example.slideshowstudio.render.gl.EglCore
@@ -41,23 +46,48 @@ class VideoExporter(
     private val photoRepository: PhotoRepository,
 ) {
 
-    fun export(storyboard: Storyboard, photos: List<GalleryPhoto>): Flow<ExportProgress> = channelFlow {
+    fun export(
+        storyboard: Storyboard,
+        photos: List<GalleryPhoto>,
+        music: List<AudioTrackInfo> = emptyList(),
+        soundtrackSettings: SoundtrackSettings = SoundtrackSettings(),
+    ): Flow<ExportProgress> = channelFlow {
         require(!storyboard.isEmpty) { "Aucune scène à exporter" }
         val executor = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "slideshow-export")
         }
+        val workingDirectory = File(context.cacheDir, "export").apply { mkdirs() }
+        // The video is rendered on its own first, then the music is joined to it. A soundtrack that
+        // fails to render therefore costs the user a silent video, never the export itself.
+        val silentVideo = File(workingDirectory, "video-${System.currentTimeMillis()}.mp4")
         try {
             send(ExportProgress.Preparing)
-            val file = withContext(Dispatchers.IO) { VideoStore.createOutputFile(context) }
             val session = withContext(executor.asCoroutineDispatcher()) {
-                renderToFile(storyboard, photos, file) { frame, total ->
+                renderToFile(storyboard, photos, silentVideo) { frame, total ->
                     // Reporting every single frame would flood the UI for no benefit.
                     if (frame == total || frame % PROGRESS_STRIDE == 0) {
                         trySendBlocking(ExportProgress.Rendering(frame, total))
                     }
                 }
             }
+
+            var rendered = silentVideo
+            if (music.isNotEmpty()) {
+                send(ExportProgress.MixingAudio(0f))
+                val withMusic = withContext(Dispatchers.Default) {
+                    addSoundtrack(storyboard, music, soundtrackSettings, silentVideo, workingDirectory) {
+                        trySendBlocking(ExportProgress.MixingAudio(it))
+                    }
+                }
+                if (withMusic != null) rendered = withMusic
+            }
+
             send(ExportProgress.Saving)
+            val file = withContext(Dispatchers.IO) {
+                val destination = VideoStore.createOutputFile(context)
+                moveTo(rendered, destination)
+                destination
+            }
             // Copying the finished file into the gallery is real I/O: never on the caller's thread.
             val galleryUri = withContext(Dispatchers.IO) { VideoStore.publishToGallery(context, file) }
             send(
@@ -73,8 +103,53 @@ class VideoExporter(
             )
         } finally {
             executor.shutdown()
+            workingDirectory.listFiles()?.forEach { it.delete() }
         }
     }.buffer(Channel.BUFFERED)
+
+    /**
+     * Renders the music and joins it to the silent video.
+     *
+     * @return the combined file, or null when there was nothing to add or the device could not
+     *   handle the music — in which case the caller keeps the silent video.
+     */
+    private fun addSoundtrack(
+        storyboard: Storyboard,
+        music: List<AudioTrackInfo>,
+        settings: SoundtrackSettings,
+        video: File,
+        workingDirectory: File,
+        onProgress: (Float) -> Unit,
+    ): File? {
+        val soundtrack = SoundtrackPlanner.plan(
+            tracks = music.map { it.toRef() },
+            videoDurationSeconds = storyboard.totalDurationSeconds,
+            rawSettings = settings,
+        )
+        if (soundtrack.isEmpty) return null
+
+        val audio = SoundtrackRenderer(context).render(soundtrack, music, workingDirectory, onProgress)
+            ?: return null
+        val merged = File(workingDirectory, "with-music-${System.currentTimeMillis()}.mp4")
+        val combined = Remuxer.combine(video, audio, merged)
+        audio.delete()
+        if (!combined) {
+            merged.delete()
+            Log.w(TAG, "Bande sonore ignorée : la vidéo est exportée sans musique")
+            return null
+        }
+        video.delete()
+        return merged
+    }
+
+    /** Moves a file, falling back to a copy when the two sit on different volumes. */
+    private fun moveTo(source: File, destination: File) {
+        if (source.renameTo(destination)) return
+        source.inputStream().use { input ->
+            destination.outputStream().use { output -> input.copyTo(output) }
+        }
+        source.delete()
+    }
 
     private data class Session(val width: Int, val height: Int)
 
@@ -147,6 +222,21 @@ class VideoExporter(
                         photoRepository.decodeSync(photo, decodeWidths[command.photoIndex] ?: DEFAULT_DECODE_WIDTH)
                     }
                     if (textureId != 0) renderer.draw(command, textureId)
+
+                    // The opening and the ending can pull the scene out of focus: the blurred copy
+                    // of each photo is cross faded over the sharp one, in its own place.
+                    if (frame.defocus > 0f) {
+                        val blurredId = textures.textureFor(
+                            key = TextureCache.backdropKey(command.photoIndex),
+                            frameIndex = frameIndex,
+                            renderer = renderer,
+                        ) {
+                            photoRepository.decodeBackdropSync(photo)
+                        }
+                        if (blurredId != 0) {
+                            renderer.draw(command.copy(alpha = command.alpha * frame.defocus), blurredId)
+                        }
+                    }
                 }
                 renderer.drawOverlay(frame.blackout)
 

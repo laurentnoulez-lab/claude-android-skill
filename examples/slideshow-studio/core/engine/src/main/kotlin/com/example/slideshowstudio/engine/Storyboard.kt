@@ -101,6 +101,9 @@ data class Storyboard(
  */
 object StoryboardBuilder {
 
+    /** Largest number of photos a single scene can hold, whatever a group asks for. */
+    const val MAX_PHOTOS_PER_SCENE = 4
+
     /** How far a photo may travel from its original position in adaptive order. */
     const val MAX_ADAPTIVE_SHIFT = 2
 
@@ -114,6 +117,69 @@ object StoryboardBuilder {
      */
     private const val ADAPTIVE_MIN_GAIN = 0.80f
 
+    /**
+     * How much worse than the best fitting composition a candidate may be and still be considered.
+     * Without it the engine would always pick the single best fit and every scene with the same
+     * photo shapes would look identical; with it, variety is chosen among the compositions that
+     * actually suit the photos.
+     */
+    private const val TEMPLATE_TOLERANCE = 0.22f
+
+    /**
+     * What the engine schedules: either one photo on its own, or a set of photos the user tied
+     * together and which must be shown side by side in a single scene.
+     */
+    private data class PhotoUnit(
+        val photoIndexes: List<Int>,
+        val kind: Kind,
+    ) {
+        enum class Kind { FREE, GROUP, IMPORTANT }
+
+        /** Free units are the only ones the engine may combine with their neighbours. */
+        val isFree: Boolean get() = kind == Kind.FREE
+        val first: Int get() = photoIndexes.first()
+    }
+
+    /**
+     * Splits the photos into schedulable units.
+     *
+     * A group takes the place of its first photo, so the sequence still reads in the user's order.
+     * An important photo is alone by definition, which wins over any group it was put in — the app
+     * prevents the combination, and the engine does not depend on it having done so.
+     */
+    private fun buildUnits(photos: List<PhotoRef>, settings: SlideshowSettings, random: Random): List<PhotoUnit> {
+        val members = linkedMapOf<String, MutableList<Int>>()
+        photos.forEachIndexed { index, photo ->
+            val group = photo.groupId
+            if (group != null && !photo.isImportant) {
+                members.getOrPut(group) { mutableListOf() } += index
+            }
+        }
+
+        val emitted = mutableSetOf<String>()
+        val units = mutableListOf<PhotoUnit>()
+        photos.forEachIndexed { index, photo ->
+            val group = photo.groupId?.takeIf { !photo.isImportant }
+            when {
+                photo.isImportant -> units += PhotoUnit(listOf(index), PhotoUnit.Kind.IMPORTANT)
+                group == null -> units += PhotoUnit(listOf(index), PhotoUnit.Kind.FREE)
+                emitted.add(group) -> {
+                    // A group larger than a scene can hold is shown as consecutive full scenes
+                    // rather than being silently broken up out of order.
+                    members.getValue(group).chunked(MAX_PHOTOS_PER_SCENE).forEach { chunk ->
+                        units += if (chunk.size == 1) {
+                            PhotoUnit(chunk, PhotoUnit.Kind.FREE)
+                        } else {
+                            PhotoUnit(chunk, PhotoUnit.Kind.GROUP)
+                        }
+                    }
+                }
+            }
+        }
+
+        return if (settings.photoOrder == PhotoOrder.SHUFFLE) units.shuffled(random) else units
+    }
+
     fun build(photos: List<PhotoRef>, rawSettings: SlideshowSettings): Storyboard {
         val settings = rawSettings.sanitized()
         if (photos.isEmpty()) return Storyboard(settings, emptyList())
@@ -122,8 +188,13 @@ object StoryboardBuilder {
         val canvasAspect = settings.canvasAspect
         val templatesByCount = (1..4).associateWith { LayoutCatalog.templatesFor(it, canvasAspect) }
 
-        val queue = ArrayDeque(initialOrder(photos, settings, random))
-        val originalPosition = queue.withIndex().associate { (position, index) -> index to position }
+        // The engine schedules units, not photos: a group travels through the whole pipeline as one.
+        val queue = ArrayDeque(buildUnits(photos, settings, random))
+        val originalPosition = buildMap {
+            queue.forEachIndexed { position, unit ->
+                unit.photoIndexes.forEach { photoIndex -> put(photoIndex, position) }
+            }
+        }
 
         val scenes = mutableListOf<Scene>()
         var placed = 0
@@ -137,25 +208,40 @@ object StoryboardBuilder {
         var previousWasHighlight = false
 
         while (queue.isNotEmpty()) {
-            // A photo marked as important takes the whole scene. Everything else — the count the
-            // engine would have liked, the composition variety — gives way to that.
-            val highlight = photos[queue.first()].isImportant
-            // Photos available for a shared composition: the run before the next important photo.
-            val groupable = queue.takeWhile { !photos[it].isImportant }
+            val head = queue.first()
+            // An important photo takes the whole scene, and so does a group — for opposite reasons,
+            // but with the same consequence: the count the engine would have liked gives way.
+            val highlight = head.kind == PhotoUnit.Kind.IMPORTANT
+            // Units free to share a scene: the run before the next group or important photo.
+            val free = queue.takeWhile { it.isFree }
 
-            val count = if (highlight) {
-                1
+            val naturalPicks: List<Int>
+            val count: Int
+            if (head.isFree) {
+                count = chooseCount(minOf(settings.mode.maxImages, free.size), previousCount, random)
+                naturalPicks = free.take(count).map { it.first }
             } else {
-                chooseCount(minOf(settings.mode.maxImages, groupable.size), previousCount, random)
+                naturalPicks = head.photoIndexes
+                count = naturalPicks.size
             }
+
             val templates = templatesByCount.getValue(count)
-            val template = chooseTemplate(templates, previousTemplateId, lastTemplateForCount[count], random)
+            val template = chooseTemplate(
+                templates = templates,
+                picks = naturalPicks,
+                photos = photos,
+                canvasAspect = canvasAspect,
+                previousTemplateId = previousTemplateId,
+                lastForThisCount = lastTemplateForCount[count],
+                random = random,
+            )
 
             val ordered = takePhotos(
                 queue = queue,
-                groupable = groupable,
+                free = free,
+                naturalPicks = naturalPicks,
                 count = count,
-                highlight = highlight,
+                shareable = head.isFree,
                 template = template,
                 photos = photos,
                 canvasAspect = canvasAspect,
@@ -163,7 +249,7 @@ object StoryboardBuilder {
                 placed = placed,
                 originalPosition = originalPosition,
             )
-            placed += ordered.size
+            placed += if (head.isFree) count else 1
 
             val usedMotions = mutableSetOf<MotionKind>()
             val slots = ordered.mapIndexed { slotIndex, photoIndex ->
@@ -245,15 +331,6 @@ object StoryboardBuilder {
         return Storyboard(settings, scenes)
     }
 
-    private fun initialOrder(
-        photos: List<PhotoRef>,
-        settings: SlideshowSettings,
-        random: Random,
-    ): List<Int> = when (settings.photoOrder) {
-        PhotoOrder.STRICT, PhotoOrder.ADAPTIVE -> photos.indices.toList()
-        PhotoOrder.SHUFFLE -> photos.indices.shuffled(random)
-    }
-
     /**
      * Removes the photos of the next scene from [queue] and returns them in slot order.
      *
@@ -262,10 +339,11 @@ object StoryboardBuilder {
      * any photo drift more than [MAX_ADAPTIVE_SHIFT] positions from where the user put it.
      */
     private fun takePhotos(
-        queue: ArrayDeque<Int>,
-        groupable: List<Int>,
+        queue: ArrayDeque<PhotoUnit>,
+        free: List<PhotoUnit>,
+        naturalPicks: List<Int>,
         count: Int,
-        highlight: Boolean,
+        shareable: Boolean,
         template: LayoutTemplate,
         photos: List<PhotoRef>,
         canvasAspect: Float,
@@ -274,15 +352,15 @@ object StoryboardBuilder {
         originalPosition: Map<Int, Int>,
     ): List<Int> {
         val chosen: List<Int> = when {
-            highlight -> listOf(queue.first())
-            // Adaptive order looks ahead, but never past an important photo: pulling one into a
-            // shared composition is exactly what it must not do.
-            order == PhotoOrder.ADAPTIVE && groupable.size > count ->
-                pickAdaptive(groupable, count, template, photos, canvasAspect, placed, originalPosition)
+            !shareable -> naturalPicks
+            // Adaptive order looks ahead, but never past a group or an important photo: pulling one
+            // into a shared composition, or breaking it up, is exactly what it must not do.
+            order == PhotoOrder.ADAPTIVE && free.size > count ->
+                pickAdaptive(free.map { it.first }, count, template, photos, canvasAspect, placed, originalPosition)
 
-            else -> groupable.take(count)
+            else -> naturalPicks
         }
-        chosen.forEach { queue.remove(it) }
+        queue.removeAll { unit -> unit.photoIndexes.any { it in chosen } }
         return bestAssignment(chosen, template.slots, photos, canvasAspect).first
     }
 
@@ -331,16 +409,36 @@ object StoryboardBuilder {
         return pool[random.nextInt(pool.size)]
     }
 
+    /**
+     * Picks the composition for a scene.
+     *
+     * The choice is made against the photos that will actually fill it, which is what keeps a
+     * landscape photo out of a narrow column in a portrait video and a portrait photo out of a flat
+     * band in a landscape one: the shape distance between a photo and its slot is exactly the cost
+     * being minimised. Variety is then taken among the compositions that fit nearly as well, rather
+     * than across all of them.
+     */
     private fun chooseTemplate(
         templates: List<LayoutTemplate>,
+        picks: List<Int>,
+        photos: List<PhotoRef>,
+        canvasAspect: Float,
         previousTemplateId: String?,
         lastForThisCount: String?,
         random: Random,
     ): LayoutTemplate {
         val avoided = setOfNotNull(previousTemplateId, lastForThisCount)
-        val candidates = templates.filterNot { it.id in avoided }
-        val pool = candidates.ifEmpty { templates.filterNot { it.id == previousTemplateId }.ifEmpty { templates } }
-        return pool[random.nextInt(pool.size)]
+        val pool = templates.filterNot { it.id in avoided }
+            .ifEmpty { templates.filterNot { it.id == previousTemplateId } }
+            .ifEmpty { templates }
+        if (picks.isEmpty() || pool.size == 1) return pool[random.nextInt(pool.size)]
+
+        val scored = pool.map { template ->
+            template to bestAssignment(picks, template.slots, photos, canvasAspect).second
+        }
+        val best = scored.minOf { it.second }
+        val suitable = scored.filter { it.second <= best + TEMPLATE_TOLERANCE }.map { it.first }
+        return suitable[random.nextInt(suitable.size)]
     }
 
     private fun buildBackground(

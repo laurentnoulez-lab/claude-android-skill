@@ -36,6 +36,10 @@ import com.example.slideshowstudio.R
 import com.example.slideshowstudio.engine.OutputFormat
 import com.example.slideshowstudio.engine.Palette
 
+/** One decimal at most: "4" rather than "4.0", "4,5" in French. */
+internal fun format(value: Float): String =
+    if (value == value.toInt().toFloat()) value.toInt().toString() else String.format("%.1f", value)
+
 /** Title of a settings block, in the same style everywhere. */
 @Composable
 internal fun SettingLabel(text: String, modifier: Modifier = Modifier) {

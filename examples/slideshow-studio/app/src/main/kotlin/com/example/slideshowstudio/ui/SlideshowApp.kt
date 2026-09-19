@@ -25,7 +25,11 @@ import com.example.slideshowstudio.ui.preview.PreviewScreen
 fun SlideshowApp(container: AppContainer) {
     val viewModel: SlideshowViewModel = viewModel(
         factory = remember(container) {
-            SlideshowViewModel.Factory(container.photoRepository, container.videoExporter)
+            SlideshowViewModel.Factory(
+                photoRepository = container.photoRepository,
+                audioLibrary = container.audioLibrary,
+                videoExporter = container.videoExporter,
+            )
         },
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()

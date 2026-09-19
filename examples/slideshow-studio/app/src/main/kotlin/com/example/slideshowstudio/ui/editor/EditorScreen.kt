@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -43,26 +44,37 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.slideshowstudio.R
 import com.example.slideshowstudio.data.PhotoRepository
+import android.content.Intent
 import com.example.slideshowstudio.engine.BackgroundMode
 import com.example.slideshowstudio.engine.CropMode
+import com.example.slideshowstudio.engine.EndingMode
+import com.example.slideshowstudio.engine.OpeningMode
+import com.example.slideshowstudio.engine.Palette
 import com.example.slideshowstudio.engine.ImagesPerSceneMode
 import com.example.slideshowstudio.engine.OutputFormat
 import com.example.slideshowstudio.engine.PhotoOrder
 import com.example.slideshowstudio.engine.SlideshowSettings
+import com.example.slideshowstudio.ui.EditorMessage
 import com.example.slideshowstudio.ui.SlideshowAction
 import com.example.slideshowstudio.ui.SlideshowUiState
 import com.example.slideshowstudio.ui.components.PhotoThumbnail
@@ -88,10 +100,31 @@ fun EditorScreen(
     onOpenPreview: () -> Unit,
 ) {
     val maxItems = remember { maxSelectablePhotos() }
+    val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems),
     ) { uris ->
         onAction(SlideshowAction.AddPhotos(uris))
+    }
+    val musicPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        // The export may happen long after the picking: hold on to the permission.
+        uris.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        onAction(SlideshowAction.AddMusic(uris))
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val messageText = state.message?.let { stringResource(messageResource(it)) }
+    LaunchedEffect(state.message) {
+        if (messageText != null) {
+            snackbarHostState.showSnackbar(messageText)
+            onAction(SlideshowAction.DismissMessage)
+        }
     }
 
     Scaffold(
@@ -109,8 +142,13 @@ fun EditorScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             Surface(tonalElevation = 3.dp) {
+                if (state.isSelecting) {
+                    SelectionBar(state = state, onAction = onAction)
+                    return@Surface
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -156,7 +194,11 @@ fun EditorScreen(
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column {
-                    SettingsCard(state = state, onAction = onAction)
+                    SettingsCard(
+                        state = state,
+                        onAddMusic = { musicPicker.launch(AUDIO_MIME_TYPES) },
+                        onAction = onAction,
+                    )
                     Spacer(Modifier.height(12.dp))
                     ImportRow(
                         state = state,
@@ -167,6 +209,9 @@ fun EditorScreen(
                         },
                         onAction = onAction,
                     )
+                    if (state.isSelecting) {
+                        SettingHint(stringResource(R.string.group_hint))
+                    }
                     Spacer(Modifier.height(4.dp))
                 }
             }
@@ -177,6 +222,14 @@ fun EditorScreen(
 
             items(state.photos, key = { it.id }) { photo ->
                 val important = photo.ref.isImportant
+                val groupId = photo.ref.groupId
+                val selected = photo.id in state.selection
+                val outline = when {
+                    selected -> MaterialTheme.colorScheme.primary
+                    important -> MaterialTheme.colorScheme.primary
+                    groupId != null -> Color(groupColor(state.groupIds.indexOf(groupId)))
+                    else -> Color.Transparent
+                }
                 Box {
                     PhotoThumbnail(
                         photo = photo,
@@ -185,52 +238,100 @@ fun EditorScreen(
                         modifier = Modifier
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            // A marked photo is outlined, so the selection reads at a glance across
-                            // the whole grid rather than one badge at a time.
+                            // Marked and grouped photos are outlined, so both read at a glance
+                            // across the whole grid rather than one badge at a time.
                             .border(
-                                width = if (important) 3.dp else 0.dp,
-                                color = if (important) {
+                                width = if (outline == Color.Transparent) 0.dp else 3.dp,
+                                color = outline,
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .clickable(enabled = state.isSelecting) {
+                                onAction(SlideshowAction.ToggleSelection(photo.id))
+                            },
+                    )
+
+                    if (state.isSelecting) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                                    },
+                                )
+                                .clickable { onAction(SlideshowAction.ToggleSelection(photo.id)) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = stringResource(R.string.select_photo),
+                                tint = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { onAction(SlideshowAction.RemovePhoto(photo.id)) },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(2.dp)
+                                .size(28.dp)
+                                .clip(CircleShape),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.remove_photo),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        IconButton(
+                            onClick = { onAction(SlideshowAction.ToggleImportant(photo.id)) },
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(2.dp)
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                        ) {
+                            Icon(
+                                imageVector = if (important) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                contentDescription = stringResource(
+                                    if (important) R.string.unmark_important else R.string.mark_important,
+                                ),
+                                tint = if (important) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
-                                    Color.Transparent
+                                    MaterialTheme.colorScheme.onSurface
                                 },
-                                shape = RoundedCornerShape(12.dp),
-                            ),
-                    )
-                    IconButton(
-                        onClick = { onAction(SlideshowAction.RemovePhoto(photo.id)) },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(2.dp)
-                            .size(28.dp)
-                            .clip(CircleShape),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.remove_photo),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    IconButton(
-                        onClick = { onAction(SlideshowAction.ToggleImportant(photo.id)) },
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(2.dp)
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
-                    ) {
-                        Icon(
-                            imageVector = if (important) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                            contentDescription = stringResource(
-                                if (important) R.string.unmark_important else R.string.mark_important,
-                            ),
-                            tint = if (important) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
+                            )
+                        }
+                        if (groupId != null) {
+                            // The letter says which scene the photo will share; tapping it leaves.
+                            val label = state.groupLabel(groupId)
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(4.dp)
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(groupColor(state.groupIds.indexOf(groupId))))
+                                    .clickable { onAction(SlideshowAction.LeaveGroup(photo.id)) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -258,6 +359,9 @@ private fun ImportRow(
             )
         }
         if (state.hasPhotos) {
+            OutlinedButton(onClick = { onAction(SlideshowAction.StartSelection) }) {
+                Text(stringResource(R.string.group_start))
+            }
             OutlinedButton(onClick = { onAction(SlideshowAction.Reshuffle) }) {
                 Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.shuffle))
             }
@@ -274,6 +378,7 @@ private fun ImportRow(
 @Composable
 private fun SettingsCard(
     state: SlideshowUiState,
+    onAddMusic: () -> Unit,
     onAction: (SlideshowAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -356,6 +461,44 @@ private fun SettingsCard(
                 ),
             )
 
+            SettingLabel(stringResource(R.string.opening_title))
+            ChoiceChips(
+                options = listOf(
+                    OpeningMode.FROM_BLACK to R.string.opening_black,
+                    OpeningMode.FROM_BLUR to R.string.opening_blur,
+                ),
+                selected = settings.opening,
+                onSelect = { onAction(SlideshowAction.SetOpening(it)) },
+            )
+            SettingHint(
+                stringResource(
+                    when (settings.opening) {
+                        OpeningMode.FROM_BLACK -> R.string.opening_black_hint
+                        OpeningMode.FROM_BLUR -> R.string.opening_blur_hint
+                    },
+                ),
+            )
+
+            SettingLabel(stringResource(R.string.ending_title))
+            ChoiceChips(
+                options = listOf(
+                    EndingMode.TO_BLACK to R.string.ending_black,
+                    EndingMode.TO_BLUR to R.string.ending_blur,
+                ),
+                selected = settings.ending,
+                onSelect = { onAction(SlideshowAction.SetEnding(it)) },
+            )
+            SettingHint(
+                stringResource(
+                    when (settings.ending) {
+                        EndingMode.TO_BLACK -> R.string.ending_black_hint
+                        EndingMode.TO_BLUR -> R.string.ending_blur_hint
+                    },
+                ),
+            )
+
+            SoundtrackSection(state = state, onAddMusic = onAddMusic, onAction = onAction)
+
             SettingLabel(stringResource(R.string.order_title))
             ChoiceChips(
                 options = listOf(
@@ -390,6 +533,13 @@ private fun SettingsCard(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                if (state.groupCount > 0) {
+                    Text(
+                        text = stringResource(R.string.group_summary, state.groupCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
             Text(
                 text = stringResource(R.string.summary_format, resolutionLabel(settings.format)),
@@ -399,6 +549,51 @@ private fun SettingsCard(
         }
     }
 }
+
+/** Replaces the action bar while the user is putting a group together. */
+@Composable
+private fun SelectionBar(
+    state: SlideshowUiState,
+    onAction: (SlideshowAction) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.group_selected, state.selection.size),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { onAction(SlideshowAction.CancelSelection) }) {
+                Text(stringResource(R.string.group_cancel))
+            }
+            Button(
+                onClick = { onAction(SlideshowAction.CreateGroup) },
+                enabled = state.selection.size >= 2,
+            ) {
+                Text(stringResource(R.string.group_create))
+            }
+        }
+    }
+}
+
+/** A distinct, readable colour per group, so two groups never look alike. */
+private fun groupColor(index: Int): Int =
+    Palette.hsvToColor(hue = (index * 67f) % 360f, saturation = 0.55f, value = 0.85f)
+
+private fun messageResource(message: EditorMessage): Int = when (message) {
+    EditorMessage.GROUP_NEEDS_TWO -> R.string.group_needs_two
+    EditorMessage.GROUP_TOO_LARGE -> R.string.group_too_large
+    EditorMessage.GROUP_HAS_IMPORTANT -> R.string.group_has_important
+    EditorMessage.IMPORTANT_LEFT_GROUP -> R.string.important_left_group
+    EditorMessage.GROUPS_DISSOLVED -> R.string.groups_dissolved
+}
+
+private val AUDIO_MIME_TYPES = arrayOf("audio/*")
 
 @Composable
 private fun EmptyState(modifier: Modifier = Modifier) {
@@ -426,9 +621,6 @@ private fun resolutionLabel(format: OutputFormat): String = "${format.width} × 
 
 /** Sliders move in half seconds: fine enough to matter, coarse enough to stay easy to hit. */
 private fun round(value: Float): Float = (value * 2f).roundToInt() / 2f
-
-private fun format(value: Float): String =
-    if (value == value.toInt().toFloat()) value.toInt().toString() else String.format("%.1f", value)
 
 private fun formatDuration(seconds: Float): String {
     val total = seconds.roundToInt()
