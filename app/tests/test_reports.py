@@ -42,9 +42,14 @@ def texte_pdf(chemin: str) -> str:
     with open(chemin, "rb") as fh:
         brut = fh.read()
     flux = []
-    for bloc in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", brut, re.S):
+    # La fin du flux se lit dans le flux lui-même, jamais sur le mot « endstream » :
+    # les octets compressés le contiennent de temps à autre, et la recherche non
+    # gourmande coupait alors le flux trop tôt. Zlib refusait ce morceau tronqué,
+    # la page entière disparaissait du texte, et un contrôle concluait qu'un
+    # chapitre manquait au dossier alors qu'il y était.
+    for debut in re.finditer(rb"stream\r?\n", brut):
         try:
-            flux.append(zlib.decompress(bloc.group(1)).decode("latin-1"))
+            flux.append(zlib.decompressobj().decompress(brut[debut.end():]).decode("latin-1"))
         except zlib.error:
             continue
     morceaux = re.findall(r"\((?:[^()\\]|\\.)*\)", "\n".join(flux))
