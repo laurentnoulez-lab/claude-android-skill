@@ -1,3 +1,5 @@
-"""Composants d'interface réutilisables."""
+"""Composants d'interface partagés par plusieurs onglets."""
 
-from .amont import panneau_amont  # noqa: F401
+from .selecteur import barre_ouvrage
+
+__all__ = ["barre_ouvrage"]

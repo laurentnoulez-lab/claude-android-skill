@@ -1,4 +1,7 @@
-"""HydroBassin - dimensionnement de bassins d'orage (methode rationnelle, donnees GTI)."""
+"""HydroBassin+ - dimensionnement de reseaux de bassins d'orage.
 
-__version__ = "2.0.0"
-__app_name__ = "HydroBassin"
+Methode rationnelle, pluies statistiques du GTI (Region wallonne).
+"""
+
+__version__ = "3.0.0"
+__app_name__ = "HydroBassin+"

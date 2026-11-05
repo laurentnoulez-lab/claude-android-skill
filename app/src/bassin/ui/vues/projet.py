@@ -1,15 +1,18 @@
-"""Vue « Projet » : commune, récurrence, surfaces incidentes, sauvegarde."""
+"""Vue « Projet » : identification, commune, récurrence, contraintes, sauvegarde.
+
+Les surfaces ont quitté cet onglet pour celui des **bassins versants** : un
+projet peut en compter plusieurs, chacun avec son propre tableau de surfaces et
+son propre raccordement. Ce qui reste ici est ce qui vaut pour tout le système.
+"""
 
 from __future__ import annotations
 
 import os
-import shutil
 from typing import List, Optional
 
 import flet as ft
 
 from ...core import rainfall
-from ...core.model import Projet, SurfaceIncidente, TYPES_SURFACES
 from .. import theme
 from ..state import (EXTENSION_PROJET, destination_utilisable, repertoire_documents,
                      source_utilisable)
@@ -19,7 +22,7 @@ from .base import Vue
 class VueProjet(Vue):
     titre = "Projet"
     icone = ft.Icons.FOLDER_OPEN
-    sous_titre = "Commune, récurrence et surfaces"
+    sous_titre = "Identification, pluie de projet et contraintes"
 
     def __init__(self, page, etat):
         super().__init__(page, etat)
@@ -88,106 +91,6 @@ class VueProjet(Vue):
         self.page.open(dialogue)
         remplir()
 
-    # --------------------------------------------------------------- surfaces
-    def _ligne_surface(self, index: int, surface: SurfaceIncidente) -> ft.Control:
-        actifs = ft.Text(theme.nombre(surface.aire_ponderee_m2, 1, "m² actifs"), size=12, color=theme.BLEU,
-                         weight=ft.FontWeight.W_600, no_wrap=True)
-
-        def rafraichir_ligne() -> None:
-            """Met à jour la surface active de la ligne et les totaux, sans tout reconstruire."""
-            actifs.value = theme.nombre(surface.aire_ponderee_m2, 1, "m² actifs")
-            try:
-                actifs.update()
-            except Exception:
-                pass
-            self._maj_totaux()
-
-        def maj_aire(v: float) -> None:
-            surface.aire_m2 = max(v, 0.0)
-            # Un ajutage encodé en l/(s·ha) se recalcule sur la nouvelle surface.
-            self.etat.projet.recalculer_ajutage()
-            self.etat.invalider()
-            rafraichir_ligne()
-
-        def maj_coef(v: float) -> None:
-            surface.coefficient = max(min(v, 1.5), 0.0)
-            self.etat.invalider()
-            rafraichir_ligne()
-
-        def supprimer(_=None) -> None:
-            self.etat.projet.surfaces.pop(index)
-            self.etat.projet.recalculer_ajutage()
-            self.etat.invalider()
-            self.rafraichir()
-
-        personnalisee = index >= len(TYPES_SURFACES)
-        libelle: ft.Control
-        if personnalisee:
-            def maj_libelle(e: ft.ControlEvent) -> None:
-                surface.libelle = e.control.value
-
-            libelle = ft.TextField(value=surface.libelle, label="Surface personnalisée", dense=True,
-                                   border_radius=10, text_size=13, on_change=maj_libelle)
-        else:
-            libelle = ft.Text(surface.libelle, size=13, weight=ft.FontWeight.W_500, no_wrap=False)
-
-        return ft.Container(
-            content=ft.ResponsiveRow(
-                [
-                    ft.Container(libelle, col={"xs": 12, "md": 5},
-                                 alignment=ft.alignment.center_left,
-                                 padding=ft.padding.only(bottom=2)),
-                    ft.Container(
-                        theme.champ_nombre("Coefficient", surface.coefficient, maj_coef,
-                                           on_valide=rafraichir_ligne, compact=True),
-                        col={"xs": 5, "md": 2},
-                    ),
-                    ft.Container(
-                        theme.champ_nombre("Surface", surface.aire_m2, maj_aire, "m²",
-                                           on_valide=rafraichir_ligne, compact=True),
-                        col={"xs": 7, "md": 3},
-                    ),
-                    ft.Container(
-                        ft.Row(
-                            [
-                                actifs,
-                                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_size=18,
-                                              tooltip="Supprimer", on_click=supprimer)
-                                if personnalisee else ft.Container(),
-                            ],
-                            spacing=4,
-                            alignment=ft.MainAxisAlignment.END,
-                        ),
-                        col={"xs": 12, "md": 2},
-                        alignment=ft.alignment.center_right,
-                    ),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
-                run_spacing=8,
-            ),
-            padding=ft.padding.symmetric(6, 4),
-            border_radius=10,
-            bgcolor=ft.Colors.with_opacity(0.55, ft.Colors.SURFACE) if surface.aire_m2 > 0 else None,
-        )
-
-    def _maj_totaux(self) -> None:
-        p = self.etat.projet
-        self._total.value = (
-            f"Surface totale : {theme.nombre(p.aire_totale_m2, 0)} m²    ·    "
-            f"Surface active pondérée : {theme.nombre(p.aire_ponderee_m2, 1)} m²    ·    "
-            f"Coefficient moyen : {theme.nombre(p.coefficient_moyen, 3)}"
-        )
-        try:
-            self._total.update()
-        except Exception:
-            pass
-
-    def _ajouter_surface(self, _=None) -> None:
-        self.etat.projet.surfaces.append(SurfaceIncidente("Autre surface (à justifier)", 0.8, 0.0))
-        self.etat.invalider()
-        self.rafraichir()
-
     # ---------------------------------------------------------------- rendu
     # ---------------------------------------------------- import / export
     def _sur_mobile(self) -> bool:
@@ -197,7 +100,60 @@ class VueProjet(Vue):
             return False
 
     def _exporter(self, _=None) -> None:
-        """Écrit le projet dans un fichier, puis propose de le ranger ailleurs."""
+        """Demande la destination, puis n'écrit qu'elle.
+
+        L'ordre compte. Écrire d'abord dans un dossier interne, annoncer
+        « enregistré », puis seulement ouvrir le sélecteur, revenait à annoncer
+        un succès avant l'arbitrage de l'utilisateur : qui annulait la boîte de
+        dialogue avait pourtant un fichier sur le disque, dans un dossier qu'il
+        n'avait pas choisi et où les exports s'accumulaient.
+
+        Android fait exception : son sélecteur ne rend qu'un URI du Storage
+        Access Framework, que Python ne sait pas ouvrir. Là, écrire dans le
+        dossier de l'application est le seul chemin possible, et c'est annoncé
+        comme tel.
+        """
+        if self._sur_mobile():
+            self._exporter_dans_le_dossier_interne()
+            return
+        if self._selecteur_export is None:
+            self._selecteur_export = ft.FilePicker(on_result=self._destination_choisie)
+            self.page.overlay.append(self._selecteur_export)
+            self.page.update()
+        try:
+            self._selecteur_export.save_file(
+                dialog_title="Enregistrer le projet",
+                file_name=os.path.basename(self.etat.nom_fichier_projet()),
+                allowed_extensions=[EXTENSION_PROJET],
+            )
+        except Exception:
+            # Pas de sélecteur sur cette plateforme : le dossier interne reste
+            # la seule destination possible, et on le dit.
+            self._exporter_dans_le_dossier_interne()
+
+    def _destination_choisie(self, e: ft.FilePickerResultEvent) -> None:
+        """Suite du sélecteur : rien n'a encore été écrit à ce stade."""
+        cible = getattr(e, "path", None)
+        if not cible:
+            return  # annulation : aucun fichier, aucun message de succès
+        if not cible.lower().endswith("." + EXTENSION_PROJET):
+            cible = f"{cible}.{EXTENSION_PROJET}"
+        if not destination_utilisable(cible):
+            self.notifier("Cet emplacement n'est pas accessible en écriture directe ; "
+                          "le projet est enregistré dans le dossier de l'application.", "alerte")
+            self._exporter_dans_le_dossier_interne()
+            return
+        try:
+            chemin = self.etat.exporter_vers(cible)
+        except Exception as exc:
+            self.notifier(f"Enregistrement impossible : {type(exc).__name__} — {exc}", "erreur")
+            return
+        self._dernier_export = chemin
+        self.rafraichir()
+        self.notifier(f"Projet enregistré dans {chemin}", "succes")
+
+    def _exporter_dans_le_dossier_interne(self) -> None:
+        """Dernier recours : le dossier de l'application, annoncé sans détour."""
         try:
             chemin = self.etat.exporter_vers(
                 os.path.join(repertoire_documents(),
@@ -207,55 +163,7 @@ class VueProjet(Vue):
             return
         self._dernier_export = chemin
         self.rafraichir()
-        if self._sur_mobile():
-            # Le sélecteur d'Android ne rend qu'un URI de document, inutilisable
-            # depuis Python : le fichier est déjà au bon endroit, dans un dossier
-            # que n'importe quel gestionnaire de fichiers sait ouvrir.
-            self.notifier(f"Projet enregistré : {chemin}", "succes")
-            return
-        self.notifier(f"Projet enregistré dans {chemin}", "succes")
-        self._enregistrer_sous(chemin)
-
-    def _enregistrer_sous(self, chemin: str) -> None:
-        """Sélecteur du système, pour choisir soi-même la destination."""
-        if self._selecteur_export is None:
-            def _resultat(e: ft.FilePickerResultEvent) -> None:
-                cible = getattr(e, "path", None)
-                source = getattr(self._selecteur_export, "data", None)
-                if not cible or not source:
-                    return
-                if not cible.lower().endswith("." + EXTENSION_PROJET):
-                    cible = f"{cible}.{EXTENSION_PROJET}"
-                if not destination_utilisable(cible):
-                    # Ce n'est pas un chemin de fichier mais un URI du système :
-                    # inutile d'alarmer, le projet est déjà enregistré.
-                    self.notifier(
-                        f"Cet emplacement n'est pas accessible en écriture directe. "
-                        f"Le projet reste enregistré dans {source}.", "alerte")
-                    return
-                try:
-                    shutil.copyfile(source, cible)
-                    self._dernier_export = cible
-                    self.rafraichir()
-                    self.notifier(f"Projet copié vers {cible}", "succes")
-                except Exception as exc:
-                    self.notifier(f"Copie impossible : {exc}", "erreur")
-
-            self._selecteur_export = ft.FilePicker(on_result=_resultat)
-            self.page.overlay.append(self._selecteur_export)
-            self.page.update()
-        self._selecteur_export.data = chemin
-        try:
-            self._selecteur_export.save_file(
-                dialog_title="Enregistrer le projet",
-                file_name=os.path.basename(chemin),
-                allowed_extensions=[EXTENSION_PROJET],
-            )
-        except Exception:
-            # Sur certaines plateformes le sélecteur n'existe pas : le fichier
-            # est déjà écrit, il suffit de dire où.
-            self.notifier(f"Le sélecteur de fichiers n'est pas disponible ici. "
-                          f"Le projet reste dans {os.path.dirname(chemin)}.", "alerte")
+        self.notifier(f"Projet enregistré : {chemin}", "succes")
 
     def _importer(self, _=None) -> None:
         if self._selecteur_import is None:
@@ -291,15 +199,20 @@ class VueProjet(Vue):
             self.notifier(str(exc), "erreur")
             return False
         self.rafraichir()
-        self.notifier(f"Projet « {self.etat.projet.nom_projet or os.path.basename(chemin)} » "
-                      f"chargé.", "succes")
+        systeme = self.etat.systeme
+        self.notifier(
+            f"Projet « {systeme.nom_projet or os.path.basename(chemin)} » chargé : "
+            f"{len(systeme.bassins_versants)} bassin(s) versant(s), "
+            f"{len(systeme.ouvrages)} bassin(s) d'orage.", "succes")
         return True
 
     def _bloc_sauvegarde(self) -> ft.Control:
         lignes: List[ft.Control] = [
-            ft.Text("Un projet exporté se recharge tel quel : surfaces, sol, ouvrage, bassin "
-                    "amont et scénario retenu. De quoi reprendre une étude sans tout resaisir, "
-                    "ou la transmettre à un collègue.", size=12, color=theme.GRIS),
+            ft.Text("Un projet exporté se recharge tel quel : bassins versants, bassins "
+                    "d'orage, raccordements, sol, ouvrages et scénarios. De quoi reprendre "
+                    "une étude sans tout resaisir, ou la transmettre à un collègue. Les "
+                    "projets enregistrés par une version antérieure se rechargent aussi.",
+                    size=12, color=theme.GRIS),
             ft.Row(
                 [
                     theme.bouton_principal("Exporter le projet", ft.Icons.SAVE, self._exporter),
@@ -316,28 +229,33 @@ class VueProjet(Vue):
         return ft.Column(lignes, spacing=12)
 
     def construire(self) -> List[ft.Control]:
-        p = self.etat.projet
-        commune = rainfall.commune_par_ins(p.commune_ins)
+        systeme = self.etat.systeme
+        commune = rainfall.commune_par_ins(systeme.commune_ins)
 
         def maj_texte(champ: str):
             def _f(e: ft.ControlEvent) -> None:
-                setattr(p, champ, e.control.value)
+                # L'identification appartient au système : l'écrire sur l'étude
+                # d'un ouvrage serait effacé à la synchronisation suivante.
+                setattr(systeme, champ, e.control.value)
             return _f
 
         identification = ft.ResponsiveRow(
             [
-                ft.Container(ft.TextField(label="Nom du projet", value=p.nom_projet, dense=True,
-                                          border_radius=10, on_change=maj_texte("nom_projet")),
+                ft.Container(ft.TextField(label="Nom du projet", value=systeme.nom_projet,
+                                          dense=True, border_radius=10,
+                                          on_change=maj_texte("nom_projet")),
                              col={"xs": 12, "md": 6}),
-                ft.Container(ft.TextField(label="Localisation", value=p.localisation, dense=True,
-                                          border_radius=10, on_change=maj_texte("localisation")),
+                ft.Container(ft.TextField(label="Localisation", value=systeme.localisation,
+                                          dense=True, border_radius=10,
+                                          on_change=maj_texte("localisation")),
                              col={"xs": 12, "md": 6}),
-                ft.Container(ft.TextField(label="Auteur du calcul", value=p.auteur, dense=True,
-                                          border_radius=10, on_change=maj_texte("auteur")),
+                ft.Container(ft.TextField(label="Auteur du calcul", value=systeme.auteur,
+                                          dense=True, border_radius=10,
+                                          on_change=maj_texte("auteur")),
                              col={"xs": 12, "md": 6}),
-                ft.Container(ft.TextField(label="Remarques", value=p.remarques, dense=True, multiline=True,
-                                          min_lines=1, max_lines=3, border_radius=10,
-                                          on_change=maj_texte("remarques")),
+                ft.Container(ft.TextField(label="Remarques", value=systeme.remarques, dense=True,
+                                          multiline=True, min_lines=1, max_lines=3,
+                                          border_radius=10, on_change=maj_texte("remarques")),
                              col={"xs": 12, "md": 6}),
             ],
             spacing=12,
@@ -355,22 +273,26 @@ class VueProjet(Vue):
         sources = [ft.dropdown.Option(rainfall.SOURCE_MONTANA, "Montana")]
         if commune and commune.a_qdf:
             sources.append(ft.dropdown.Option(rainfall.SOURCE_QDF, "Tables QDF"))
-        source_effective = rainfall.SourcePluie(p.commune_ins, p.periode_retour, p.source_pluie).source
+        source_effective = rainfall.SourcePluie(
+            systeme.commune_ins, systeme.periode_retour, systeme.source_pluie).source
 
         pluie = ft.ResponsiveRow(
             [
                 ft.Container(
                     ft.Column(
                         [
-                            ft.Text("Commune", size=12, color=theme.GRIS, weight=ft.FontWeight.W_600),
+                            ft.Text("Commune", size=12, color=theme.GRIS,
+                                    weight=ft.FontWeight.W_600),
                             ft.Container(
                                 content=ft.Row(
                                     [
                                         ft.Icon(ft.Icons.LOCATION_CITY, color=theme.BLEU),
                                         ft.Column(
                                             [
-                                                ft.Text(p.commune_nom, size=16, weight=ft.FontWeight.W_700),
-                                                ft.Text(f"INS {p.commune_ins}", size=11, color=theme.GRIS),
+                                                ft.Text(systeme.commune_nom, size=16,
+                                                        weight=ft.FontWeight.W_700),
+                                                ft.Text(f"INS {systeme.commune_ins}", size=11,
+                                                        color=theme.GRIS),
                                             ],
                                             spacing=0,
                                             expand=True,
@@ -393,8 +315,9 @@ class VueProjet(Vue):
                 ft.Container(
                     ft.Dropdown(
                         label="Période de retour",
-                        value=str(p.periode_retour),
-                        options=[ft.dropdown.Option(str(rp), f"{rp} ans") for rp in rainfall.RETURN_PERIODS],
+                        value=str(systeme.periode_retour),
+                        options=[ft.dropdown.Option(str(rp), f"{rp} ans")
+                                 for rp in rainfall.RETURN_PERIODS],
                         on_change=maj_recurrence,
                         dense=True,
                         border_radius=10,
@@ -418,68 +341,71 @@ class VueProjet(Vue):
         )
 
         avertissements: List[ft.Control] = []
-        if p.periode_retour < 25:
+        if systeme.periode_retour < 25:
             avertissements.append(theme.message(
-                "Le GTI recommande une période de retour d'au moins 25 ans pour le dimensionnement.", "alerte"))
+                "Le GTI recommande une période de retour d'au moins 25 ans pour le "
+                "dimensionnement.", "alerte"))
         if commune and not commune.a_montana:
             avertissements.append(theme.message(
                 f"{commune.nom} ne dispose pas des coefficients de Montana dans le GTI : "
                 "les tables QDF sont utilisées (interpolation logarithmique).", "info"))
 
-        self._total = ft.Text(
-            f"Surface totale : {theme.nombre(p.aire_totale_m2, 0)} m²    ·    "
-            f"Surface active pondérée : {theme.nombre(p.aire_ponderee_m2, 1)} m²    ·    "
-            f"Coefficient moyen : {theme.nombre(p.coefficient_moyen, 3)}",
-            size=13,
-            weight=ft.FontWeight.W_700,
-            color=theme.BLEU,
-        )
+        def maj_vidange(v: float) -> None:
+            self.etat.definir("temps_vidange_max_h", max(v, 0.0))
 
-        surfaces = ft.Column(
-            [self._ligne_surface(i, s) for i, s in enumerate(p.surfaces)]
-            + [
-                ft.Row(
-                    [
-                        theme.bouton_secondaire("Ajouter une surface", ft.Icons.ADD, self._ajouter_surface),
-                        ft.Container(expand=True),
-                    ]
-                ),
-                ft.Divider(height=16),
-                self._total,
+        def maj_securite(v: float) -> None:
+            self.etat.definir("coef_securite_infiltration", max(v, 1e-9))
+
+        contraintes = ft.ResponsiveRow(
+            [
+                theme.champ_nombre("Temps de vidange maximum", systeme.temps_vidange_max_h,
+                                   maj_vidange, "h", "après la pluie · GTI : 48 h",
+                                   on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4},
+                                   domaine="temps_vidange_max_h"),
+                theme.champ_nombre("Coefficient de sécurité sur K",
+                                   systeme.coef_securite_infiltration, maj_securite, "—",
+                                   "GTI : 2", on_valide=self.maj_resultats,
+                                   col={"xs": 12, "sm": 6, "md": 4},
+                                   domaine="coef_securite_infiltration"),
             ],
-            spacing=4,
+            spacing=12,
+            run_spacing=12,
         )
 
-        def maj_sref(v: float) -> None:
-            self.etat.definir("surface_reference_m2", v)
-
+        self.zone.controls = self.resultats()
         return [
             theme.section("Identification du projet", identification, ft.Icons.EDIT_DOCUMENT),
             theme.section("Sauvegarde du projet", self._bloc_sauvegarde(), ft.Icons.SAVE_ALT,
                           "Exporter pour reprendre plus tard · importer un projet existant"),
             theme.section("Pluie de projet", ft.Column([pluie] + avertissements, spacing=12),
                           ft.Icons.WATER_DROP_OUTLINED,
-                          "Pluies statistiques du GTI (Région wallonne)"),
-            theme.section(
-                "Surfaces incidentes",
-                ft.Column(
-                    [
-                        ft.ResponsiveRow(
-                            [
-                                ft.Container(
-                                    theme.champ_nombre("Surface de référence du projet",
-                                                       p.surface_reference_m2, maj_sref, "m²",
-                                                       "parcelle concernée par le projet"),
-                                    col={"xs": 12, "md": 5},
-                                ),
-                            ]
-                        ),
-                        ft.Divider(height=14),
-                        surfaces,
-                    ],
-                    spacing=10,
-                ),
-                ft.Icons.GRID_ON,
-                "Coefficients de ruissellement du GTI par type d'occupation du sol",
-            ),
+                          "Pluies statistiques du GTI (Région wallonne) · commune à tout le réseau"),
+            theme.section("Contraintes du GTI", contraintes, ft.Icons.RULE,
+                          "Elles s'appliquent à tous les bassins d'orage du projet"),
+            theme.section("Composition du projet", self.zone, ft.Icons.ACCOUNT_TREE,
+                          "Les surfaces s'encodent dans l'onglet « Bassins versants »"),
         ]
+
+    def resultats(self) -> List[ft.Control]:
+        systeme = self.etat.systeme
+        return [
+            ft.Row(
+                [
+                    theme.etiquette(f"{len(systeme.bassins_versants)} bassin(s) versant(s)",
+                                    theme.VERT, theme.VERT_CLAIR, ft.Icons.LANDSCAPE),
+                    theme.etiquette(f"{len(systeme.ouvrages)} bassin(s) d'orage", theme.BLEU,
+                                    theme.BLEU_CLAIR, ft.Icons.WATER_DAMAGE),
+                    theme.etiquette(
+                        f"Surface totale {theme.nombre(systeme.aire_totale_m2, 0)} m²",
+                        theme.ARDOISE, theme.GRIS_CLAIR, ft.Icons.CROP_LANDSCAPE),
+                    theme.etiquette(
+                        f"Surface active {theme.nombre(systeme.aire_ponderee_m2, 1)} m²",
+                        theme.GRIS, theme.GRIS_CLAIR, ft.Icons.GRASS),
+                    theme.etiquette(
+                        f"C moyen {theme.nombre(systeme.coefficient_moyen, 3)}",
+                        theme.GRIS, theme.GRIS_CLAIR, ft.Icons.FUNCTIONS),
+                ],
+                wrap=True, spacing=8, run_spacing=8,
+            ),
+        ] + [theme.message(a, "alerte") for a in systeme.anomalies()]

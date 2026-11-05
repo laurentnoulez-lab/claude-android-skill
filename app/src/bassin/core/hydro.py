@@ -258,15 +258,26 @@ class Resultat:
 
 
 def formater_duree(minutes: float) -> str:
-    """Formatage lisible d'une durée en minutes."""
+    """Durée lisible, à la même granularité quelle que soit sa longueur.
+
+    Au-delà de 24 h, l'affichage passait au dixième de jour : une durée critique
+    de 1 460 min — soit 1 j 0 h 20 — s'écrivait « 1,0 j », moins précise que le
+    « 3 h 15 » de la ligne voisine et impossible à recouper.
+    """
     minutes = float(minutes)
     if minutes < 60:
         return f"{minutes:.0f} min"
-    if minutes < 1440:
-        h, m = divmod(int(round(minutes)), 60)
+    total = int(round(minutes))
+    if total < 1440:
+        h, m = divmod(total, 60)
         return f"{h} h {m:02d}" if m else f"{h} h"
-    j = minutes / 1440.0
-    return f"{j:.1f} j" if j % 1 else f"{j:.0f} j"
+    j, reste = divmod(total, 1440)
+    h, m = divmod(reste, 60)
+    if not reste:
+        return f"{j} j"
+    if not m:
+        return f"{j} j {h} h"
+    return f"{j} j {h} h {m:02d}"
 
 
 # ---------------------------------------------------------------------------
@@ -300,8 +311,8 @@ def volume_de_dimensionnement(
     elle aussi, pour ne pas pouvoir répondre autrement que le tableau.
     """
     v_sous = projet.bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
-    if projet.amont.actif:
-        # Un bassin amont déverse ici : son apport doit entrer dans le volume à
+    if projet.a_un_apport_amont:
+        # Un ouvrage amont déverse ici : son apport doit entrer dans le volume à
         # prévoir, sans quoi l'ouvrage dimensionné déborderait en simulation.
         return volume_a_maitriser_amont(projet, serie, debit_infiltration, debit_ajutage, v_sous)
     if scenario == SCENARIO_SEUIL:
@@ -329,7 +340,7 @@ def dimensionner(projet: Projet, scenario: str, surface_infiltration: Optional[f
     res.volume_sous_ajutage_m3 = v_sous if scenario == SCENARIO_SEUIL else 0.0
 
     res.debit_sortant_ls = q_inf + q_aj
-    res.amont_pris_en_compte = projet.amont.actif
+    res.amont_pris_en_compte = projet.a_un_apport_amont
     v, t, h = volume_de_dimensionnement(projet, serie, scenario, q_inf, q_aj)
 
     res.volume_m3 = v
@@ -399,7 +410,7 @@ def temps_vidange_apres_pluie_h(projet: Projet, volume_m3: float, duree_min: flo
     peut même dépasser ce que le fond infiltre, et le niveau se maintient alors
     sur l'axe de l'ajutage au lieu de descendre : il faut intégrer.
     """
-    if not projet.amont.actif or duree_min <= 0:
+    if not projet.a_un_apport_amont or duree_min <= 0:
         return temps_vidange_h(volume_m3, debit_infiltration, debit_ajutage,
                                volume_sous_ajutage_m3)
     from . import simulation
@@ -435,10 +446,48 @@ def temps_vidange_h(volume_m3: float, q_infiltration_ls: float, q_ajutage_ls: fl
     return volume_m3 * 1000.0 / q_total / 3600.0
 
 
-def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
-    from .model import DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE
+def _ecarts_ouvrage_encode(projet: Projet, res: Resultat, scenario: str) -> List[str]:
+    """En quoi l'ouvrage encodé s'écarte-t-il de ce que ce scénario suppose ?
 
-    if projet.aire_ponderee_m2 <= 0:
+    Le dimensionnement cherche un minimum sous des hypothèses ; l'onglet
+    « Bassin réel », la table de protection et la synthèse portent sur
+    l'ouvrage tel qu'il sera construit. Quand les deux divergent, deux chiffres
+    de « volume requis » s'affichent côte à côte sans que rien ne les
+    réconcilie — un bandeau annonçait « 0,0 m³ requis » au-dessus d'une table
+    pleine de volumes.
+
+    Plutôt que d'énumérer les cas un à un, on compare terme à terme ce que le
+    scénario suppose et ce qui est encodé : débit d'infiltration, débit
+    d'ajutage, volume mort sous l'ajutage.
+    """
+    bassin = projet.bassin
+    if bassin.volume_total_m3 <= 0:
+        return []                      # rien n'est encore construit
+    construit_inf = debit_infiltration_ls(bassin.surface_dispersion_m2, projet.k_bassin_ms,
+                                          projet.coef_securite_infiltration)
+    v_sous_suppose = bassin.volume_sous_ajutage_m3 if scenario == SCENARIO_SEUIL else 0.0
+    differences: List[str] = []
+    for libelle, suppose, encode, unite, decimales in (
+            ("débit d'infiltration", res.debit_infiltration_ls, construit_inf, "l/s", 3),
+            ("débit d'ajutage", res.debit_ajutage_ls, bassin.debit_ajutage_ls, "l/s", 3),
+            ("volume sous l'axe de l'ajutage", v_sous_suppose,
+             bassin.volume_sous_ajutage_m3, "m³", 1)):
+        if abs(suppose - encode) > max(abs(suppose) * 0.01, 1e-4):
+            differences.append(f"{libelle} {suppose:.{decimales}f} {unite} supposé contre "
+                               f"{encode:.{decimales}f} {unite} encodés")
+    if not differences:
+        return []
+    return ["L'ouvrage encodé ne correspond pas aux hypothèses de ce scénario : "
+            + " ; ".join(differences)
+            + ". La vérification de l'ouvrage, la table des pluies absorbées et la synthèse "
+              "portent sur l'ouvrage encodé : leurs volumes diffèrent donc de celui-ci."]
+
+
+def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
+    from .model import (DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA, PERIODE_RETOUR_MINIMALE,
+                        valeurs_hors_domaine)
+
+    if not projet.a_un_apport:
         res.conforme = False
         res.alertes.append("Aucune surface incidente encodée : encodez au moins une surface.")
     if res.debit_sortant_ls <= 0:
@@ -463,7 +512,8 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
             f"({projet.temps_vidange_max_h:.0f} h)."
         )
         if scenario in (SCENARIO_DISPERSION, SCENARIO_MIXTE, SCENARIO_SEUIL):
-            msg += " La surface d'infiltration doit être augmentée."
+            msg += (" La surface d'infiltration doit être augmentée, dans la mesure des "
+                    "possibilités techniques.")
         else:
             msg += " Le débit d'ajutage doit être augmente."
         res.alertes.append(msg)
@@ -475,13 +525,33 @@ def _controles(projet: Projet, res: Resultat, scenario: str) -> None:
                 "La surface d'infiltration atteint déjà 10 % de la surface de référence : "
                 "le GTI admet ce cas comme un maximum raisonnable (rejet complémentaire a prévoir)."
             )
+    for message in valeurs_hors_domaine(projet):
+        # Une grandeur hors de son domaine physique n'est pas une hypothèse
+        # audacieuse : c'est une saisie fausse, et le résultat qui en découle
+        # n'a pas de sens. Elle est dite, et le dimensionnement non conforme.
+        res.conforme = False
+        res.alertes.append(message)
+    if projet.bassin.ajutage_au_dessus_du_trop_plein:
+        res.conforme = False
+        res.alertes.append(
+            f"Volume sous l'axe de l'ajutage ({projet.bassin.volume_sous_ajutage_m3:.1f} m³) "
+            f"supérieur au volume tampon total ({projet.bassin.volume_total_m3:.1f} m³) : "
+            "l'orifice serait au-dessus du trop-plein. L'ouvrage encodé ne peut se vidanger "
+            "que par infiltration, et tout ce qu'il reçoit au-delà part au trop-plein."
+        )
+    for ecart in _ecarts_ouvrage_encode(projet, res, scenario):
+        res.alertes.append(ecart)
     if scenario in (SCENARIO_TEMPORISATION, SCENARIO_MIXTE, SCENARIO_SEUIL) and res.debit_ajutage_ls > 0:
         q_adm = projet.debit_fuite_admissible_ls
         if q_adm > 0 and res.debit_ajutage_ls > q_adm:
+            # La surface citée est celle qui a servi au calcul — la surface
+            # raccordée, bassins versants amont compris s'ils sont comptés —
+            # sans quoi le message contredit le chiffre qu'il explique.
             res.alertes.append(
                 f"Débit d'ajutage de {res.debit_ajutage_ls:.2f} l/s supérieur au débit de fuite "
                 f"admissible de {q_adm:.2f} l/s "
-                f"({DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA:.0f} l/s/ha x {projet.aire_totale_m2:.0f} m²)."
+                f"({DEBIT_FUITE_SPECIFIQUE_MAX_LS_HA:.0f} l/s/ha x "
+                f"{projet.aire_raccordee_m2:.0f} m² raccordés)."
             )
 
 
@@ -507,7 +577,7 @@ def _temps_vidange_pour(projet: Projet, scenario: str, s_inf: float, q_aj: float
 
 def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: float = 0.01) -> Optional[float]:
     """Plus petite surface d'infiltration respectant le temps de vidange maximal."""
-    if projet.aire_ponderee_m2 <= 0 or projet.k_infiltration_ms <= 0:
+    if not projet.a_un_apport or projet.k_infiltration_ms <= 0:
         return None
     q_aj = projet.debit_ajutage_ls if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h
@@ -534,7 +604,7 @@ def surface_infiltration_minimale(projet: Projet, scenario: str, tolerance: floa
 
 def debit_ajutage_minimal(projet: Projet, scenario: str, tolerance: float = 1e-4) -> Optional[float]:
     """Plus petit débit d'ajutage respectant le temps de vidange maximal."""
-    if projet.aire_ponderee_m2 <= 0:
+    if not projet.a_un_apport:
         return None
     s_inf = projet.surface_infiltration_m2 if scenario in (SCENARIO_MIXTE, SCENARIO_SEUIL) else 0.0
     cible = projet.temps_vidange_max_h
@@ -581,7 +651,7 @@ def courbe_volume(projet: Projet, scenario: str, n_points: int = 160) -> List[Tu
         t = math.exp(lo + (hi - lo) * i / (n_points - 1))
         h = src.hauteur(t)
         v_in = h * s_pond / 1000.0
-        if projet.amont.actif:
+        if projet.a_un_apport_amont:
             # Même règle que le tableau des scénarios, sans quoi la courbe
             # passerait sous le volume de dimensionnement qu'elle annote.
             seuil = v_sous if scenario == SCENARIO_SEUIL else 0.0

@@ -15,7 +15,7 @@ from .base import Vue
 class VuePluies(Vue):
     titre = "Pluies GTI"
     icone = ft.Icons.CLOUD
-    sous_titre = "Tables QDF en mm et l/s/ha"
+    sous_titre = "Pluies statistiques en mm et l/s/ha"
 
     def construire(self) -> List[ft.Control]:
         p = self.etat.projet
@@ -74,18 +74,26 @@ class VuePluies(Vue):
         info: List[ft.Control] = []
         if commune and commune.a_montana:
             a1, b1, a2, b2, a3, b3 = rainfall.montana_coeffs(p.commune_ins, p.periode_retour)
+            # Les coefficients restent visibles sous QDF — ils décrivent la
+            # commune — mais grisés et annoncés comme inutilisés : affichés en
+            # bleu à côté d'un tableau tabulé, ils laissaient croire qu'ils
+            # avaient servi à le produire.
+            actifs = src.source == rainfall.SOURCE_MONTANA
+            teinte = theme.BLEU if actifs else theme.GRIS
+            fond = theme.BLEU_CLAIR if actifs else theme.GRIS_CLAIR
             info.append(ft.Row(
                 [
-                    theme.etiquette(f"a₁ = {a1:.1f} · b₁ = {b1:.4f}  (t < 25 min)", theme.BLEU,
-                                    theme.BLEU_CLAIR),
-                    theme.etiquette(f"a₂ = {a2:.1f} · b₂ = {b2:.4f}  (25 → 6000 min)", theme.BLEU,
-                                    theme.BLEU_CLAIR),
-                    theme.etiquette(f"a₃ = {a3:.1f} · b₃ = {b3:.4f}  (t > 6000 min)", theme.BLEU,
-                                    theme.BLEU_CLAIR),
+                    theme.etiquette(f"a₁ = {a1:.1f} · b₁ = {b1:.4f}  (t < 25 min)", teinte, fond),
+                    theme.etiquette(f"a₂ = {a2:.1f} · b₂ = {b2:.4f}  (25 → 6000 min)", teinte, fond),
+                    theme.etiquette(f"a₃ = {a3:.1f} · b₃ = {b3:.4f}  (t > 6000 min)", teinte, fond),
                 ],
                 wrap=True, spacing=8, run_spacing=8,
             ))
-            info.append(ft.Text("i [mm/h] = a × t[min]^(−b)", size=12.5, color=theme.GRIS))
+            info.append(ft.Text(
+                "i [mm/h] = a × t[min]^(−b)" if actifs
+                else "i [mm/h] = a × t[min]^(−b) — pour information : la source active est QDF, "
+                     "ces coefficients ne sont pas utilisés.",
+                size=12.5, color=theme.GRIS, no_wrap=False))
         else:
             info.append(theme.message(
                 "Commune sans coefficients de Montana : les valeurs proviennent des tables QDF.", "info"))
@@ -114,7 +122,8 @@ class VuePluies(Vue):
                 ft.Icons.CLOUD_QUEUE,
                 f"Source : {src.libelle_source} · période de retour de projet : {p.periode_retour} ans",
             ),
-            theme.section("Tables QDF", ft.Column([selecteur, tableau], spacing=12), ft.Icons.TABLE_ROWS,
+            theme.section(src.titre_tableau_hauteurs,
+                          ft.Column([selecteur, tableau], spacing=12), ft.Icons.TABLE_ROWS,
                           "Lignes : durée de pluie · Colonnes : période de retour"),
             theme.section("Courbes IDF", graphiques.construire(courbe_mm, 300), ft.Icons.STACKED_LINE_CHART),
         ]

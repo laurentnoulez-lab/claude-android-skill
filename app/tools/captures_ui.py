@@ -15,7 +15,8 @@ import os
 import socketserver
 import threading
 
-VUES = ["Projet", "Dimensionnement", "Bassin", "Table QDF", "Ajutage", "Pluies GTI", "Rapport"]
+VUES = ["Projet", "Bassins versants", "Réseau", "Dimensionnement", "Bassin réel", "Table QDF",
+        "Ajutage", "Synthèse", "Pluies GTI", "Rapport"]
 FORMATS = {"telephone": (390, 844), "tablette": (820, 1180), "bureau": (1440, 960)}
 
 
@@ -38,19 +39,66 @@ def servir(racine: str, port: int) -> socketserver.TCPServer:
     return serveur
 
 
-def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str) -> None:
-    """Capture aussi le bas de la page : les débordements y sont fréquents."""
+def defiler_et_capturer(page, sortie: str, nom_format: str, index: int, nom: str,
+                        largeur: int, hauteur: int, haut: bytes,
+                        journal: list[str]) -> bool:
+    """Capture aussi le bas de la page : les débordements y sont fréquents.
+
+    La molette agit là où se trouve le pointeur. Posé à x = 200, il tombait sur
+    la barre de navigation du format bureau, qui ne défile pas : neuf des dix
+    captures « bas » étaient l'exacte copie de celle du haut, et le bas de ces
+    écrans n'a jamais été photographié. Le pointeur est désormais au milieu du
+    contenu.
+
+    Renvoie si la page a bougé. Une page qui ne bouge pas n'est pas une faute en
+    soi — un écran court tient entièrement dans une grande fenêtre —, c'est
+    :func:`anomalies_de_defilement` qui tranche, en confrontant les formats.
+    """
+    chemin = os.path.join(sortie, f"{nom_format}_{index}_{nom}_bas.png")
     try:
-        page.mouse.move(200, 400)
+        page.mouse.move(largeur * 0.6, hauteur * 0.6)
         for _ in range(3):
             page.mouse.wheel(0, 900)
             page.wait_for_timeout(600)
-        page.screenshot(path=os.path.join(sortie, f"{nom_format}_{index}_{nom}_bas.png"))
+        # Le pointeur est au milieu du contenu pour que la molette agisse ; l'y
+        # laisser ouvrait une infobulle qui masquait quatre cellules de la table
+        # QDF. On le gare dans le coin bas-gauche, sans contrôle, avant le cliché.
+        page.mouse.move(6, hauteur - 6)
+        page.wait_for_timeout(500)
+        bas = page.screenshot(path=chemin)
         for _ in range(4):
             page.mouse.wheel(0, -900)
         page.wait_for_timeout(600)
     except Exception as exc:  # pragma: no cover
         print(f"  ! défilement impossible ({nom_format}/{nom}) : {str(exc)[:80]}")
+        journal.append(f"[{nom_format}] {nom} : défilement impossible ({str(exc)[:120]})")
+        return False
+    return bas != haut
+
+
+def anomalies_de_defilement(defilements: dict, formats: dict) -> list[str]:
+    """Écrans dont la capture du bas ne montre pas le bas.
+
+    Une capture « bas » identique à celle du haut est normale quand l'écran
+    tient dans la fenêtre — c'est le cas de quatre écrans dans le format
+    tablette, le plus haut des trois. Ce qui ne l'est pas, c'est qu'une **grande**
+    fenêtre défile là où une **petite** ne défile pas : le même écran y est
+    forcément plus long. C'est la signature du défaut d'origine, où le format
+    bureau ne défilait sur aucun écran quand le téléphone défilait sur tous.
+    """
+    anomalies = []
+    for nom in {nom for _f, nom in defilements}:
+        for grand, (_l, h_grand) in formats.items():
+            if not defilements.get((grand, nom)):
+                continue
+            for petit, (_l2, h_petit) in formats.items():
+                if h_petit < h_grand and not defilements.get((petit, nom), True):
+                    anomalies.append(
+                        f"[{petit}] {nom} : la capture du bas est identique à celle du "
+                        f"haut, alors que le format {grand} — plus haut de "
+                        f"{h_grand - h_petit} px — défile sur ce même écran. Le "
+                        "défilement n'a pas agi, le bas de cet écran n'est pas vérifié.")
+    return sorted(set(anomalies))
 
 
 def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
@@ -58,6 +106,8 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
 
     os.makedirs(sortie, exist_ok=True)
     journal: list[str] = []
+    #: (format, écran) -> la page a-t-elle bougé sous la molette ?
+    defilements: dict = {}
     with sync_playwright() as pw:
         options = {"args": ["--no-sandbox"]}
         if chemin_navigateur:
@@ -81,7 +131,13 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             except Exception as exc:
                 print(f"  ! accessibilité non activée ({nom_format}) : {str(exc)[:80]}")
             try:  # le canvas doit avoir le focus pour recevoir les touches
-                page.click("body", position={"x": largeur // 2, "y": hauteur - 30})
+                # Un clic au milieu du bas de l'écran tombait, sur téléphone, sur
+                # la carte « Commune » : le sélecteur s'ouvrait et masquait toutes
+                # les captures suivantes. Le coin est sans contrôle, et Échap
+                # referme ce qui aurait tout de même pu s'ouvrir.
+                page.click("body", position={"x": 6, "y": hauteur - 6})
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
             except Exception:
                 pass
             # Un projet complet : sans données, tableaux et graphiques restent
@@ -89,22 +145,28 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
             # à la vérification.
             page.keyboard.press("Control+e")
             page.wait_for_timeout(4000)
-            page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
-            defiler_et_capturer(page, sortie, nom_format, 0, "Projet")
+            haut = page.screenshot(path=os.path.join(sortie, f"{nom_format}_0_Projet.png"))
+            defilements[(nom_format, "Projet")] = defiler_et_capturer(
+                page, sortie, nom_format, 0, "Projet", largeur, hauteur, haut, erreurs)
             # L'application lit elle-même l'adresse du navigateur : Flet ne
             # transmet pas le chemin de l'URL dans la version web, et l'arbre
             # d'accessibilité de Flutter reste vide sans interaction humaine.
             # Le clavier atteint le canvas Flutter à coup sûr, contrairement à
             # l'URL (Flet n'en transmet pas le chemin sur le web) et à l'arbre
-            # d'accessibilité (vide sans interaction humaine). Ctrl+1..7 est aussi
-            # un raccourci offert à l'utilisateur.
+            # d'accessibilité (vide sans interaction humaine). Ctrl+1..9 puis
+            # Ctrl+0 sont aussi des raccourcis offerts à l'utilisateur.
             for i, vue in enumerate(VUES[1:], start=1):
                 nom = vue.replace(" ", "_")
+                # La dixième section s'ouvre par Ctrl+0, comme dans un navigateur.
+                touche = "0" if i == 9 else str(i + 1)
                 try:
-                    page.keyboard.press(f"Control+{i + 1}")
+                    page.keyboard.press("Escape")   # aucun dialogue ne doit masquer l'écran
+                    page.keyboard.press(f"Control+{touche}")
                     page.wait_for_timeout(3000)
-                    page.screenshot(path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
-                    defiler_et_capturer(page, sortie, nom_format, i, nom)
+                    haut = page.screenshot(
+                        path=os.path.join(sortie, f"{nom_format}_{i}_{nom}.png"))
+                    defilements[(nom_format, nom)] = defiler_et_capturer(
+                        page, sortie, nom_format, i, nom, largeur, hauteur, haut, erreurs)
                 except Exception as exc:  # pragma: no cover - dépend du rendu
                     print(f"  ! {nom_format} / {vue} : {str(exc)[:120]}")
                     erreurs.append(f"[{nom_format}] {vue} : {str(exc)[:200]}")
@@ -113,6 +175,9 @@ def capturer(url: str, sortie: str, chemin_navigateur: str | None) -> None:
                 print(f"  ! {len(erreurs)} message(s) console ({nom_format})")
             page.close()
         navigateur.close()
+    for anomalie in anomalies_de_defilement(defilements, FORMATS):
+        print("  ! " + anomalie)
+        journal.append(anomalie)
     # Le journal est publié avec les captures : indispensable pour diagnostiquer
     # un écran vide sans avoir accès au navigateur.
     with open(os.path.join(sortie, "journal.txt"), "w", encoding="utf-8") as fh:

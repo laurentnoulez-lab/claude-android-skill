@@ -98,17 +98,23 @@ class Canevas:
         self.px = bytearray(bytes(fond) * (largeur * hauteur))
 
     def point(self, x: int, y: int, c: Couleur) -> None:
+        if not _dessinable(x, y):
+            return
         if 0 <= x < self.w and 0 <= y < self.h:
             i = (y * self.w + x) * 3
             self.px[i:i + 3] = bytes(c)
 
     def disque(self, x: int, y: int, r: int, c: Couleur) -> None:
+        if not _dessinable(x, y):
+            return
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
                 if dx * dx + dy * dy <= r * r:
                     self.point(x + dx, y + dy, c)
 
     def rectangle(self, x0: int, y0: int, x1: int, y1: int, c: Couleur, plein: bool = True) -> None:
+        if not _dessinable(x0, y0, x1, y1):
+            return
         x0, x1 = sorted((x0, x1))
         y0, y1 = sorted((y0, y1))
         for y in range(y0, y1 + 1):
@@ -118,6 +124,8 @@ class Canevas:
 
     def ligne(self, x0: float, y0: float, x1: float, y1: float, c: Couleur,
               epaisseur: int = 1, pointilles: bool = False) -> None:
+        if not _dessinable(x0, y0, x1, y1):
+            return
         x0, y0, x1, y1 = int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1))
         dx, dy = abs(x1 - x0), -abs(y1 - y0)
         sx = 1 if x0 < x1 else -1
@@ -143,6 +151,8 @@ class Canevas:
             n += 1
 
     def texte(self, x: int, y: int, texte: str, c: Couleur = NOIR, echelle: int = 1) -> None:
+        if not _dessinable(x, y):
+            return
         cx = x
         for ch in texte:
             glyphe = _FONT.get(ch)
@@ -175,11 +185,30 @@ class Canevas:
                 + bloc(b"IDAT", zlib.compress(bytes(brut), 9)) + bloc(b"IEND", b""))
 
 
+def _dessinable(*coordonnees: float) -> bool:
+    """Ces coordonnées désignent-elles un endroit du dessin ?
+
+    Une grandeur infinie ou indéterminée n'a pas de place sur une image : la
+    convertir en pixel lève ``ValueError``, et tout le dossier tombait avec elle.
+    Ce qui n'a pas de position ne se dessine pas ; le reste de la figure, ses
+    axes et sa légende, restent lisibles, et c'est l'alerte du moteur qui dit à
+    l'utilisateur ce qui cloche dans sa saisie.
+    """
+    return all(isinstance(v, (int, float)) and math.isfinite(v) for v in coordonnees)
+
+
 # ---------------------------------------------------------------------------
 # Echelles et graduations
 # ---------------------------------------------------------------------------
 def graduations(vmin: float, vmax: float, n: int = 5) -> List[float]:
-    """Graduations "rondes" couvrant l'intervalle."""
+    """Graduations "rondes" couvrant l'intervalle.
+
+    Un projet relu d'un fichier peut porter une grandeur infinie ou
+    indéterminée : l'axe n'a alors pas de graduation, mais le tracé ne doit pas
+    faire tomber l'application — le reste de la page, lui, reste lisible.
+    """
+    if not (math.isfinite(vmin) and math.isfinite(vmax)):
+        return [vmin] if math.isfinite(vmin) else []
     if vmax <= vmin:
         return [vmin]
     brut = (vmax - vmin) / max(n, 1)
@@ -245,12 +274,39 @@ def _format_nombre(v: float) -> str:
     return f"{v:.2f}"
 
 
-def format_duree_courte(minutes: float) -> str:
+def format_duree_courte(minutes: float, decimale: bool = False) -> str:
     if minutes < 60:
         return f"{minutes:.0f}min"
+    chiffres = 1 if decimale else 0
     if minutes < 1440:
-        return f"{minutes / 60:.0f}h"
-    return f"{minutes / 1440:.0f}j"
+        return fr(f"{minutes / 60:.{chiffres}f}") + "h"
+    return fr(f"{minutes / 1440:.{chiffres}f}") + "j"
+
+
+def axe_est_temporel(axe_x: str) -> bool:
+    """Dit si l'abscisse porte un temps, et s'étiquette donc en min, h ou j.
+
+    L'accent compte. Faute de le prévoir, le rendu PNG — celui qu'emporte le
+    rapport Word — graduait « Durée de pluie » en minutes brutes et superposait
+    « 10000 » et « 20000 », là où le PDF écrivait « 17h » et « 1j » sur le même
+    graphique. Les trois traceurs posent désormais la question ici.
+    """
+    return axe_x.lower().startswith(("duree", "durée", "temps"))
+
+
+def etiquettes_de_temps(valeurs: Sequence[float]) -> List[str]:
+    """Étiquette les graduations d'un axe de temps, sans jamais deux fois la même.
+
+    Les graduations d'un axe linéaire tombent rarement sur l'heure ou le jour
+    juste. Arrondies à l'entier, deux graduations voisines de la simulation d'un
+    réseau — dont l'horizon se compte en jours — portaient toutes deux « 1j ».
+    La décimale ne s'ajoute donc qu'en cas de confusion, pour ne pas alourdir
+    les axes qui s'en passent.
+    """
+    courtes = [format_duree_courte(v) for v in valeurs]
+    if len(set(courtes)) == len(courtes):
+        return courtes
+    return [format_duree_courte(v, decimale=True) for v in valeurs]
 
 
 @dataclass
@@ -319,11 +375,12 @@ def rendre_png(graphique: Graphique, largeur: int = 900, hauteur: int = 460, ech
             d *= 10
     else:
         ticks_x = graduations(xmin, xmax, 6)
-    duree_en_x = graphique.axe_x.lower().startswith("duree") or graphique.axe_x.lower().startswith("temps")
-    for v in ticks_x:
+    duree_en_x = axe_est_temporel(graphique.axe_x)
+    libelles_x = (etiquettes_de_temps(ticks_x) if duree_en_x
+                  else [format_nombre(v) for v in ticks_x])
+    for v, etiquette in zip(ticks_x, libelles_x):
         x = cadre.px(v)
         c.ligne(x, cadre.y0, x, cadre.y1, GRIS_CLAIR, 1)
-        etiquette = format_duree_courte(v) if duree_en_x else format_nombre(v)
         c.texte(int(x) - c.largeur_texte(etiquette, echelle_texte) // 2, cadre.y1 + 8, etiquette, GRIS, echelle_texte)
     for v in graduations(ymin, ymax, 5):
         y = cadre.py(v)

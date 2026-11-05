@@ -38,7 +38,13 @@ class Rafraichisseur:
             return self._en_attente is not None
 
     def demander(self) -> None:
-        """Programme un recalcul, en annulant celui qui attendait."""
+        """Programme un recalcul, en annulant celui qui attendait.
+
+        Là où les fils d'exécution n'existent pas — la version web tourne sous
+        Pyodide, qui refuse ``thread.start()`` — le minuteur ne peut pas être
+        armé. Plutôt que de laisser l'écran périmé, le recalcul se fait alors
+        tout de suite : c'est plus coûteux à la frappe, mais juste.
+        """
         with self._verrou:
             if self._en_attente is not None:
                 self._en_attente.cancel()
@@ -48,8 +54,16 @@ class Rafraichisseur:
                 minuteur.daemon = True
             except Exception:
                 pass
-            self._en_attente = minuteur
-            minuteur.start()
+            try:
+                minuteur.start()
+            except RuntimeError:
+                self._en_attente = None
+                immediat = True
+            else:
+                self._en_attente = minuteur
+                immediat = False
+        if immediat:
+            self._jouer()
 
     def annuler(self) -> None:
         with self._verrou:

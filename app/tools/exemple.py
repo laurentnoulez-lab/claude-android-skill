@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from bassin.core.exemple import projet_demonstration  # noqa: E402,F401
+from bassin.core.exemple import projet_demonstration, systeme_demonstration  # noqa: E402,F401
 from bassin.core.model import SCENARIO_SEUIL  # noqa: E402
 from bassin.reports import docx_report, dossier as mod_dossier, pdf_report, xlsx_report  # noqa: E402
 
@@ -23,8 +23,12 @@ def main() -> int:
     args = parser.parse_args()
 
     os.makedirs(args.sortie, exist_ok=True)
-    dossier = mod_dossier.construire(projet_demonstration(), args.scenario)
+    systeme = systeme_demonstration()
+    systeme.courant.scenario = args.scenario
+    dossier = mod_dossier.construire(systeme.courant.etude, args.scenario, systeme=systeme)
     res = dossier.resultat_principal
+    print(f"Réseau            : {len(systeme.bassins_versants)} bassin(s) versant(s), "
+          f"{len(systeme.ouvrages)} bassin(s) d'orage")
     print(f"Scénario retenu   : {res.libelle}")
     print(f"Volume            : {res.volume_m3:.1f} m³")
     print(f"Durée critique    : {res.duree_critique_hm}")
