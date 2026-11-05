@@ -10,15 +10,22 @@ import math
 from ..formats import fr, nombre
 
 #: Coefficients de ruissellement du GTI par type d'occupation du sol.
+#:
+#: Les libellés sont repris **mot pour mot** de la fiche de calcul du GTI
+#: (Service public de Wallonie), seule la majuscule initiale est ajoutée. Les
+#: abréger changeait la catégorie dans laquelle une surface se range : une
+#: toiture verte vaut 0,40 au-dessus de 15 cm et 0,50 en dessous, et un parking
+#: imperméabilisé relève du 0,90, non du 1,00. Qui compare le dossier à la fiche
+#: officielle doit y lire la même ligne.
 TYPES_SURFACES = (
-    ("Forêts, bois", 0.05),
-    ("Prairies, jardins, zones enherbées", 0.15),
-    ("Champs cultivés, landes, bruyères", 0.25),
-    ("Dalles gazon, toitures vertes", 0.40),
-    ("Terres battues, chemins de terre", 0.50),
-    ("Pavés à joints écartés, pavés drainants", 0.70),
-    ("Allées pavées, trottoirs, graviers compactés", 0.90),
-    ("Toitures, routes, plans d'eau, surfaces imperméables", 1.00),
+    ("Forêts, bois,…", 0.05),
+    ("Prairies, jardins, zones enherbées, pelouses, parcs,…", 0.15),
+    ("Champs cultivés, landes, broussailles, cimetières, dalles empierrement,…", 0.25),
+    ("Dalles gazon, toitures vertes >15cm,…", 0.40),
+    ("Terres battues, chemins de terre, toitures vertes <=15cm,…", 0.50),
+    ("Pavés à joints écartés, pavés drainants,…", 0.70),
+    ("Allées pavées, trottoirs pavés, parkings, terrains imperméabilisés,…", 0.90),
+    ("Toitures, routes, plans d'eau,…", 1.00),
 )
 
 #: Contraintes réglementaires du GTI.
