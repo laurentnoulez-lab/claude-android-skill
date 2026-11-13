@@ -86,7 +86,7 @@
     // ------------------------------------------------------ 4. Volumes câbles
     h1('4. Géométrie et volumes — partie câbles');
     formula('Recouvrement sable effectif (AK)', 'SI(ligne alignée="OUI" ET conduites présentes ; MAX(AI ; AL−(BF−BC)) ; AI)');
-    formula('Hauteur terrassement (AN)', 'AG + AH + AL − AM');
+    formula('Hauteur terrassement sous la couche de surface (AN)', 'AG + AH + AL − AM');
     p([new TextRun({ text: 'Couche de surface (AM) : ', bold: true }),
        new TextRun('au-dessus du remblai (terres décaissées ou empierrement), chaque tronçon reçoit soit un coffre, soit de la terre végétale, d\'épaisseur AM librement saisie. La nature de cette couche ne modifie aucun calcul de tranchée : seule son épaisseur intervient. Son volume est donné à part : volume couche de surface = AF × AM × AC (longueur × épaisseur × largeur théorique), ventilé entre coffre et terre végétale dans la synthèse.')]);
     formula('Lit + câbles + recouvrement (AO)', 'AG + AH + AK');
@@ -96,16 +96,16 @@
        new TextRun('si les câbles sont posés dans des gaines côte à côte (option par tronçon, Ø paramétrable), le Ø de la gaine PRIME sur la hauteur moyenne des câbles (AH = Ø), et la largeur de chaque sous-réseau est arrondie au multiple de Ø supérieur (nombre entier de fourreaux) — pour toutes les largeurs, hauteurs, volumes et parts de répartition. Le classeur généré contient une colonne « Ø gaine (mm) » (saisie) et une colonne « Volume gaines (m³) » = longueur de gaines × section circulaire π(Ø/2)² ; le volume de sable est alors simplement AW = AV − Volume gaines (0 sans gaines), comme le fait BP pour les conduites. La longueur de gaines rigides (AU) devient automatique : (AR ÷ Ø) × AF. Modifier le Ø directement dans la cellule du classeur recalcule AH, AU, le volume des gaines et le sable. Sans gaines, le volume des câbles n\'est pas déduit (AW = AV).')]);
     formula('Volume remblai sous-fondation (AX)', 'AF × AP × AT');
     formula('Volume déblais excédentaires (AY)', 'AV + AX');
-    formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT');
+    formula('Volume de tranchée câbles (AZ)', 'AF × AN × AT   (sous la couche de surface, jusqu\'au fond de fouille)');
     p([new TextRun({ text: 'AF', font: 'Consolas' }), new TextRun(' est la longueur du tronçon. Tous les volumes « câbles » utilisent la largeur totale AT (interstices compris).')]);
-    p([new TextRun({ text: 'Remblai entre le sable et le fond de coffre : ', bold: true }),
+    p([new TextRun({ text: 'Remblai entre le sable et la couche de surface (fond de coffre ou terre végétale) : ', bold: true }),
        new TextRun('la zone de hauteur AN−AO se répartit entre l\'empierrement de sous-fondation (AP) et les terres décaissées réutilisées (AQ = AN−AO−AP). Trois choix par tronçon : « Terres décaissées » (AP = 0), « Empierrement » (AP = AN−AO, soit AQ = 0) ou « Manuel » (AP saisi). La même logique s\'applique aux conduites avec BJ et BK = BH−BI−BJ.')]);
 
     // -------------------------------------------------- 5. Volumes conduites
     h1('5. Géométrie et volumes — partie conduites');
     formula('Ht moyenne conduites (BB)', 'MAX(diamètres des conduites) — ou valeur forcée manuellement (option par tronçon)');
     formula('Recouvrement sable effectif (BE)', 'SI(ligne alignée="OUI" ET câbles présents ; MAX(BC ; BF−(AL−AI)) ; BC)');
-    formula('Hauteur terrassement (BH)', 'BA + BB + BF − BG   (BG = AM)');
+    formula('Hauteur terrassement sous la couche de surface (BH)', 'BA + BB + BF − BG   (BG = AM)');
     formula('Lit + conduites + recouvrement (BI)', 'BA + BB + BE');
     formula('Volume occupé (BO)', 'AF × BI × BN');
     formula('Volume sable (BP)', 'BO − π × Σ(Øᵢ/2)² × AF   (on retire le volume des tuyaux)');
@@ -113,6 +113,7 @@
     formula('Volume déblais excédentaires (BR)', 'BO + BQ');
     formula('Volume de tranchée conduites (BS)', 'AF × BH × BN');
     formula('Volume total de tranchée (BT)', 'AZ + BS');
+    p([new TextRun({ text: 'Base des volumes de tranchée : ', bold: true }), new TextRun(M.VOLUME_BASE_NOTE + ' Les hauteurs AN et BH partent donc du dessous du coffre ou de la terre végétale.')]);
 
     // ---------------------------------------- 6. Répartition + interstices (clé)
     h1('6. Répartition par sous-réseau et traitement des interstices');
@@ -138,14 +139,14 @@
         var c = M.computeRowWithLayout(project, r, L);
         return [String(i + 1), (r.de || '') + '→' + (r.a || ''), r.type || '', f2(r.longueur), f2(c.AC), f2(c.AT), f2(c.BN), f2(c.BT), M.surfaceLabel(r.geom) + ' ' + f2(c.AM) + ' m', c.AE === 'NOK' ? 'NOK' : 'OK'];
       });
-      table(['#', 'De→à', 'Type', 'Long. (m)', 'Larg. théo.', 'Larg. câbles', 'Larg. cond.', 'Vol. tot. (m³)', 'Surface', 'Ctrl'], rows,
+      table(['#', 'De→à', 'Type', 'Long. (m)', 'Larg. théo.', 'Larg. câbles', 'Larg. cond.', 'Vol. tranchée sous surface (m³)', 'Surface', 'Ctrl'], rows,
         [5, 14, 7, 9, 10, 10, 10, 12, 16, 7]);
 
       var t = M.projectTotals(project);
       p([new TextRun({ text: 'Totaux : ', bold: true }),
          new TextRun(project.rows.length + ' tronçon(s) · longueur ' + f2(t.longueur) + ' m · volume sable ' + f2(t.volSableCable + t.volSableConduite) + ' m³ · remblai sous-fond. ' + f2(t.volRemblai) + ' m³ · déblais excéd. ' + f2(t.volDeblais) + ' m³ · ')]);
-      p([new TextRun({ text: 'Volume total de tranchée : ' + f2(t.volTotal) + ' m³', bold: true })]);
-      p([new TextRun({ text: 'Couches de surface : ', bold: true }), new TextRun('terre végétale ' + f2(t.volTerreVegetale) + ' m³ · coffre ' + f2(t.volCoffre) + ' m³')]);
+      p([new TextRun({ text: 'Volume total de tranchée : ' + f2(t.volTotal) + ' m³', bold: true }), new TextRun(' (sous le fond de coffre ou sous la terre végétale, jusqu\'au fond de fouille)')]);
+      p([new TextRun({ text: 'Couches de surface (en plus du volume de tranchée) : ', bold: true }), new TextRun('terre végétale ' + f2(t.volTerreVegetale) + ' m³ · coffre ' + f2(t.volCoffre) + ' m³')]);
 
       // Répartition agrégée par sous-réseau
       h2('Répartition des volumes par sous-réseau (cumul du projet)');

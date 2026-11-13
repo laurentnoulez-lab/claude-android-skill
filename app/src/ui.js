@@ -531,6 +531,7 @@
     return card('Tronçons de tranchée', project.rows.length ? 'Cliquez sur une ligne pour l\'éditer. La coupe et les volumes se mettent à jour à chaque frappe.' : null, [el('div', { id: 'rows-area' }, [body])], [add]);
   }
   function th(t, cls) { return el('th', { class: cls || '', text: t }); }
+  function volTh() { return el('th', { class: 'num', title: M.VOLUME_BASE_NOTE }, ['Vol. total (m³)', el('br'), el('small', { text: 'sous la surface' })]); }
   function td(t, cls) { return el('td', { class: cls || '', text: t }); }
   function statusCell(r, c, warns) {
     var errs = warns.filter(function (w) { return w.level === 'error'; }).length;
@@ -550,7 +551,7 @@
     var table = el('table', { class: 'rows' });
     table.appendChild(el('thead', {}, [el('tr', {}, [
       th('#'), th('De'), th('à'), th('Type'), th('Longueur (m)', 'num'),
-      th('Larg. théo. (m)', 'num'), th('Vol. total (m³)', 'num'), th('Surface'), th('Contrôle'), th('')
+      th('Larg. théo. (m)', 'num'), volTh(), th('Surface'), th('Contrôle'), th('')
     ])]));
     var tb = el('tbody');
     project.rows.forEach(function (r, i) {
@@ -675,15 +676,17 @@
     var pv = document.getElementById('preview-' + r.id); if (!pv) return;
     pv.innerHTML = '';
     var tv = c.surfaceType === 'terreVegetale';
-    var items = [['Largeur théorique', c.AC, 'm', 'key'], ['Volume total', c.BT, 'm³', 'key'],
+    var base = tv ? 'sous la terre végétale' : 'sous le fond de coffre';
+    var items = [['Largeur théorique', c.AC, 'm', 'key'], ['Volume total ' + base, c.BT, 'm³', 'key'],
       ['Largeur câbles', c.AT, 'm'], ['Largeur conduites', c.BN, 'm'],
       ['Volume tranchée câbles', c.AZ, 'm³'], ['Volume tranchée conduites', c.BS, 'm³'],
       ['Volume sable', c.AW + c.BP, 'm³'], ['Volume déblais excéd.', c.AY + c.BR, 'm³'],
-      ['Volume remblai s-fond.', c.AX + c.BQ, 'm³'], [tv ? 'Volume terre végétale' : 'Volume coffre', c.SV, 'm³']];
+      ['Volume remblai s-fond.', c.AX + c.BQ, 'm³'], [tv ? 'Volume terre végétale (en plus)' : 'Volume coffre (en plus)', c.SV, 'm³']];
     if (c.AU > 0) items.push(['Longueur gaines', c.AU, 'm']);
     items.forEach(function (x) {
       pv.appendChild(el('div', { class: 'pv' + (x[3] ? ' ' + x[3] : '') }, [el('b', { text: fmt(x[1]) }), el('span', { text: x[0] + ' (' + x[2] + ')' })]));
     });
+    pv.appendChild(el('p', { class: 'pv-note', text: 'Volumes de tranchée comptés ' + base + ' (ligne pointillée sur la coupe), jusqu\'au fond de fouille. Le volume ' + (tv ? 'de terre végétale' : 'du coffre') + ' est compté à part.' }));
   }
   function fillCoupe(r) {
     var box = document.getElementById('coupe-' + r.id); if (!box) return;
@@ -746,7 +749,7 @@
     var t = M.projectTotals(project);
     var box = el('div', { class: 'totals' });
     var items = [['Tronçons', String(project.rows.length), ''], ['Longueur totale', fmt(t.longueur, 0), 'm'],
-      ['Volume total tranchée', fmt(t.volTotal), 'm³', 'key'],
+      ['Volume tranchée (sous la surface)', fmt(t.volTotal), 'm³', 'key'],
       ['Sable', fmt(t.volSableCable + t.volSableConduite), 'm³'],
       ['Remblai sous-fond.', fmt(t.volRemblai), 'm³'],
       ['Déblais excéd.', fmt(t.volDeblais), 'm³']];
@@ -764,18 +767,18 @@
     var out = [];
     var tiles = el('div', { class: 'tiles' });
     [['Tronçons', String(project.rows.length), ''], ['Longueur totale de tranchées', fmt(t.longueur), 'm'],
-     ['Volume total de tranchée', fmt(t.volTotal), 'm³', 'key'], ['Sable d\'enrobage', fmt(t.volSableCable + t.volSableConduite), 'm³'],
+     ['Volume total de tranchée (sous fond de coffre ou terre végétale)', fmt(t.volTotal), 'm³', 'key'], ['Sable d\'enrobage', fmt(t.volSableCable + t.volSableConduite), 'm³'],
      ['Remblai matériaux de sous-fondation', fmt(t.volRemblai), 'm³'], ['Déblais excédentaires (merlon)', fmt(t.volDeblais), 'm³'],
-     ['Terre végétale (couche de surface)', fmt(t.volTerreVegetale), 'm³'], ['Coffre (couche de surface)', fmt(t.volCoffre), 'm³'],
+     ['Terre végétale (couche de surface, en plus)', fmt(t.volTerreVegetale), 'm³'], ['Coffre (couche de surface, en plus)', fmt(t.volCoffre), 'm³'],
      ['Longueur gaines rigides', fmt(t.longueurGaines), 'm'], ['Tronçons trop larges (NOK)', String(t.nok), '', t.nok ? 'bad' : '']]
       .forEach(function (x) { tiles.appendChild(el('div', { class: 'tile' + (x[3] ? ' ' + x[3] : '') }, [el('b', { text: x[1] + (x[2] ? ' ' + x[2] : '') }), el('span', { text: x[0] })])); });
-    out.push(el('h3', { class: 'sec', text: 'Quantités globales (métré)' }), tiles);
+    out.push(el('h3', { class: 'sec', text: 'Quantités globales (métré)' }), tiles, el('p', { class: 'hint', text: M.VOLUME_BASE_NOTE }));
 
     // Par type de tranchée
     var types = M.projectByType(project);
     out.push(el('h3', { class: 'sec', text: 'Longueurs et volumes par type de tranchée' }));
     if (types.length) {
-      var tt = el('table', { class: 'rows compact' }, [el('thead', {}, [el('tr', {}, [th('Type'), th('Nb tronçons', 'num'), th('Longueur (m)', 'num'), th('Volume tranchée (m³)', 'num')])])]);
+      var tt = el('table', { class: 'rows compact' }, [el('thead', {}, [el('tr', {}, [th('Type'), th('Nb tronçons', 'num'), th('Longueur (m)', 'num'), th('Volume tranchée sous surface (m³)', 'num')])])]);
       var tb = el('tbody');
       types.forEach(function (x) { tb.appendChild(el('tr', {}, [td(x.type, 'strong'), td(String(x.nb), 'num'), td(fmt(x.longueur), 'num'), td(fmt(x.volume), 'num')])); });
       tt.appendChild(tb); out.push(el('div', { class: 'table-wrap' }, [tt]));
@@ -971,8 +974,8 @@
       var sec = el('div', { class: 'pr-section pr-row' }, [el('h2', { text: rowTitle(r, i) })]);
       var kv = function (pairs) { var d = el('div', { class: 'pr-kv' }); pairs.forEach(function (p) { d.appendChild(el('div', {}, [el('span', { text: p[0] }), el('b', { text: p[1] })])); }); return d; };
       sec.appendChild(kv([['Longueur', fmt(r.longueur) + ' m'], ['Largeur théorique', fmt(c.AC) + ' m'], ['Largeur max disponible', num(r.largeurMax) > 0 ? fmt(r.largeurMax) + ' m' : '—'],
-        ['Contrôle', c.AE === 'NOK' ? 'NOK (trop large)' : 'OK'], ['Couche de surface', M.surfaceLabel(g) + ' ' + fmt(c.AM) + ' m'], ['Volume couche de surface', fmt(c.SV) + ' m³'],
-        ['Volume tranchée câbles', fmt(c.AZ) + ' m³'], ['Volume tranchée conduites', fmt(c.BS) + ' m³'], ['Volume total', fmt(c.BT) + ' m³'],
+        ['Contrôle', c.AE === 'NOK' ? 'NOK (trop large)' : 'OK'], ['Couche de surface', M.surfaceLabel(g) + ' ' + fmt(c.AM) + ' m'], ['Volume couche de surface (en plus)', fmt(c.SV) + ' m³'],
+        ['Volume tranchée câbles', fmt(c.AZ) + ' m³'], ['Volume tranchée conduites', fmt(c.BS) + ' m³'], ['Volume total ' + M.volumeBase(g), fmt(c.BT) + ' m³'],
         ['Volume sable', fmt(c.AW + c.BP) + ' m³'], ['Volume remblai s-fond.', fmt(c.AX + c.BQ) + ' m³'], ['Volume déblais excéd.', fmt(c.AY + c.BR) + ' m³']]));
       if (r.commentaire) sec.appendChild(el('p', { class: 'pr-com', text: 'Commentaires : ' + r.commentaire }));
       warns.forEach(function (w) { sec.appendChild(el('div', { class: 'alert ' + (w.level === 'error' ? 'err' : 'warn') }, [el('b', { text: w.level === 'error' ? 'Erreur — ' : 'À vérifier — ' }), w.msg])); });

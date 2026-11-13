@@ -215,6 +215,7 @@ table.rows.rep { min-width: 720px; }
 .preview .pv span { color: var(--muted); }
 .preview .pv.key { background: var(--slate); border-color: var(--slate); color: #fff; }
 .preview .pv.key span { color: #b9c4d1; }
+.preview .pv-note { grid-column: 1 / -1; margin: 0; font-size: 11.5px; color: var(--muted); }
 .coupe-box { background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .coupe-svg { display: block; width: 100%; height: auto; }
 .coupe-empty { padding: 28px 16px; text-align: center; margin: 0; }

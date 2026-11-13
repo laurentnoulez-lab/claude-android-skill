@@ -234,6 +234,12 @@
       svg.appendChild(E('path', { d: dpath2, stroke: COL.herbeClair, 'stroke-width': 1, fill: 'none', 'stroke-linecap': 'round' }));
     }
     svg.appendChild(txt(X(AC) + 12, Y(0) - 3, 'Niveau fini', { 'font-size': 9, fill: COL.dim }));
+    // Base des volumes de tranchée : sous la couche de surface (ligne pointillée)
+    if (AM > 0) {
+      var baseTxt = surfTV ? '▼ volume de tranchée compté sous la terre végétale' : '▼ volume de tranchée compté sous le fond de coffre';
+      svg.appendChild(txt(X(0) + 4, Y(AM) + 11, baseTxt, { 'font-size': 8.5, 'font-style': 'italic', fill: '#17212e',
+        stroke: '#ffffff', 'stroke-width': 2.6, 'paint-order': 'stroke', 'stroke-linejoin': 'round' }));
+    }
 
     // ---- Cartouches de libellés des canaux (au-dessus, anti-chevauchement) ----
     var labelBaseY = y0 - 16;            // bas des cartouches (au-dessus de la pelouse)

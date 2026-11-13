@@ -29,6 +29,12 @@
   var SURFACE_LABELS = { coffre: 'Coffre', terreVegetale: 'Terre végétale' };
   function surfaceTypeOf(g) { return (g && g.surfaceType === 'terreVegetale') ? 'terreVegetale' : 'coffre'; }
   function surfaceLabel(g) { return SURFACE_LABELS[surfaceTypeOf(g)]; }
+  // Base du volume de tranchée : les volumes de tranchée (AZ, BS, BT) sont
+  // comptés SOUS la couche de surface, jusqu'au fond de fouille. La couche de
+  // surface elle-même est comptée à part (SV).
+  var VOLUME_BASE = { coffre: 'sous le fond de coffre', terreVegetale: 'sous la terre végétale' };
+  function volumeBase(g) { return VOLUME_BASE[surfaceTypeOf(g)]; }
+  var VOLUME_BASE_NOTE = 'Les volumes de tranchée sont comptés sous la couche de surface (sous le fond de coffre ou sous la terre végétale), jusqu\'au fond de fouille. Le volume de la couche de surface est donné à part.';
 
   // ---------------------------------------------------------------------------
   // Utilitaires
@@ -291,10 +297,10 @@
     addCalc('AK', { h3: 'Recouvrement sable effectif', h4: '(m)' });
     addCalc('AL', { kind: 'input', dtype: 'number', gkey: 'recouvNiveauFiniCable', h3: 'Recouvrement min. par rapport niveau fini', h4: '(m)' });
     addCalc('AM', { kind: 'input', dtype: 'number', gkey: 'hauteurCoffre', h3: 'Épaisseur couche de surface\n(coffre ou terre végétale)', h4: '(m)' });
-    addCalc('AN', { h3: 'Hauteur terrassement (après mise à fond de coffre)', h4: '(m)' });
+    addCalc('AN', { h3: 'Hauteur terrassement sous la couche de surface (fond de coffre ou terre végétale)', h4: '(m)' });
     addCalc('AO', { h3: 'Lit de pose + câbles + recouvrement sable', h4: '(m)' });
-    addCalc('AP', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondCable', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et fond de coffre', h4: '(m)' });
-    addCalc('AQ', { h3: 'Hauteur remblai terres décaissées entre sable et fond de coffre', h4: '(m)' });
+    addCalc('AP', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondCable', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et couche de surface', h4: '(m)' });
+    addCalc('AQ', { h3: 'Hauteur remblai terres décaissées entre sable et couche de surface', h4: '(m)' });
     addCalc('AR', { h3: 'Largeur occupée par les câbles', h4: '(m)' });
     addCalc('AS', { h3: 'Largeur interstices câbles', h4: '(m)' });
     addCalc('AT', { h3: 'Largeur totale tranchée câbles', h4: '(m)' });
@@ -305,7 +311,7 @@
     addCalc('AW', { h3: 'Volume sable', h4: '(m³)' });
     addCalc('AX', { h3: 'Volume remblais en matériaux de sous-fondation', h4: '(m³)' });
     addCalc('AY', { h3: 'Volume déblais excédentaires pour mise en merlon', h4: '(m³)' });
-    addCalc('AZ', { h3: 'Volume de tranchée (entre fond de coffre et fond de fouille)', h4: '(m³)' });
+    addCalc('AZ', { h3: 'Volume de tranchée câbles (sous fond de coffre ou terre végétale, jusqu\'au fond de fouille)', h4: '(m³)' });
     // Partie conduites
     addCalc('BA', { kind: 'input', dtype: 'number', gkey: 'litPoseConduite', h3: 'Lit de pose min.', h4: '(m)' });
     addCalc('BB', { h3: 'Ht moyenne conduites', h4: '(m)' });
@@ -314,10 +320,10 @@
     addCalc('BE', { h3: 'Recouvrement sable effectif', h4: '(m)' });
     addCalc('BF', { kind: 'input', dtype: 'number', gkey: 'recouvNiveauFiniConduite', h3: 'Recouvrement min. par rapport niveau fini', h4: '(m)' });
     addCalc('BG', { h3: 'Épaisseur couche de surface\n(coffre ou terre végétale)', h4: '(m)' });
-    addCalc('BH', { h3: 'Hauteur terrassement (après mise à fond de coffre)', h4: '(m)' });
+    addCalc('BH', { h3: 'Hauteur terrassement sous la couche de surface (fond de coffre ou terre végétale)', h4: '(m)' });
     addCalc('BI', { h3: 'Lit de pose + câbles + recouvrement sable', h4: '(m)' });
-    addCalc('BJ', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondConduite', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et fond de coffre', h4: '(m)' });
-    addCalc('BK', { h3: 'Hauteur remblai terres décaissées entre sable et fond de coffre', h4: '(m)' });
+    addCalc('BJ', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondConduite', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et couche de surface', h4: '(m)' });
+    addCalc('BK', { h3: 'Hauteur remblai terres décaissées entre sable et couche de surface', h4: '(m)' });
     addCalc('BL', { h3: 'Largeur occupée par les conduites', h4: '(m)' });
     addCalc('BM', { h3: 'Largeur interstices conduites', h4: '(m)' });
     addCalc('BN', { h3: 'Largeur totale tranchée conduites', h4: '(m)' });
@@ -325,11 +331,11 @@
     addCalc('BP', { h3: 'Volume sable', h4: '(m³)' });
     addCalc('BQ', { h3: 'Volume remblais en matériaux de sous-fondation', h4: '(m³)' });
     addCalc('BR', { h3: 'Volume déblais excédentaires pour mise en merlon', h4: '(m³)' });
-    addCalc('BS', { h3: 'Volume de tranchée (entre fond de coffre et fond de fouille)', h4: '(m³)' });
-    addCalc('BT', { h3: 'Volume total de tranchée (entre fond de coffre et fond de fouille)', h4: '(m³)' });
+    addCalc('BS', { h3: 'Volume de tranchée conduites (sous fond de coffre ou terre végétale, jusqu\'au fond de fouille)', h4: '(m³)' });
+    addCalc('BT', { h3: 'Volume total de tranchée (sous fond de coffre ou terre végétale, jusqu\'au fond de fouille)', h4: '(m³)' });
     // Couche de surface (nouveauté 2.0) : nature + volume, à la suite des volumes
     addCalc('SN', { kind: 'input', dtype: 'text', h3: 'Nature de la couche de surface', h4: '' });
-    addCalc('SV', { h3: 'Volume couche de surface (épaisseur × largeur théorique × longueur)', h4: '(m³)' });
+    addCalc('SV', { h3: 'Volume couche de surface, compté à part (épaisseur × largeur théorique × longueur)', h4: '(m³)' });
 
     // Colonne tampon vide (comme l'original : sépare volumes et répartition)
     push({ field: 'spacer', kind: 'spacer', h3: '', h4: '' });
@@ -855,6 +861,13 @@
       ws.getCell('C' + r).border = border;
       r += 1;
     }
+    function note(text) {
+      var c = ws.getCell('A' + r);
+      c.value = text; c.font = { italic: true, size: 9, color: { argb: 'FF66727F' } };
+      c.alignment = { wrapText: true, vertical: 'top' };
+      mergeSafe('A' + r, 'K' + r); ws.getRow(r).height = 26;
+      r += 1;
+    }
     function headerRow(labels) {
       labels.forEach(function (t, i) {
         var c = ws.getCell(colLetter(i + 1) + r);
@@ -881,15 +894,16 @@
     section('1. Quantités globales (métré)');
     kv('Nombre de tronçons', 'COUNT(' + ref('E') + ')', '', '0');
     kv('Longueur totale de tranchées', 'SUM(' + ref(lt('AF')) + ')', 'm');
-    kv('Volume total de tranchée', 'SUM(' + ref(lt('BT')) + ')', 'm³');
+    kv('Volume total de tranchée (sous fond de coffre ou terre végétale)', 'SUM(' + ref(lt('BT')) + ')', 'm³');
     kv("Volume de sable d'enrobage", 'SUM(' + ref(lt('AW')) + ')+SUM(' + ref(lt('BP')) + ')', 'm³');
     kv('Volume remblai en matériaux de sous-fondation', 'SUM(' + ref(lt('AX')) + ')+SUM(' + ref(lt('BQ')) + ')', 'm³');
     kv('Volume déblais excédentaires (mise en merlon)', 'SUM(' + ref(lt('AY')) + ')+SUM(' + ref(lt('BR')) + ')', 'm³');
     kv('Longueur gaines rigides', 'SUM(' + ref(lt('AU')) + ')', 'm');
     kv('Volume des gaines (déduit du sable)', 'SUM(' + ref(lt('GV')) + ')', 'm³');
-    kv('Volume de terre végétale (couche de surface)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.terreVegetale + '")', 'm³');
-    kv('Volume de coffre (couche de surface)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.coffre + '")', 'm³');
+    kv('Volume de terre végétale (couche de surface, en plus)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.terreVegetale + '")', 'm³');
+    kv('Volume de coffre (couche de surface, en plus)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.coffre + '")', 'm³');
     kv('Tronçons en dépassement de largeur (NOK)', 'COUNTIF(' + ref(lt('AE')) + ',"NOK")', '', '0');
+    note(VOLUME_BASE_NOTE);
     r += 1;
 
     // --- 2. Longueurs et volumes par type de tranchée ---
@@ -901,7 +915,7 @@
     });
     types.sort();
     if (types.length) {
-      headerRow(['Type', 'Nb tronçons', '', 'Longueur (m)', 'Volume tranchée (m³)']);
+      headerRow(['Type', 'Nb tronçons', '', 'Longueur (m)', 'Volume tranchée sous surface (m³)']);
       types.forEach(function (ty) {
         var q = '"' + ty.replace(/"/g, '""') + '"';
         ws.getCell('A' + r).value = ty; ws.getCell('A' + r).border = border; ws.getCell('A' + r).font = { bold: true };
@@ -1131,6 +1145,7 @@
   return {
     DATA_START: DATA_START, appInfo: appInfo,
     SURFACE_LABELS: SURFACE_LABELS, surfaceTypeOf: surfaceTypeOf, surfaceLabel: surfaceLabel,
+    volumeBase: volumeBase, VOLUME_BASE_NOTE: VOLUME_BASE_NOTE,
     migrateProject: migrateProject, rowWarnings: rowWarnings,
     projectRepartition: projectRepartition, projectByType: projectByType,
     uid: uid, colLetter: colLetter, num: num, parseDecimal: parseDecimal,
