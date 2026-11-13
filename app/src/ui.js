@@ -197,6 +197,31 @@
     return base + ' (' + i + ')';
   }
 
+  // Plusieurs fenêtres ou onglets ouverts sur l'application : chaque fenêtre
+  // suit les enregistrements faits ailleurs (événement « storage »). Sans cela,
+  // une fenêtre restée sur une ancienne copie du projet écraserait, à la
+  // moindre modification, tout ce qui a été saisi dans l'autre.
+  function onStorage(e) {
+    if (!e.key || e.key.indexOf('gabarit-tranchees-v2:') !== 0) return;
+    if (e.key === K_INDEX) {
+      try { var idx = JSON.parse(e.newValue || '[]'); if (Array.isArray(idx)) store.index = idx; } catch (err) {}
+      if (!store.index.some(function (x) { return x.id === store.currentId; })) {
+        // le projet ouvert ici a été supprimé dans une autre fenêtre
+        clearTimeout(hist.timer); hist.timer = null;
+        if (store.index.length) { switchProject(store.index[0].id); toast('Ce projet a été supprimé dans une autre fenêtre.'); }
+      }
+      return;
+    }
+    if (e.key === K_PROJECT + store.currentId && e.newValue) {
+      try { project = M.migrateProject(JSON.parse(e.newValue)); } catch (err) { return; }
+      clearTimeout(hist.timer); hist.timer = null;
+      if (ui.expandedRowId && !project.rows.some(function (r) { return r.id === ui.expandedRowId; })) ui.expandedRowId = null;
+      resetHistory(); render();
+      if ($('#modal-root').firstChild && $('.proj-list')) openProjects();
+      toast('Projet mis à jour depuis une autre fenêtre.');
+    }
+  }
+
   // ------------------------------------------------- annuler / rétablir
   // Historique par instantanés du projet. Les frappes successives sont
   // regroupées (délai court) pour qu'un Ctrl+Z annule une saisie entière.
@@ -256,21 +281,36 @@
     });
     return { err: err, warn: warn };
   }
+  // Les onglets sont créés une seule fois puis mis à jour sur place : les
+  // reconstruire pendant un clic (par exemple quand un champ perd le focus au
+  // moment où l'on clique sur un onglet) ferait disparaître le bouton visé et
+  // le clic serait perdu.
   function renderTabs() {
-    var nav = $('#tabs'); nav.innerHTML = '';
+    var nav = $('#tabs');
+    if (!nav.children.length) {
+      TABS.forEach(function (t) {
+        nav.appendChild(el('button', { type: 'button', role: 'tab', class: 'tab', 'data-tab': t.id, onclick: function () { setTab(t.id); } }, [
+          el('span', { class: 'tab-n', text: t.n }), el('span', { class: 'tab-l', text: t.label }),
+          el('span', { class: 'tab-c' }), el('span', { class: 'tab-alert' })
+        ]));
+      });
+    }
     var nSr = project.concessionnaires.reduce(function (s, c) { return s + c.sousReseaux.length; }, 0);
     var al = countAlerts();
     var counts = { impetrants: nSr + ' sous-réseaux', parametres: '', troncons: String(project.rows.length), synthese: '' };
     TABS.forEach(function (t) {
-      var b = el('button', { type: 'button', role: 'tab', class: 'tab' + (ui.tab === t.id ? ' active' : ''), 'aria-selected': ui.tab === t.id ? 'true' : 'false',
-        'data-tab': t.id, onclick: function () { setTab(t.id); } }, [
-        el('span', { class: 'tab-n', text: t.n }), el('span', { class: 'tab-l', text: t.label }),
-        counts[t.id] ? el('span', { class: 'tab-c', text: counts[t.id] }) : null
-      ]);
-      if (t.id === 'troncons' && (al.err || al.warn)) {
-        b.appendChild(el('span', { class: 'tab-alert ' + (al.err ? 'err' : 'warn'), title: al.err + ' erreur(s), ' + al.warn + ' point(s) à vérifier', text: String(al.err + al.warn) }));
-      }
-      nav.appendChild(b);
+      var b = nav.querySelector('[data-tab="' + t.id + '"]');
+      var active = ui.tab === t.id;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      var c = b.querySelector('.tab-c');
+      c.textContent = counts[t.id]; c.style.display = counts[t.id] ? '' : 'none';
+      var a = b.querySelector('.tab-alert');
+      var show = t.id === 'troncons' && (al.err || al.warn);
+      a.style.display = show ? '' : 'none';
+      a.className = 'tab-alert' + (show ? ' ' + (al.err ? 'err' : 'warn') : '');
+      a.textContent = show ? String(al.err + al.warn) : '';
+      a.title = show ? al.err + ' erreur(s), ' + al.warn + ' point(s) à vérifier' : '';
     });
   }
   function card(title, sub, bodyNodes, extra) {
@@ -1006,6 +1046,7 @@
       else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); redo(); }
     });
     window.addEventListener('beforeunload', function () { flushHistory(); persist(); });
+    window.addEventListener('storage', onStorage);
     if (window.TIAndroid) document.documentElement.classList.add('android');
     render();
   }
