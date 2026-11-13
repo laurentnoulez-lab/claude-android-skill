@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gabarit Tranchées 2.0</title>
+<link rel="icon" href="__FAVICON__">
+<style>
+/*__STYLES__*/
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"><!--__LOGO__--></span>
+    <div class="brand-txt">
+      <h1>Gabarit Tranchées <span class="vbadge">2.0</span></h1>
+      <div class="sub">Tranchées communes impétrants · <button type="button" id="btn-about" class="linklike" title="À propos de cette version">v__APP_VERSION__ · __APP_DATE_FR__</button></div>
+    </div>
+  </div>
+  <div class="pname">
+    <label for="pname">Projet</label>
+    <input id="pname" placeholder="Nom du projet" autocomplete="off" spellcheck="false">
+    <button type="button" id="btn-projects" class="ghost" title="Ouvrir, créer, dupliquer ou supprimer un projet">Projets ▾</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <div class="tgroup">
+      <button type="button" id="btn-undo" class="ghost icon" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button>
+      <button type="button" id="btn-redo" class="ghost icon" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">↷</button>
+    </div>
+    <div class="tgroup">
+      <button type="button" id="btn-import" class="ghost" title="Ouvrir un fichier projet .json">Importer</button>
+      <button type="button" id="btn-export" class="ghost" title="Enregistrer le projet en fichier .json">Exporter</button>
+    </div>
+    <div class="tgroup">
+      <button type="button" id="btn-print" class="ghost" title="Imprimer ou enregistrer en PDF">Imprimer</button>
+      <button type="button" id="btn-word" class="ghost" title="Notice Word avec les coupes">Word</button>
+      <button type="button" id="btn-excel" class="primary" title="Classeur Excel avec formules">Générer Excel</button>
+    </div>
+  </div>
+  <input type="file" id="file-import" accept=".json,application/json" style="display:none">
+</header>
+<nav class="tabs" id="tabs" role="tablist"></nav>
+<main>
+  <div id="app-root"></div>
+</main>
+<div id="totals-area"></div>
+<footer class="appfoot">Gabarit Tranchées 2.0 — version __APP_VERSION__ du __APP_DATE_FR__ · le projet en cours est enregistré automatiquement sur cet appareil</footer>
+<div id="modal-root"></div>
+<div id="print-root"></div>
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+/*__EXCELJS__*/
+</script>
+<script>
+/*__DOCX__*/
+</script>
+<script>
+/*__MODEL__*/
+</script>
+<script>
+window.TIModel.appInfo.name = "__APP_NAME__";
+window.TIModel.appInfo.version = "__APP_VERSION__";
+window.TIModel.appInfo.date = "__APP_DATE__";
+</script>
+<script>
+/*__COUPE__*/
+</script>
+<script>
+/*__DOCXGEN__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>

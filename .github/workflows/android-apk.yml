@@ -1,0 +1,50 @@
+name: Android APK
+
+on:
+  push:
+    branches: [ "claude/trench-template-automation-6gcqnk" ]
+    paths:
+      - 'android/**'
+      - 'app/**'
+      - 'gabarit-tranchees-v2.html'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Le SDK Android est préinstallé sur les runners ubuntu (ANDROID_HOME).
+      # L'action android-actions/setup-android@v3 échoue depuis le passage des
+      # runners à Node 24 : on utilise directement le sdkmanager du runner.
+      - name: Install SDK components
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Rebuild single-file web app
+        run: python3 app/build.py
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renommer l'APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/GabaritTranchees2-2.0.0.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gabarit-tranchees-2.0-android-apk
+          path: android/app/build/outputs/apk/debug/GabaritTranchees2-2.0.0.apk
+          if-no-files-found: error
