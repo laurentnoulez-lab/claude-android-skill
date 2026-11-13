@@ -23,11 +23,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # Le SDK Android est préinstallé sur les runners ubuntu (ANDROID_HOME).
+      # L'action android-actions/setup-android@v3 échoue depuis le passage des
+      # runners à Node 24 : on utilise directement le sdkmanager du runner.
       - name: Install SDK components
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Rebuild single-file web app
         run: python3 app/build.py
