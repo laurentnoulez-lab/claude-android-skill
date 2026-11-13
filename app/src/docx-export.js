@@ -1,17 +1,21 @@
 /*
  * Génération du document Word (.docx) : notice méthodologique + données du projet
  * courant + explication de la répartition des interstices.
- * window.TIDocx.generate(project, M) -> Promise<Blob>.
+ * window.TIDocx.generate(project, M, { coupes }) -> Promise<Blob>.
+ * coupes (optionnel) : [{ title, data: Uint8Array (PNG), width, height }] — une
+ * coupe à l'échelle par tronçon, insérée en image.
  * Utilise la variable globale `docx` (build IIFE de la bibliothèque docx).
  */
 (function () {
   'use strict';
 
-  function generate(project, M) {
+  function generate(project, M, opts) {
+    opts = opts || {};
+    var info = M.appInfo || { name: 'Gabarit Tranchées', version: '' };
     var D = window.docx;
     var Document = D.Document, Packer = D.Packer, Paragraph = D.Paragraph, TextRun = D.TextRun,
         HeadingLevel = D.HeadingLevel, Table = D.Table, TableRow = D.TableRow, TableCell = D.TableCell,
-        WidthType = D.WidthType, AlignmentType = D.AlignmentType;
+        WidthType = D.WidthType, AlignmentType = D.AlignmentType, ImageRun = D.ImageRun;
     var num = M.num;
     var f2 = function (n) { return (n == null || isNaN(n)) ? '–' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
     var pct = function (n) { return (n == null || isNaN(n)) ? '–' : (n * 100).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %'; };
@@ -48,14 +52,14 @@
     C.push(new Paragraph({ text: 'Gabarit tranchées impétrants', heading: HeadingLevel.TITLE }));
     p([new TextRun({ text: 'Notice méthodologique et récapitulatif du projet', italics: true })]);
     p([new TextRun({ text: 'Projet : ', bold: true }), new TextRun(project.name || '(sans nom)'),
-       new TextRun({ text: '    —    Généré le ' + new Date().toLocaleDateString('fr-FR'), color: '888888' })]);
+       new TextRun({ text: '    —    Généré le ' + new Date().toLocaleDateString('fr-FR') + ' avec ' + info.name + ' (v' + info.version + ')', color: '888888' })]);
 
     // -------------------------------------------------------------- 1. Objet
     h1('1. Objet et fonctionnement');
     p('Cette application calcule, pour chaque tronçon de tranchée commune, les largeurs et les volumes de terrassement, puis répartit ces volumes entre les impétrants (concessionnaires) au prorata de leur emprise. Elle reproduit la logique de l\'onglet « Gabarits tranchées communes » du classeur de référence et génère un classeur Excel contenant les mêmes formules.');
     p('Le travail s\'organise en trois temps :');
     bullet('Définir les impétrants et leurs sous-réseaux (catégorie Câbles ou Conduites).');
-    bullet('Saisir les tronçons : longueur, largeurs par sous-réseau, interstices et paramètres géométriques (lit de pose, recouvrements, hauteur de coffre…).');
+    bullet('Saisir les tronçons : longueur, largeurs par sous-réseau, interstices et paramètres géométriques (lit de pose, recouvrements, couche de surface — coffre ou terre végétale — et son épaisseur…).');
     bullet('Visualiser les résultats (largeurs, volumes, coupe à l\'échelle, parts par sous-réseau) puis exporter en Excel et/ou Word.');
 
     // ----------------------------------------------------- 2. Structure données
@@ -83,6 +87,8 @@
     h1('4. Géométrie et volumes — partie câbles');
     formula('Recouvrement sable effectif (AK)', 'SI(ligne alignée="OUI" ET conduites présentes ; MAX(AI ; AL−(BF−BC)) ; AI)');
     formula('Hauteur terrassement (AN)', 'AG + AH + AL − AM');
+    p([new TextRun({ text: 'Couche de surface (AM) : ', bold: true }),
+       new TextRun('au-dessus du remblai (terres décaissées ou empierrement), chaque tronçon reçoit soit un coffre, soit de la terre végétale, d\'épaisseur AM librement saisie. La nature de cette couche ne modifie aucun calcul de tranchée : seule son épaisseur intervient. Son volume est donné à part : volume couche de surface = AF × AM × AC (longueur × épaisseur × largeur théorique), ventilé entre coffre et terre végétale dans la synthèse.')]);
     formula('Lit + câbles + recouvrement (AO)', 'AG + AH + AK');
     formula('Remblai terres décaissées (AQ)', 'AN − AO − AP');
     formula('Volume occupé câbles+sable (AV) / Volume sable (AW)', 'AF × AO × AT ; AW = AV');
@@ -130,15 +136,16 @@
       var L = M.buildLayout(project);
       var rows = project.rows.map(function (r, i) {
         var c = M.computeRowWithLayout(project, r, L);
-        return [String(i + 1), (r.de || '') + '→' + (r.a || ''), r.type || '', f2(r.longueur), f2(c.AC), f2(c.AT), f2(c.BN), f2(c.BT), c.AE === 'NOK' ? 'NOK' : 'OK'];
+        return [String(i + 1), (r.de || '') + '→' + (r.a || ''), r.type || '', f2(r.longueur), f2(c.AC), f2(c.AT), f2(c.BN), f2(c.BT), M.surfaceLabel(r.geom) + ' ' + f2(c.AM) + ' m', c.AE === 'NOK' ? 'NOK' : 'OK'];
       });
-      table(['#', 'De→à', 'Type', 'Long. (m)', 'Larg. théo.', 'Larg. câbles', 'Larg. cond.', 'Vol. tot. (m³)', 'Ctrl'], rows,
-        [6, 16, 8, 11, 12, 12, 12, 14, 9]);
+      table(['#', 'De→à', 'Type', 'Long. (m)', 'Larg. théo.', 'Larg. câbles', 'Larg. cond.', 'Vol. tot. (m³)', 'Surface', 'Ctrl'], rows,
+        [5, 14, 7, 9, 10, 10, 10, 12, 16, 7]);
 
       var t = M.projectTotals(project);
       p([new TextRun({ text: 'Totaux : ', bold: true }),
          new TextRun(project.rows.length + ' tronçon(s) · longueur ' + f2(t.longueur) + ' m · volume sable ' + f2(t.volSableCable + t.volSableConduite) + ' m³ · remblai sous-fond. ' + f2(t.volRemblai) + ' m³ · déblais excéd. ' + f2(t.volDeblais) + ' m³ · ')]);
       p([new TextRun({ text: 'Volume total de tranchée : ' + f2(t.volTotal) + ' m³', bold: true })]);
+      p([new TextRun({ text: 'Couches de surface : ', bold: true }), new TextRun('terre végétale ' + f2(t.volTerreVegetale) + ' m³ · coffre ' + f2(t.volCoffre) + ' m³')]);
 
       // Répartition agrégée par sous-réseau
       h2('Répartition des volumes par sous-réseau (cumul du projet)');
@@ -161,13 +168,27 @@
         [22, 13, 17, 17, 19, 12]);
     }
 
-    // ----------------------------------------------------- 8. Excel
-    h1('8. Génération du classeur Excel');
+    // ------------------------------------------------ Coupes des tronçons
+    var coupes = (opts.coupes || []).filter(function (c) { return c && c.data && ImageRun; });
+    if (coupes.length) {
+      h1('8. Coupes des tronçons (à l\'échelle)');
+      p('Chaque coupe est dessinée à l\'échelle à partir des mêmes valeurs que les calculs : couche de surface (coffre en gris, terre végétale en brun avec pelouse), remblais, sable, câbles (rectangles ou gaines) et conduites (cercles).');
+      coupes.forEach(function (cp) {
+        var maxW = 600;
+        var w = Math.min(maxW, cp.width), hgt = Math.round(cp.height * (w / cp.width));
+        C.push(new Paragraph({ keepNext: true, spacing: { before: 200, after: 60 }, children: [new TextRun({ text: cp.title, bold: true })] }));
+        C.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 },
+          children: [new ImageRun({ data: cp.data, transformation: { width: Math.round(w), height: hgt } })] }));
+      });
+    }
+
+    // ----------------------------------------------------- Excel
+    h1((coupes.length ? '9' : '8') + '. Génération du classeur Excel');
     p('Le bouton « Générer Excel » produit un fichier .xlsx reproduisant l\'onglet du gabarit : en-têtes, cellules de saisie (en jaune) et toutes les formules ci-dessus (largeurs, volumes et répartition par sous-réseau). Les colonnes s\'adaptent automatiquement aux impétrants et sous-réseaux définis.');
     p('Les formules de répartition sont encadrées par SI.ERREUR(… ; 0) : si un volume est nul, le résultat affiché est 0 au lieu d\'une erreur #DIV/0!.');
 
     var doc = new Document({
-      creator: 'Gabarit tranchées impétrants',
+      creator: info.name + ' (v' + info.version + ')',
       title: 'Notice — ' + (project.name || 'projet'),
       sections: [{ properties: {}, children: C }]
     });

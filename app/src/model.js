@@ -20,6 +20,16 @@
 
   var DATA_START = 5; // première ligne de données dans le classeur (lignes 1-4 = en-têtes)
 
+  // Identité de l'application (renseignée au build à partir de app/version.json).
+  var appInfo = { name: 'Gabarit Tranchées 2.0', version: '2.0.0', date: '' };
+
+  // Nature de la couche de surface posée au-dessus du remblai : un coffre de
+  // voirie ou de la terre végétale. Elle ne change AUCUN calcul de tranchée
+  // (seule l'épaisseur AM intervient) ; elle qualifie le volume de surface.
+  var SURFACE_LABELS = { coffre: 'Coffre', terreVegetale: 'Terre végétale' };
+  function surfaceTypeOf(g) { return (g && g.surfaceType === 'terreVegetale') ? 'terreVegetale' : 'coffre'; }
+  function surfaceLabel(g) { return SURFACE_LABELS[surfaceTypeOf(g)]; }
+
   // ---------------------------------------------------------------------------
   // Utilitaires
   // ---------------------------------------------------------------------------
@@ -110,7 +120,8 @@
       recouvSableMinCable: 0.1,     // AI
       ligneAligne: 'OUI',           // AJ (OUI/NON)
       recouvNiveauFiniCable: 0.8,   // AL
-      hauteurCoffre: 0.3,           // AM
+      hauteurCoffre: 0.3,           // AM : épaisseur de la couche de surface
+      surfaceType: 'coffre',        // 'coffre' | 'terreVegetale'
       // Remblai entre le haut du sable d'enrobage et le fond de coffre :
       //  'terres'       -> terres décaissées réutilisées (AP = 0)
       //  'empierrement' -> matériaux de sous-fondation sur toute la zone (AP = AN-AO)
@@ -144,7 +155,7 @@
       };
     };
     return {
-      version: 1,
+      version: 2,
       app: 'gabarit-tranchees-impetrants',
       name: 'Nouveau projet',
       concessionnaires: [
@@ -177,6 +188,7 @@
         ligneAligne: d.ligneAligne || 'OUI',
         recouvNiveauFiniCable: num(d.recouvNiveauFiniCable, 0.8),
         hauteurCoffre: num(d.hauteurCoffre, 0.3),
+        surfaceType: surfaceTypeOf(d),
         remblaiModeCable: d.remblaiModeCable || 'terres',
         remblaiSousFondCable: num(d.remblaiSousFondCable, 0),
         gainesCables: d.gainesCables || 'NON',
@@ -278,7 +290,7 @@
     addCalc('AJ', { kind: 'input', dtype: 'oui', gkey: 'ligneAligne', h3: 'Ligne recouvrement sable alignée entre câbles et conduites', h4: '(OUI/NON)' });
     addCalc('AK', { h3: 'Recouvrement sable effectif', h4: '(m)' });
     addCalc('AL', { kind: 'input', dtype: 'number', gkey: 'recouvNiveauFiniCable', h3: 'Recouvrement min. par rapport niveau fini', h4: '(m)' });
-    addCalc('AM', { kind: 'input', dtype: 'number', gkey: 'hauteurCoffre', h3: 'Hauteur coffre (travaux SPI)', h4: '(m)' });
+    addCalc('AM', { kind: 'input', dtype: 'number', gkey: 'hauteurCoffre', h3: 'Épaisseur couche de surface\n(coffre ou terre végétale)', h4: '(m)' });
     addCalc('AN', { h3: 'Hauteur terrassement (après mise à fond de coffre)', h4: '(m)' });
     addCalc('AO', { h3: 'Lit de pose + câbles + recouvrement sable', h4: '(m)' });
     addCalc('AP', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondCable', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et fond de coffre', h4: '(m)' });
@@ -301,7 +313,7 @@
     addCalc('BD', { h3: 'Ligne recouvrement sable alignée entre câbles et conduites', h4: '(OUI/NON)' });
     addCalc('BE', { h3: 'Recouvrement sable effectif', h4: '(m)' });
     addCalc('BF', { kind: 'input', dtype: 'number', gkey: 'recouvNiveauFiniConduite', h3: 'Recouvrement min. par rapport niveau fini', h4: '(m)' });
-    addCalc('BG', { h3: 'Hauteur coffre (travaux SPI)', h4: '(m)' });
+    addCalc('BG', { h3: 'Épaisseur couche de surface\n(coffre ou terre végétale)', h4: '(m)' });
     addCalc('BH', { h3: 'Hauteur terrassement (après mise à fond de coffre)', h4: '(m)' });
     addCalc('BI', { h3: 'Lit de pose + câbles + recouvrement sable', h4: '(m)' });
     addCalc('BJ', { kind: 'input', dtype: 'number', gkey: 'remblaiSousFondConduite', h3: 'Hauteur remblai matériaux de sous-fondation entre sable et fond de coffre', h4: '(m)' });
@@ -315,6 +327,9 @@
     addCalc('BR', { h3: 'Volume déblais excédentaires pour mise en merlon', h4: '(m³)' });
     addCalc('BS', { h3: 'Volume de tranchée (entre fond de coffre et fond de fouille)', h4: '(m³)' });
     addCalc('BT', { h3: 'Volume total de tranchée (entre fond de coffre et fond de fouille)', h4: '(m³)' });
+    // Couche de surface (nouveauté 2.0) : nature + volume, à la suite des volumes
+    addCalc('SN', { kind: 'input', dtype: 'text', h3: 'Nature de la couche de surface', h4: '' });
+    addCalc('SV', { h3: 'Volume couche de surface (épaisseur × largeur théorique × longueur)', h4: '(m³)' });
 
     // Colonne tampon vide (comme l'original : sépare volumes et répartition)
     push({ field: 'spacer', kind: 'spacer', h3: '', h4: '' });
@@ -427,8 +442,11 @@
     var BT = AZ + BS;
     var AC = AT + BN;
     var AE = (num(row.largeurMax, 0) > 0 && AC > num(row.largeurMax, 0)) ? 'NOK' : '';
+    // Volume de la couche de surface (coffre ou terre végétale) au droit de la tranchée
+    var SV = AF * AM * AC;
 
     return {
+      AM: AM, SV: SV, surfaceType: surfaceTypeOf(g),
       AC: AC, AE: AE, AF: AF, AR: AR, AS: AS, AT: AT, AK: AK, AN: AN, AO: AO, AP: AP, AQ: AQ,
       AU: AU, GV: GV, AV: AV, AW: AW, AX: AX, AY: AY, AZ: AZ, BB: BB, BE: BE, BH: BH, BI: BI, BJ: BJ, BK: BK,
       BL: BL, BM: BM, BN: BN, BO: BO, BP: BP, BQ: BQ, BR: BR, BS: BS, BT: BT
@@ -485,7 +503,8 @@
 
   function projectTotals(project) {
     var L = buildLayout(project);
-    var t = { longueur: 0, volSableCable: 0, volSableConduite: 0, volRemblai: 0, volDeblais: 0, volTotal: 0, nok: 0 };
+    var t = { longueur: 0, volSableCable: 0, volSableConduite: 0, volRemblai: 0, volDeblais: 0, volTotal: 0, nok: 0,
+              volCoffre: 0, volTerreVegetale: 0, longueurGaines: 0 };
     project.rows.forEach(function (row) {
       var c = computeRowWithLayout(project, row, L);
       t.longueur += num(row.longueur, 0);
@@ -493,9 +512,133 @@
       t.volRemblai += c.AX + c.BQ;
       t.volDeblais += c.AY + c.BR;
       t.volTotal += c.BT;
+      t.longueurGaines += c.AU;
+      if (c.surfaceType === 'terreVegetale') t.volTerreVegetale += c.SV; else t.volCoffre += c.SV;
       if (c.AE === 'NOK') t.nok += 1;
     });
     return t;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Migration : accepte les projets de la version 1 (et les fichiers partiels)
+  // ---------------------------------------------------------------------------
+  // Complète un projet chargé (localStorage, import .json) sans jamais modifier
+  // une valeur existante : les champs absents reçoivent leur valeur par défaut.
+  // Un projet 1.x n'a pas de nature de couche de surface : c'était un coffre.
+  function migrateProject(p) {
+    if (!p || typeof p !== 'object' || !Array.isArray(p.concessionnaires)) return defaultProject();
+    var dg = defaultGeometry();
+    var fill = function (g) {
+      g = g || {};
+      Object.keys(dg).forEach(function (k) { if (g[k] === undefined || g[k] === null) g[k] = dg[k]; });
+      g.surfaceType = surfaceTypeOf(g);
+      return g;
+    };
+    p.app = p.app || 'gabarit-tranchees-impetrants';
+    p.name = p.name == null ? 'Projet' : String(p.name);
+    p.concessionnaires.forEach(function (c) {
+      c.id = c.id || uid('conc');
+      c.name = c.name == null ? '' : String(c.name);
+      c.category = c.category === 'conduite' ? 'conduite' : 'cable';
+      c.sousReseaux = Array.isArray(c.sousReseaux) ? c.sousReseaux : [];
+      c.sousReseaux.forEach(function (sr) { sr.id = sr.id || uid('sr'); sr.label = sr.label == null ? '' : String(sr.label); });
+    });
+    var d = p.defaults || {};
+    if (d.type === undefined) d.type = 'A';
+    if (d.largeurMax === undefined) d.largeurMax = 0;
+    p.defaults = fill(d);
+    p.rows = Array.isArray(p.rows) ? p.rows : [];
+    p.rows.forEach(function (r) {
+      r.id = r.id || uid('row');
+      r.widths = r.widths || {}; r.interstices = r.interstices || {};
+      r.geom = fill(r.geom);
+    });
+    p.version = 2;
+    return p;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Alertes de cohérence d'un tronçon (n'influencent aucun calcul)
+  // ---------------------------------------------------------------------------
+  // Retourne [{ level: 'error' | 'warn', msg }] — 'error' : résultat faux ou
+  // non constructible ; 'warn' : valeur inhabituelle à vérifier.
+  function rowWarnings(project, row, L) {
+    L = L || buildLayout(project);
+    var c = computeRowWithLayout(project, row, L);
+    var g = row.geom || {};
+    var out = [];
+    var add = function (level, msg) { out.push({ level: level, msg: msg }); };
+    var f = function (n) { return formatDecimal(Math.round(n * 1000) / 1000); };
+    var EPS = 1e-9;
+
+    if (!(c.AC > 0)) add('warn', 'Aucune largeur saisie : le tronçon n\'a pas de tranchée.');
+    if (!(num(row.longueur, 0) > 0)) add('warn', 'Longueur nulle : aucun volume n\'est calculé.');
+    if (c.AE === 'NOK') add('error', 'Largeur théorique (' + f(c.AC) + ' m) supérieure à la largeur max disponible (' + f(num(row.largeurMax, 0)) + ' m).');
+
+    if (c.AT > 0) {
+      if (c.AN <= EPS) add('error', 'Câbles : hauteur de terrassement nulle ou négative (' + f(c.AN) + ' m) — la couche de surface est plus épaisse que la profondeur de pose.');
+      else if (c.AQ < -EPS) add('error', 'Câbles : remblai négatif (' + f(c.AQ) + ' m) — lit de pose + câbles + recouvrement sable + empierrement dépassent la hauteur de terrassement (' + f(c.AN) + ' m).');
+    }
+    if (c.BN > 0) {
+      if (c.BH <= EPS) add('error', 'Conduites : hauteur de terrassement nulle ou négative (' + f(c.BH) + ' m) — la couche de surface est plus épaisse que la profondeur de pose.');
+      else if (c.BK < -EPS) add('error', 'Conduites : remblai négatif (' + f(c.BK) + ' m) — lit de pose + conduites + recouvrement sable + empierrement dépassent la hauteur de terrassement (' + f(c.BH) + ' m).');
+      if (g.htConduiteMode === 'manuel' && !(num(g.htConduiteManuelle, 0) > 0)) add('warn', 'Conduites : hauteur forcée à 0 m alors que des conduites sont présentes.');
+    }
+    if (g.gainesCables === 'OUI' && !(num(g.diamGaine, 0) > 0)) add('error', 'Câbles sous gaines : le Ø de gaine est nul.');
+    if (g.gainesCables === 'OUI' && num(g.diamGaine, 0) > 0.5) add('warn', 'Câbles sous gaines : Ø de gaine de ' + f(num(g.diamGaine, 0)) + ' m — vérifier l\'unité (mètres).');
+
+    L.cols.forEach(function (col) {
+      if (!col.isChannel && !col.isInterstice) return;
+      var w = col.isInterstice ? num(row.interstices[col.intKey], 0) : num(row.widths[col.srId], 0);
+      var name = col.isInterstice ? 'Interstice ' + col.h3 : col.h3.replace('\n', ' ');
+      if (w < 0) add('error', name + ' : largeur négative (' + f(w) + ' m).');
+      else if (col.isChannel && col.category === 'conduite' && w > 2) add('warn', name + ' : Ø de ' + f(w) + ' m — vérifier l\'unité (mètres).');
+      else if (w > 5) add('warn', name + ' : largeur de ' + f(w) + ' m — vérifier l\'unité (mètres).');
+    });
+    ['litPoseCable', 'htMoyCable', 'recouvSableMinCable', 'recouvNiveauFiniCable', 'hauteurCoffre',
+     'litPoseConduite', 'recouvSableMinConduite', 'recouvNiveauFiniConduite'].forEach(function (k) {
+      var v = num(g[k], 0);
+      if (v < 0) add('error', 'Paramètre géométrique négatif (' + f(v) + ' m).');
+      else if (v > 5) add('warn', 'Paramètre géométrique de ' + f(v) + ' m — vérifier l\'unité (mètres).');
+    });
+    return out;
+  }
+
+  // Clé de répartition cumulée du projet, par sous-réseau (miroir de l'onglet
+  // « Synthèse » de l'Excel) : clé = Σ volume attribué ÷ Σ volume total.
+  function projectRepartition(project) {
+    var L = buildLayout(project);
+    var agg = {}, order = [], totalVol = 0;
+    L.allChannels.forEach(function (col) {
+      var conc = project.concessionnaires.filter(function (x) { return x.id === col.concId; })[0];
+      var sr = conc ? conc.sousReseaux.filter(function (x) { return x.id === col.srId; })[0] : null;
+      agg[col.srId] = { srId: col.srId, concId: col.concId, concName: conc ? conc.name : '', srLabel: sr ? sr.label : '',
+        category: col.category, longueur: 0, volCable: 0, volConduite: 0, volTranchee: 0, volSable: 0, volRemblai: 0, volDeblais: 0, cle: 0 };
+      order.push(col.srId);
+    });
+    project.rows.forEach(function (row) {
+      var rep = computeRepartition(project, row, L);
+      totalVol += rep.row.BT;
+      rep.channels.forEach(function (ch) {
+        var a = agg[ch.srId]; if (!a) return;
+        a.longueur += ch.longueur; a.volCable += ch.volCable; a.volConduite += ch.volConduite;
+        a.volTranchee += ch.volTranchee; a.volSable += ch.volSable; a.volRemblai += ch.volRemblai; a.volDeblais += ch.volDeblais;
+      });
+    });
+    var list = order.map(function (k) { var a = agg[k]; a.cle = totalVol > 0 ? a.volTranchee / totalVol : 0; return a; });
+    return { channels: list, totalVol: totalVol };
+  }
+
+  // Longueurs et volumes par type de tranchée (miroir de la synthèse Excel).
+  function projectByType(project) {
+    var L = buildLayout(project), map = {}, keys = [];
+    project.rows.forEach(function (row) {
+      var ty = String(row.type || '').trim() || '(sans type)';
+      if (!map[ty]) { map[ty] = { type: ty, nb: 0, longueur: 0, volume: 0 }; keys.push(ty); }
+      var c = computeRowWithLayout(project, row, L);
+      map[ty].nb += 1; map[ty].longueur += num(row.longueur, 0); map[ty].volume += c.BT;
+    });
+    return keys.sort().map(function (k) { return map[k]; });
   }
 
   // ---------------------------------------------------------------------------
@@ -508,7 +651,7 @@
     var lt = function (role) { return Rr[role].letter; };
 
     var wb = new ExcelJS.Workbook();
-    wb.creator = 'Gabarit tranchées impétrants';
+    wb.creator = appInfo.name + ' (v' + appInfo.version + ')';
     wb.created = new Date();
     var ws = wb.addWorksheet('Gabarits tranchées communes', { views: [{ state: 'frozen', xSplit: 5, ySplit: 4 }] });
 
@@ -562,7 +705,7 @@
       mergeSafe(L.widthFirstLetter + '1', L.widthLastLetter + '1');
     }
     styleBandCell(ws.getCell(lt('AF') + '1'), 'Longueurs et volumes');
-    mergeSafe(lt('AF') + '1', lt('BT') + '1');
+    mergeSafe(lt('AF') + '1', lt('SV') + '1');
     if (L.repartGroups.length) {
       styleBandCell(ws.getCell(colLetter(L.repStart) + '1'), 'Répartition des volumes par sous-réseau');
       mergeSafe(colLetter(L.repStart) + '1', colLetter(L.repEnd) + '1');
@@ -639,7 +782,7 @@
       var totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F0' } };
       var totalFont = { bold: true, size: 9 };
       var thick = { style: 'double', color: { argb: 'FF1F3864' } };
-      var totalRoles = ['AF', 'AU', 'GV', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT'];
+      var totalRoles = ['AF', 'AU', 'GV', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BO', 'BP', 'BQ', 'BR', 'BS', 'BT', 'SV'];
       var tcell = ws.getCell('A' + TR);
       tcell.value = 'TOTAL'; tcell.font = totalFont; tcell.fill = totalFill;
       tcell.alignment = { horizontal: 'center' };
@@ -729,7 +872,8 @@
     t.fill = titleFill; t.alignment = { vertical: 'middle', indent: 1 };
     mergeSafe('A1', 'K1'); ws.getRow(1).height = 26;
     r = 2;
-    ws.getCell('A2').value = 'Projet : ' + (project.name || '(sans nom)') + '    —    généré le ' + new Date().toLocaleDateString('fr-FR');
+    ws.getCell('A2').value = 'Projet : ' + (project.name || '(sans nom)') + '    —    généré le ' + new Date().toLocaleDateString('fr-FR')
+      + '    —    ' + appInfo.name + ' (v' + appInfo.version + ')';
     ws.getCell('A2').font = { italic: true, color: { argb: 'FF66727F' } };
     r = 4;
 
@@ -743,6 +887,8 @@
     kv('Volume déblais excédentaires (mise en merlon)', 'SUM(' + ref(lt('AY')) + ')+SUM(' + ref(lt('BR')) + ')', 'm³');
     kv('Longueur gaines rigides', 'SUM(' + ref(lt('AU')) + ')', 'm');
     kv('Volume des gaines (déduit du sable)', 'SUM(' + ref(lt('GV')) + ')', 'm³');
+    kv('Volume de terre végétale (couche de surface)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.terreVegetale + '")', 'm³');
+    kv('Volume de coffre (couche de surface)', 'SUMIFS(' + ref(lt('SV')) + ',' + ref(lt('SN')) + ',"' + SURFACE_LABELS.coffre + '")', 'm³');
     kv('Tronçons en dépassement de largeur (NOK)', 'COUNTIF(' + ref(lt('AE')) + ',"NOK")', '', '0');
     r += 1;
 
@@ -895,6 +1041,7 @@
       case 'calc': // saisies parmi les colonnes calculées (gkey)
         if (col.role === 'AD') return num(row.largeurMax, 0);
         if (col.role === 'AJ') return (row.geom && row.geom.ligneAligne) || 'OUI';
+        if (col.role === 'SN') return surfaceLabel(row.geom);
         // GD : Ø gaine en mm (vide si le tronçon n'est pas sous gaines)
         if (col.role === 'GD') {
           var gg = row.geom || {};
@@ -947,7 +1094,8 @@
       BQ: lt('AF') + R + '*' + lt('BJ') + R + '*' + lt('BN') + R,
       BR: lt('BO') + R + '+' + lt('BQ') + R,
       BS: lt('AF') + R + '*' + lt('BH') + R + '*' + lt('BN') + R,
-      BT: lt('AZ') + R + '+' + lt('BS') + R
+      BT: lt('AZ') + R + '+' + lt('BS') + R,
+      SV: lt('AF') + R + '*' + lt('AM') + R + '*' + lt('AC') + R
     };
     return f[role];
   }
@@ -981,7 +1129,10 @@
   }
 
   return {
-    DATA_START: DATA_START,
+    DATA_START: DATA_START, appInfo: appInfo,
+    SURFACE_LABELS: SURFACE_LABELS, surfaceTypeOf: surfaceTypeOf, surfaceLabel: surfaceLabel,
+    migrateProject: migrateProject, rowWarnings: rowWarnings,
+    projectRepartition: projectRepartition, projectByType: projectByType,
     uid: uid, colLetter: colLetter, num: num, parseDecimal: parseDecimal,
     formatDecimal: formatDecimal, effGaineWidth: effGaineWidth,
     defaultProject: defaultProject, defaultGeometry: defaultGeometry, newRow: newRow,

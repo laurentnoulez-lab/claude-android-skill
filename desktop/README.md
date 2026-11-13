@@ -6,20 +6,22 @@ entre les sessions (profil utilisateur Windows), et permet de créer / modifier 
 exporter / importer des projets (fichiers `.json`) ainsi que de générer les
 livrables **Excel** et **Word** via la boîte « Enregistrer sous » native.
 
+> **Version 2.0 — application distincte.** Identifiant, nom et dossier de données diffèrent de ceux de la version 1 : les deux s'installent côte à côte, aucune ne remplace l'autre.
+
 ## Récupérer l'application
 
 Le workflow GitHub Actions `.github/workflows/windows-exe.yml` compile à chaque
 push. Onglet **Actions** du dépôt → workflow **« Windows EXE »** → dernier run →
-section **Artifacts** → télécharger **`gabarit-tranchees-windows-setup`**.
+section **Artifacts** → télécharger **`gabarit-tranchees-2.0-windows`**.
 
 L'archive contient **trois façons de lancer l'application**, de la plus simple
 à la plus intégrée :
 
 | Fichier | Ce qu'il faut faire | Installation |
 |---|---|---|
-| `gabarit-tranchees-impetrants.html` | double-clic (s'ouvre dans Edge) | aucune |
-| `GabaritTranchees-portable-1.0.0.zip` | décompresser, lancer l'`.exe` du dossier | aucune |
-| `GabaritTranchees-Setup-1.0.0.exe` | installateur classique | oui |
+| `gabarit-tranchees-v2.html` | double-clic (s'ouvre dans Edge) | aucune |
+| `GabaritTranchees2-portable-2.0.0.zip` | décompresser, lancer l'`.exe` du dossier | aucune |
+| `GabaritTranchees2-Setup-2.0.0.exe` | installateur classique | oui |
 
 Plus `SHA256SUMS.txt`, pour vérifier qu'un téléchargement n'a pas été tronqué.
 
@@ -56,7 +58,7 @@ l'ordre de fréquence :
    `SHA256SUMS.txt` :
 
    ```powershell
-   Get-FileHash .\GabaritTranchees-Setup-1.0.0.exe -Algorithm SHA256
+   Get-FileHash .\GabaritTranchees2-Setup-2.0.0.exe -Algorithm SHA256
    ```
 
    Si elle diffère, re-télécharger et décompresser avec 7-Zip plutôt qu'avec
@@ -70,7 +72,7 @@ l'ordre de fréquence :
    depuis un raccourci et non depuis l'`.exe`, vérifier sa cible.
 
 **Dans tous les cas, la solution immédiate est le fichier
-`gabarit-tranchees-impetrants.html`** : c'est un simple document, aucun
+`gabarit-tranchees-v2.html`** : c'est un simple document, aucun
 antivirus ni aucune stratégie ne le bloque, et il fait tout ce que fait
 l'application installée.
 
@@ -82,19 +84,19 @@ Prérequis : Node.js 18+ (l'idéal est de compiler sous Windows).
 # 1) (re)générer le fichier web autonome
 python3 app/build.py
 # 2) le copier dans l'app de bureau
-mkdir -p desktop/app && cp gabarit-tranchees-impetrants.html desktop/app/index.html
+mkdir -p desktop/app && cp gabarit-tranchees-v2.html desktop/app/index.html
 # 3) compiler l'installateur
 cd desktop
 npm install
 npm run dist
-# Résultat : desktop/dist/GabaritTranchees-Setup-1.0.0.exe
+# Résultat : desktop/dist/GabaritTranchees2-Setup-2.0.0.exe
 ```
 
 ## Caractéristiques
 
 | Élément | Valeur |
 |---|---|
-| Nom | Gabarit Tranchées Impétrants |
+| Nom | Gabarit Tranchées 2.0 |
 | Installateur | NSIS (assistant, choix du dossier, raccourcis) |
 | Version portable | zip, à décompresser et lancer sans installation |
 | Mémoire des projets | automatique (localStorage persisté dans `%AppData%`) |

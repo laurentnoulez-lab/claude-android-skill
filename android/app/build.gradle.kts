@@ -7,11 +7,13 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.tranchees.impetrants"
+        // Identifiant distinct de la version 1 (com.tranchees.impetrants) : les deux
+        // applications cohabitent sur le même appareil.
+        applicationId = "com.tranchees.impetrants.v2"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 200
+        versionName = "2.0.0"
     }
 
     buildTypes {
@@ -28,9 +30,9 @@ android {
 }
 
 // Copie le fichier HTML autonome (racine du dépôt) dans les assets avant build,
-// pour garder une source unique : gabarit-tranchees-impetrants.html -> assets/index.html
+// pour garder une source unique : gabarit-tranchees-v2.html -> assets/index.html
 val copyWebApp = tasks.register<Copy>("copyWebApp") {
-    from(rootProject.file("../gabarit-tranchees-impetrants.html"))
+    from(rootProject.file("../gabarit-tranchees-v2.html"))
     into(layout.projectDirectory.dir("src/main/assets"))
     rename { "index.html" }
 }

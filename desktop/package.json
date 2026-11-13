@@ -1,7 +1,7 @@
 {
-  "name": "gabarit-tranchees-impetrants",
-  "productName": "Gabarit Tranchées Impétrants",
-  "version": "1.0.0",
+  "name": "gabarit-tranchees-v2",
+  "productName": "Gabarit Tranchées 2.0",
+  "version": "2.0.0",
   "description": "Calcul des largeurs, volumes et répartition des tranchées par impétrant — génération Excel et Word",
   "main": "main.js",
   "author": "Gabarit Tranchées",
@@ -15,8 +15,8 @@
     "electron-builder": "24.13.3"
   },
   "build": {
-    "appId": "com.tranchees.impetrants",
-    "productName": "Gabarit Tranchées Impétrants",
+    "appId": "com.tranchees.impetrants.v2",
+    "productName": "Gabarit Tranchées 2.0",
     "files": [
       "main.js",
       "app/**/*"
@@ -41,7 +41,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "GabaritTranchees-portable-${version}.${ext}"
+      "artifactName": "GabaritTranchees2-portable-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -49,12 +49,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Gabarit Tranchées",
-      "artifactName": "GabaritTranchees-Setup-${version}.${ext}",
+      "shortcutName": "Gabarit Tranchées 2.0",
+      "artifactName": "GabaritTranchees2-Setup-${version}.${ext}",
       "installerLanguages": [
         "fr_FR"
       ],
-      "language": "1036"
+      "language": "1036",
+      "uninstallDisplayName": "Gabarit Tranchées 2.0"
     }
   }
 }

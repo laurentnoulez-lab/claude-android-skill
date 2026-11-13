@@ -1,4 +1,62 @@
-# Gabarit tranchées impétrants
+# Gabarit Tranchées 2.0
+
+Version **2.0.0** (13/11/2026) — numéro et date dans `app/version.json`, affichés
+dans l'en-tête de l'application, la fenêtre « À propos », le classeur Excel et la
+notice Word.
+
+Ouvrir **`gabarit-tranchees-v2.html`** (racine du dépôt) dans un navigateur :
+aucune installation, aucune connexion. Les applications Windows (`desktop/`) et
+Android (`android/`) embarquent ce même fichier.
+
+## Une application distincte de la version 1
+
+La 2.0 est un **nouveau programme**, pas une mise à jour : elle s'installe à côté
+de la 1.x sans la remplacer ni toucher à ses données.
+
+| | Version 1 | Version 2.0 |
+|---|---|---|
+| Fichier autonome | `gabarit-tranchees-impetrants.html` (conservé, figé) | `gabarit-tranchees-v2.html` |
+| Windows (appId / nom) | `com.tranchees.impetrants` / Gabarit Tranchées Impétrants | `com.tranchees.impetrants.v2` / Gabarit Tranchées 2.0 |
+| Android (applicationId) | `com.tranchees.impetrants` | `com.tranchees.impetrants.v2` |
+| Stockage navigateur | `gabarit-tranchees-impetrants:project` | `gabarit-tranchees-v2:*` |
+
+Les projets `.json` de la version 1 s'importent tels quels (la couche de surface
+devient un coffre, comme avant). Au premier lancement dans un navigateur où la
+1.x a servi, son projet est repris **par copie**.
+
+## Nouveautés de la 2.0
+
+- **Couche de surface au choix** par tronçon : *coffre* ou *terre végétale* (cases
+  à cocher), épaisseur toujours libre, au-dessus du remblai en terres ou en
+  empierrement. La terre végétale est dessinée en brun sombre avec la pelouse en
+  surface. La mention « SPI » a disparu. La nature de la couche ne modifie aucun
+  calcul de tranchée ; son **volume** (épaisseur × largeur × longueur) est ajouté
+  à l'application, au classeur Excel (2 colonnes après BT) et à sa synthèse.
+- **Interface** : navigation par onglets (Impétrants · Paramètres · Tronçons ·
+  Synthèse), saisie d'un tronçon en deux colonnes avec **coupe en direct**, blocs
+  Câbles / Conduites nettement distincts et **barre de séparation** entre les deux,
+  totaux permanents, nouveau logo.
+- **Onglet Synthèse** : métré, volumes par type, clé de répartition cumulée.
+- **Alertes de cohérence** en direct (remblai négatif, largeur max dépassée,
+  valeur aberrante du type « 20 m » au lieu de « 0,20 m »…).
+- **Annuler / rétablir** (Ctrl+Z / Ctrl+Y), **plusieurs projets** enregistrés,
+  réordonnancement des tronçons, confirmation avant suppression.
+- **Livrables** : coupes insérées dans la notice Word, coupe exportable en PNG,
+  impression / PDF (synthèse + une fiche par tronçon).
+
+## Non-régression
+
+`npm test` (dans `app/`) exécute quatre suites, dont `test/v2.test.js` qui compare
+la 2.0 au moteur de la version 1 conservé dans `test/fixtures/model-v1.js` : sur
+60 projets aléatoires, valeurs, répartitions, totaux et cellules Excel héritées
+sont strictement identiques. L'équivalence avec le classeur de référence reste à
+1031/1031 valeurs.
+
+---
+
+*La suite de ce document décrit le fonctionnement commun aux deux versions.*
+
+## Gabarit tranchées impétrants — fonctionnement
 
 Application HTML autonome qui automatise l'onglet **« Gabarits tranchées
 communes »** du classeur de récapitulatif des tranchées impétrants : saisie des
@@ -8,7 +66,7 @@ l'original.
 
 ## Utilisation
 
-Ouvrir le fichier **`gabarit-tranchees-impetrants.html`** (à la racine du dépôt)
+Ouvrir le fichier **`gabarit-tranchees-v2.html`** (à la racine du dépôt)
 dans un navigateur. Aucune installation, aucun serveur, aucune connexion
 internet : tout est embarqué dans un seul fichier (y compris la bibliothèque
 ExcelJS).
@@ -91,7 +149,8 @@ app/
 ├── vendor/
 │   ├── exceljs.min.js      # ExcelJS 4.4.0 (embarqué)
 │   └── docx.iife.js        # docx 8.5.0 (embarqué)
-└── build.py                # produit gabarit-tranchees-impetrants.html à la racine
+├── version.json            # numéro et date de version (source unique)
+└── build.py                # produit gabarit-tranchees-v2.html à la racine
 ```
 
 Reconstruire le fichier autonome après modification des sources :

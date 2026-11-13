@@ -1,5 +1,8 @@
 /*
- * Application de bureau « Gabarit Tranchées Impétrants » (Electron).
+ * Application de bureau « Gabarit Tranchées 2.0 » (Electron).
+ *
+ * Identité distincte de la version 1 (appId, nom de produit, dossier de données) :
+ * les deux versions s'installent et fonctionnent côte à côte.
  *
  * Coque native autour de l'application web autonome (app/index.html) :
  *  - 100 % hors-ligne ;
@@ -74,11 +77,11 @@ function buildMenu() {
             dialog.showMessageBox(win, {
               type: 'info',
               title: 'À propos',
-              message: 'Gabarit Tranchées Impétrants',
+              message: 'Gabarit Tranchées 2.0 — version ' + app.getVersion(),
               detail: 'Calcul des largeurs, volumes et répartition des tranchées communes par impétrant.\n\n'
                 + 'Le projet en cours est enregistré automatiquement. Utilisez « Exporter » pour sauvegarder '
                 + 'un projet en fichier .json et « Importer… » pour le rouvrir.\n\n'
-                + 'Les boutons « Générer Excel » et « Générer Word » produisent les livrables.'
+                + 'Les boutons « Générer Excel » et « Word » produisent les livrables. Cette version s\'installe à côté de la version 1 sans la remplacer.'
             });
           }
         }

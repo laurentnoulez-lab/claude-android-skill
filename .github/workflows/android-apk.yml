@@ -6,7 +6,7 @@ on:
     paths:
       - 'android/**'
       - 'app/**'
-      - 'gabarit-tranchees-impetrants.html'
+      - 'gabarit-tranchees-v2.html'
       - '.github/workflows/android-apk.yml'
   workflow_dispatch:
 
@@ -36,9 +36,12 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
+      - name: Renommer l'APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/GabaritTranchees2-2.0.0.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gabarit-tranchees-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: gabarit-tranchees-2.0-android-apk
+          path: android/app/build/outputs/apk/debug/GabaritTranchees2-2.0.0.apk
           if-no-files-found: error

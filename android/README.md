@@ -1,9 +1,11 @@
 # Application Android (APK) — Gabarit tranchées impétrants
 
 Coque **WebView** native qui embarque l'application web autonome
-(`gabarit-tranchees-impetrants.html`) : l'app fonctionne **100 % hors-ligne**, et
+(`gabarit-tranchees-v2.html`) : l'app fonctionne **100 % hors-ligne**, et
 les exports (Excel, Word, JSON) sont enregistrés dans le dossier
 **Téléchargements** du téléphone via un pont natif.
+
+> **Version 2.0 — application distincte.** Identifiant, nom et dossier de données diffèrent de ceux de la version 1 : les deux s'installent côte à côte, aucune ne remplace l'autre.
 
 ## Récupérer l'APK sans rien installer (recommandé)
 
@@ -11,8 +13,8 @@ Un workflow GitHub Actions compile l'APK à chaque push :
 `.github/workflows/android-apk.yml`.
 
 1. Onglet **Actions** du dépôt → workflow **« Android APK »** → dernier run.
-2. Section **Artifacts** → télécharger **`gabarit-tranchees-debug-apk`**.
-3. Décompresser, transférer `app-debug.apk` sur le téléphone et l'installer
+2. Section **Artifacts** → télécharger **`gabarit-tranchees-2.0-android-apk`**.
+3. Décompresser, transférer `GabaritTranchees2-2.0.0.apk` sur le téléphone et l'installer
    (autoriser « sources inconnues »).
 
 > APK *debug* signé avec la clé de debug : installable directement, idéal pour
@@ -34,15 +36,15 @@ cd android
 ```
 
 L'application web est copiée automatiquement dans les assets avant compilation
-(tâche `copyWebApp`), à partir de `gabarit-tranchees-impetrants.html` — source
+(tâche `copyWebApp`), à partir de `gabarit-tranchees-v2.html` — source
 unique.
 
 ## Caractéristiques
 
 | Élément | Valeur |
 |---|---|
-| Package | `com.tranchees.impetrants` |
-| Nom | Gabarit Tranchées |
+| Package | `com.tranchees.impetrants.v2` |
+| Nom | Gabarit Tranchées 2.0 |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | Dépendances | aucune (framework Android uniquement, sans AndroidX) |
 | AGP / Gradle | 8.5.2 / 8.9 |
