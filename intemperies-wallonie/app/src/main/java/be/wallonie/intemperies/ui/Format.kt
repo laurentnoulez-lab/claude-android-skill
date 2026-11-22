@@ -36,25 +36,38 @@ object Fmt {
     fun reason(r: Reason, c: Criteria): String {
         val op = if (c.strictComparison) ">" else "≥"
         return when (r) {
-            Reason.CONSECUTIVE_RAIN -> "Pluie consécutive $op ${hoursShort(c.consecutiveRainHours)}"
-            Reason.TOTAL_RAIN -> "Pluie totale $op ${hoursShort(c.totalRainHours)}"
-            Reason.FROST -> "T moy. < ${num(c.frostThresholdC)} °C"
+            Reason.CONSECUTIVE_RAIN -> "Précipitations consécutives $op ${hoursShort(c.consecutiveRainHours)}"
+            Reason.TOTAL_RAIN -> "Précipitations totales $op ${hoursShort(c.totalRainHours)}"
+            Reason.COLD -> "T < ${deg(c.coldThresholdC)} pendant ≥ ${hoursShort(c.coldMinHours)}"
+            Reason.HEAT -> "T > ${deg(c.heatThresholdC)} pendant ≥ ${hoursShort(c.heatMinHours)}"
         }
     }
 
     fun reasonShort(r: Reason): String = when (r) {
-        Reason.CONSECUTIVE_RAIN -> "Pluie consécutive"
-        Reason.TOTAL_RAIN -> "Pluie totale"
-        Reason.FROST -> "Gel"
+        Reason.CONSECUTIVE_RAIN -> "Précip. consécutives"
+        Reason.TOTAL_RAIN -> "Précip. totales"
+        Reason.COLD -> "Gel"
+        Reason.HEAT -> "Canicule"
     }
+
+    /** Température : « 0 °C », « -2,5 °C ». */
+    fun deg(v: Double): String = (if (v % 1.0 == 0.0) v.toInt().toString() else num(v)) + " °C"
 
     fun hoursShort(v: Double): String = if (v % 1.0 == 0.0) "${v.toInt()} h" else hours(v)
 
     fun criteriaSummary(c: Criteria): String {
         val op = if (c.strictComparison) ">" else "≥"
-        val frost = if (c.frostCountsAsIntemperie) " ou T moy. < ${num(c.frostThresholdC)} °C" else ""
-        return "Plage ${c.windowStart}–${c.windowEnd} · pas de ${c.stepMinutes} min pluvieux si ≥ ${num(c.wetStepThresholdMm)} mm · " +
-            "Intempérie : pluie consécutive $op ${hoursShort(c.consecutiveRainHours)} ou pluie totale $op ${hoursShort(c.totalRainHours)}$frost · " +
-            "Orange : pluie ≥ ${hoursShort(c.warningRainHours)}"
+        val temp = buildList {
+            if (c.coldCountsAsIntemperie) add(reason(Reason.COLD, c))
+            if (c.heatCountsAsIntemperie) add(reason(Reason.HEAT, c))
+        }.joinToString("") { " ou $it" }
+        val info = buildList {
+            if (!c.coldCountsAsIntemperie) add("gel T < ${deg(c.coldThresholdC)} ≥ ${hoursShort(c.coldMinHours)}")
+            if (!c.heatCountsAsIntemperie) add("canicule T > ${deg(c.heatThresholdC)} ≥ ${hoursShort(c.heatMinHours)}")
+        }
+        return "Plage ${c.windowStart}–${c.windowEnd} · pas de ${c.stepMinutes} min avec précipitations si ≥ ${num(c.wetStepThresholdMm)} mm · " +
+            "Intempérie : précipitations consécutives $op ${hoursShort(c.consecutiveRainHours)} ou totales $op ${hoursShort(c.totalRainHours)}$temp · " +
+            "Orange : précipitations ≥ ${hoursShort(c.warningRainHours)}" +
+            (if (info.isNotEmpty()) " · Signalé sans être bloquant : ${info.joinToString(", ")}" else "")
     }
 }

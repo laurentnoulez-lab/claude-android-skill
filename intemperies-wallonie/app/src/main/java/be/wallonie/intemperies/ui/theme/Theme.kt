@@ -15,6 +15,7 @@ object StatusColors {
     val NoData = Color(0xFFBDBDBD)
     val Pending = Color(0x00000000)
     val Frost = Color(0xFF1565C0)
+    val Heat = Color(0xFFD84315)
     val OnStatus = Color(0xFF1B1B1B)
 
     fun of(status: DayStatus): Color = when (status) {

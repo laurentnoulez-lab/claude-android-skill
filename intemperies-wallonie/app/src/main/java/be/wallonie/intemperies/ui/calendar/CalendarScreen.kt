@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
@@ -218,7 +219,8 @@ private fun DayCell(d: DayReport, onClick: () -> Unit) {
                 color = if (pending) MaterialTheme.colorScheme.onSurface else StatusColors.OnStatus.copy(alpha = if (nonWorking) 0.6f else 1f),
             )
             Spacer(Modifier.weight(1f))
-            if (d.belowFrostThreshold == true) Icon(Icons.Default.AcUnit, "Gel", tint = StatusColors.Frost, modifier = Modifier.size(12.dp))
+            if (d.coldReached == true) Icon(Icons.Default.AcUnit, "Gel", tint = StatusColors.Frost, modifier = Modifier.size(12.dp))
+            if (d.heatReached == true) Icon(Icons.Default.WbSunny, "Canicule", tint = StatusColors.Heat, modifier = Modifier.size(12.dp))
         }
         Spacer(Modifier.weight(1f))
         if (!pending || d.status == DayStatus.IN_PROGRESS) {
@@ -293,16 +295,19 @@ private fun DayDetail(d: DayReport, r: MonthReport?) {
         }
         Spacer(Modifier.height(12.dp))
         val c = r?.criteria
-        Metric("Pluie dans la plage ${c?.windowStart ?: ""}–${c?.windowEnd ?: ""}", Fmt.mm(d.windowRainMm))
-        Metric("Durée de pluie", Fmt.hours(d.rainHours))
-        Metric("Pluie consécutive max.", Fmt.hours(d.maxConsecutiveRainHours))
-        Metric("Pluie sur 24 h", Fmt.mm(d.dayRainMm))
+        Metric("Précipitations dans la plage ${c?.windowStart ?: ""}–${c?.windowEnd ?: ""}", Fmt.mm(d.windowRainMm))
+        Metric("Durée de précipitations", Fmt.hours(d.rainHours))
+        Metric("Précipitations consécutives max.", Fmt.hours(d.maxConsecutiveRainHours))
+        Metric("Précipitations sur 24 h", Fmt.mm(d.dayRainMm))
         Metric("Température moyenne (plage)", Fmt.temp(d.meanTemperatureC))
+        if (d.minTemperatureC != null) Metric("T min. / max. (moyennes horaires)", "${Fmt.temp(d.minTemperatureC)} / ${Fmt.temp(d.maxTemperatureC)}")
+        if (c != null && d.coldHours != null) Metric("Durée T < ${Fmt.deg(c.coldThresholdC)} (gel)", Fmt.hours(d.coldHours))
+        if (c != null && d.heatHours != null) Metric("Durée T > ${Fmt.deg(c.heatThresholdC)} (canicule)", Fmt.hours(d.heatHours))
         Metric("Données disponibles", "${(d.coverage * 100).toInt()} %")
         if (d.provisional) Metric("Validation SPW", "non encore validées")
         if (c != null && d.wetSteps.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text("Pas de ${c.stepMinutes} min pluvieux (≥ ${Fmt.num(c.wetStepThresholdMm)} mm)", style = MaterialTheme.typography.labelLarge)
+            Text("Pas de ${c.stepMinutes} min avec précipitations (≥ ${Fmt.num(c.wetStepThresholdMm)} mm)", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 d.wetSteps.forEach { wet ->

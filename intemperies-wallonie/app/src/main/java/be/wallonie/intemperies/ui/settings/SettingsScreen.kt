@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +58,7 @@ fun SettingsRoute(
     onBack: () -> Unit,
     onPickCommunes: () -> Unit,
     onOpenRegulatory: () -> Unit,
+    onOpenHowItWorks: () -> Unit,
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     var editTime by remember { mutableStateOf<Boolean?>(null) } // true = début, false = fin
@@ -88,6 +90,14 @@ fun SettingsRoute(
                 Text("  Ajouter / retirer des communes")
             }
 
+            SectionTitle("Fonctionnement")
+            ListItem(
+                modifier = Modifier.clickable(onClick = onOpenHowItWorks),
+                leadingContent = { Icon(Icons.AutoMirrored.Outlined.HelpOutline, null) },
+                headlineContent = { Text("Comment l'application qualifie une journée") },
+                supportingContent = { Text("Stations, précipitations, température, couleurs — avec les valeurs en vigueur") },
+            )
+
             SectionTitle("Base réglementaire")
             ListItem(
                 modifier = Modifier.clickable(onClick = onOpenRegulatory),
@@ -103,19 +113,19 @@ fun SettingsRoute(
                 AssistChip(onClick = { editTime = false }, label = { Text("Fin ${c.windowEnd}") }, leadingIcon = { Icon(Icons.Default.Schedule, null) })
             }
 
-            SectionTitle("Journée d'intempérie (rouge)")
-            StepperRow("Pluie consécutive", c.consecutiveRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(consecutiveRainHours = v) } })
-            StepperRow("Pluie totale dans la plage", c.totalRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(totalRainHours = v) } })
+            SectionTitle("Précipitations (pluie, neige, grêle) — intempérie (rouge)")
+            StepperRow("Précipitations consécutives", c.consecutiveRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(consecutiveRainHours = v) } })
+            StepperRow("Précipitations totales dans la plage", c.totalRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(totalRainHours = v) } })
             SwitchRow(
                 "Comparaison stricte (« plus de »)",
                 if (c.strictComparison) "Rouge si la durée dépasse le seuil (>)" else "Rouge dès que le seuil est atteint (≥)",
                 c.strictComparison,
             ) { v -> update { it.copy(strictComparison = v) } }
 
-            SectionTitle("Journée de pluie (orange)")
-            StepperRow("Pluie au moins", c.warningRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(warningRainHours = v) } })
+            SectionTitle("Précipitations — journée orange")
+            StepperRow("Précipitations au moins", c.warningRainHours, 0.5, 0.5, 12.0, Fmt::hours, { v -> update { it.copy(warningRainHours = v) } })
 
-            SectionTitle("Détection de la pluie")
+            SectionTitle("Détection des précipitations")
             Text("Pas d'analyse", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(4.dp))
             val steps = listOf(15, 30, 60)
@@ -131,20 +141,44 @@ fun SettingsRoute(
             StepperRow(
                 "Seuil d'un pas pluvieux", c.wetStepThresholdMm, 0.1, 0.1, 5.0, Fmt::mm,
                 { v -> update { it.copy(wetStepThresholdMm = v) } },
-                subtitle = "Cumul minimal sur un pas pour le compter comme « pluie »",
+                subtitle = "Cumul minimal (équivalent eau) pour compter un pas comme « précipitation »",
             )
 
-            SectionTitle("Température")
+            SectionTitle("Température — seuil bas (gel)")
             StepperRow(
-                "Seuil de température moyenne", c.frostThresholdC, 0.5, -10.0, 10.0, { Fmt.num(it) + " °C" },
-                { v -> update { it.copy(frostThresholdC = v) } },
-                subtitle = "Moyenne entre ${c.windowStart} et ${c.windowEnd}",
+                "Température inférieure à", c.coldThresholdC, 0.5, -15.0, 10.0, { Fmt.deg(it) },
+                { v -> update { it.copy(coldThresholdC = v) } },
+                subtitle = "Moyennes horaires de la station de température",
+            )
+            StepperRow(
+                "Pendant au moins", c.coldMinHours, 0.5, 0.5, 12.0, Fmt::hours,
+                { v -> update { it.copy(coldMinHours = v) } },
+                subtitle = "Durée cumulée entre ${c.windowStart} et ${c.windowEnd}",
             )
             SwitchRow(
-                "Température sous le seuil = intempérie",
-                "Sinon, l'information est seulement indiquée (❄)",
-                c.frostCountsAsIntemperie,
-            ) { v -> update { it.copy(frostCountsAsIntemperie = v) } }
+                "Le gel provoque une intempérie",
+                if (c.coldCountsAsIntemperie) "Journée rouge si le seuil bas est atteint" else "Seulement signalé (flocon), sans changer la couleur",
+                c.coldCountsAsIntemperie,
+            ) { v -> update { it.copy(coldCountsAsIntemperie = v) } }
+
+            SectionTitle("Température — seuil haut (canicule)")
+            StepperRow(
+                "Température supérieure à", c.heatThresholdC, 0.5, 20.0, 45.0, { Fmt.deg(it) },
+                { v -> update { it.copy(heatThresholdC = v) } },
+                subtitle = "Moyennes horaires de la station de température",
+            )
+            StepperRow(
+                "Pendant au moins", c.heatMinHours, 0.5, 0.5, 12.0, Fmt::hours,
+                { v -> update { it.copy(heatMinHours = v) } },
+                subtitle = "Durée cumulée entre ${c.windowStart} et ${c.windowEnd}",
+            )
+            SwitchRow(
+                "La canicule provoque une intempérie",
+                if (c.heatCountsAsIntemperie) "Journée rouge si le seuil haut est atteint" else "Seulement signalé (soleil), sans changer la couleur",
+                c.heatCountsAsIntemperie,
+            ) { v -> update { it.copy(heatCountsAsIntemperie = v) } }
+
+            SectionTitle("Température — station")
             StepperRow(
                 "Distance max. station de température", c.maxTemperatureDistanceKm, 5.0, 5.0, 150.0, { Fmt.num(it, 0) + " km" },
                 { v -> update { it.copy(maxTemperatureDistanceKm = v) } },
@@ -190,7 +224,7 @@ fun SettingsRoute(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Rétablir les valeurs par défaut ?") },
-            text = { Text("07:30–16:00, pluie consécutive > 3 h ou totale > 4 h, orange ≥ 2 h, seuil 0 °C non bloquant.") },
+            text = { Text("07:30–16:00, précipitations consécutives > 3 h ou totales > 4 h, orange ≥ 2 h ; gel < 0 °C et canicule > 30 °C pendant ≥ 4 h, signalés sans être bloquants.") },
             confirmButton = { TextButton(onClick = { viewModel.resetCriteria(); confirmReset = false }) { Text("Rétablir") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Annuler") } },
         )

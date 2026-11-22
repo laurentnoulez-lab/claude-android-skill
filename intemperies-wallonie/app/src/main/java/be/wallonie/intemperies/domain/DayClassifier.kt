@@ -19,7 +19,8 @@ import java.time.ZoneId
  *  3. Durée de pluie = somme des durées des pas pluvieux ;
  *     pluie consécutive max = plus longue suite ininterrompue de pas pluvieux.
  *  4. Rouge si pluie consécutive > seuil OU durée totale > seuil (≥ si comparaison non stricte),
- *     ou, si l'option est cochée, si la température moyenne de la plage est sous le seuil.
+ *     ou, si l'option correspondante est cochée, si la température horaire est restée sous le seuil
+ *     bas (gel) ou au-dessus du seuil haut (canicule) pendant au moins la durée paramétrée.
  *     Orange si durée totale ≥ seuil d'avertissement. Vert sinon.
  *  5. Gris si la part de données disponibles dans la plage est < `minCoverage`.
  */
@@ -100,9 +101,13 @@ object DayClassifier {
         val expected = ((effectiveEnd - windowStart) / RAIN_STEP_SEC).toInt()
         val coverage = if (expected <= 0) 0.0 else (samplesInWindow.toDouble() / expected).coerceAtMost(1.0)
 
-        // Température moyenne pondérée par le recouvrement de chaque pas horaire avec la plage.
+        // Température : chaque moyenne horaire est pondérée par son recouvrement avec la plage.
         var weighted = 0.0
         var weight = 0L
+        var coldSec = 0L
+        var heatSec = 0L
+        var minT = Double.POSITIVE_INFINITY
+        var maxT = Double.NEGATIVE_INFINITY
         if (temperatureAvailable) {
             for (t in temperature) {
                 if (t.value.isNaN()) continue
@@ -110,16 +115,25 @@ object DayClassifier {
                 if (overlap > 0) {
                     weighted += t.value * overlap
                     weight += overlap
+                    if (t.value < criteria.coldThresholdC - EPS) coldSec += overlap
+                    if (t.value > criteria.heatThresholdC + EPS) heatSec += overlap
+                    minT = minOf(minT, t.value)
+                    maxT = maxOf(maxT, t.value)
                 }
             }
         }
+        val tempKnown = weight > 0 && (weight >= (windowEnd - windowStart) / 2 || coldSec > 0 || heatSec > 0)
         val meanTemp = if (weight >= (windowEnd - windowStart) / 2) weighted / weight else null
-        val belowFrost = meanTemp?.let { it < criteria.frostThresholdC }
+        val coldHours = if (tempKnown) coldSec / 3600.0 else null
+        val heatHours = if (tempKnown) heatSec / 3600.0 else null
+        val coldReached = coldHours?.let { it + EPS >= criteria.coldMinHours }
+        val heatReached = heatHours?.let { it + EPS >= criteria.heatMinHours }
 
         val reasons = buildSet {
             if (exceeds(maxConsecutive, criteria.consecutiveRainHours, criteria.strictComparison)) add(Reason.CONSECUTIVE_RAIN)
             if (exceeds(rainHours, criteria.totalRainHours, criteria.strictComparison)) add(Reason.TOTAL_RAIN)
-            if (criteria.frostCountsAsIntemperie && belowFrost == true) add(Reason.FROST)
+            if (criteria.coldCountsAsIntemperie && coldReached == true) add(Reason.COLD)
+            if (criteria.heatCountsAsIntemperie && heatReached == true) add(Reason.HEAT)
         }
         val inProgress = nowSec < windowEnd
         val status = when {
@@ -137,7 +151,12 @@ object DayClassifier {
             rainHours = rainHours,
             maxConsecutiveRainHours = maxConsecutive,
             meanTemperatureC = meanTemp,
-            belowFrostThreshold = belowFrost,
+            minTemperatureC = minT.takeIf { tempKnown },
+            maxTemperatureC = maxT.takeIf { tempKnown },
+            coldHours = coldHours,
+            heatHours = heatHours,
+            coldReached = coldReached,
+            heatReached = heatReached,
             reasons = reasons,
             coverage = coverage,
             provisional = provisional,
@@ -151,7 +170,8 @@ object DayClassifier {
 
     private fun empty(date: LocalDate, status: DayStatus, holiday: String?) = DayReport(
         date = date, status = status, windowRainMm = 0.0, dayRainMm = 0.0, rainHours = 0.0,
-        maxConsecutiveRainHours = 0.0, meanTemperatureC = null, belowFrostThreshold = null,
+        maxConsecutiveRainHours = 0.0, meanTemperatureC = null, minTemperatureC = null, maxTemperatureC = null,
+        coldHours = null, heatHours = null, coldReached = null, heatReached = null,
         reasons = emptySet(), coverage = 0.0, provisional = false, wetSteps = emptyList(), holidayName = holiday,
     )
 }

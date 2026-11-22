@@ -58,10 +58,19 @@ data class Criteria(
     val strictComparison: Boolean = true,
     /** Orange si durée totale de pluie ≥ ce nombre d'heures. */
     val warningRainHours: Double = 2.0,
-    /** Seuil de température moyenne (°C) dans la plage horaire. */
-    val frostThresholdC: Double = 0.0,
-    /** Si coché, une moyenne sous le seuil rend la journée « intempérie ». */
-    val frostCountsAsIntemperie: Boolean = false,
+    /**
+     * Seuil bas (gel) : durée cumulée, dans la plage horaire, pendant laquelle la température
+     * (moyenne horaire) est strictement inférieure au seuil. Atteint si durée ≥ [coldMinHours].
+     */
+    val coldThresholdC: Double = 0.0,
+    val coldMinHours: Double = 4.0,
+    /** Si coché, le seuil bas atteint rend la journée « intempérie ». */
+    val coldCountsAsIntemperie: Boolean = false,
+    /** Seuil haut (canicule) : température (moyenne horaire) strictement supérieure au seuil. */
+    val heatThresholdC: Double = 30.0,
+    val heatMinHours: Double = 4.0,
+    /** Si coché, le seuil haut atteint rend la journée « intempérie ». */
+    val heatCountsAsIntemperie: Boolean = false,
     /** Part minimale de données disponibles dans la plage pour statuer. */
     val minCoverage: Double = 0.8,
     /** Distance max. de la station de température retenue automatiquement. */
@@ -97,7 +106,7 @@ enum class DayStatus {
     FUTURE,
 }
 
-enum class Reason { CONSECUTIVE_RAIN, TOTAL_RAIN, FROST }
+enum class Reason { CONSECUTIVE_RAIN, TOTAL_RAIN, COLD, HEAT }
 
 data class DayReport(
     val date: LocalDate,
@@ -110,7 +119,15 @@ data class DayReport(
     val maxConsecutiveRainHours: Double,
     /** Moyenne pondérée dans la plage, null si indisponible. */
     val meanTemperatureC: Double?,
-    val belowFrostThreshold: Boolean?,
+    /** Plus basse / plus haute moyenne horaire dans la plage. */
+    val minTemperatureC: Double?,
+    val maxTemperatureC: Double?,
+    /** Durées (h) dans la plage sous le seuil bas / au-dessus du seuil haut ; null si température indisponible. */
+    val coldHours: Double?,
+    val heatHours: Double?,
+    /** Seuil bas / haut atteint (durée ≥ durée minimale), qu'il compte ou non comme intempérie. */
+    val coldReached: Boolean?,
+    val heatReached: Boolean?,
     val reasons: Set<Reason>,
     val coverage: Double,
     /** Au moins une donnée non validée par le SPW (code qualité ≥ 200). */

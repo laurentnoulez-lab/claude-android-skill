@@ -43,8 +43,12 @@ class SettingsRepository(context: Context) {
         val total = doublePreferencesKey("total_h")
         val strict = booleanPreferencesKey("strict")
         val warning = doublePreferencesKey("warning_h")
-        val frost = doublePreferencesKey("frost_c")
-        val frostIntemperie = booleanPreferencesKey("frost_intemperie")
+        val cold = doublePreferencesKey("cold_c")
+        val coldHours = doublePreferencesKey("cold_h")
+        val coldOn = booleanPreferencesKey("cold_intemperie")
+        val heat = doublePreferencesKey("heat_c")
+        val heatHours = doublePreferencesKey("heat_h")
+        val heatOn = booleanPreferencesKey("heat_intemperie")
         val coverage = doublePreferencesKey("min_coverage")
         val tempDistance = doublePreferencesKey("temp_max_km")
         val retention = intPreferencesKey("retention_months")
@@ -82,8 +86,12 @@ class SettingsRepository(context: Context) {
         p[K.total] = c.totalRainHours
         p[K.strict] = c.strictComparison
         p[K.warning] = c.warningRainHours
-        p[K.frost] = c.frostThresholdC
-        p[K.frostIntemperie] = c.frostCountsAsIntemperie
+        p[K.cold] = c.coldThresholdC
+        p[K.coldHours] = c.coldMinHours
+        p[K.coldOn] = c.coldCountsAsIntemperie
+        p[K.heat] = c.heatThresholdC
+        p[K.heatHours] = c.heatMinHours
+        p[K.heatOn] = c.heatCountsAsIntemperie
         p[K.coverage] = c.minCoverage
         p[K.tempDistance] = c.maxTemperatureDistanceKm
     }
@@ -140,8 +148,12 @@ class SettingsRepository(context: Context) {
                 totalRainHours = this[K.total] ?: d.totalRainHours,
                 strictComparison = this[K.strict] ?: d.strictComparison,
                 warningRainHours = this[K.warning] ?: d.warningRainHours,
-                frostThresholdC = this[K.frost] ?: d.frostThresholdC,
-                frostCountsAsIntemperie = this[K.frostIntemperie] ?: d.frostCountsAsIntemperie,
+                coldThresholdC = this[K.cold] ?: d.coldThresholdC,
+                coldMinHours = this[K.coldHours] ?: d.coldMinHours,
+                coldCountsAsIntemperie = this[K.coldOn] ?: d.coldCountsAsIntemperie,
+                heatThresholdC = this[K.heat] ?: d.heatThresholdC,
+                heatMinHours = this[K.heatHours] ?: d.heatMinHours,
+                heatCountsAsIntemperie = this[K.heatOn] ?: d.heatCountsAsIntemperie,
                 minCoverage = this[K.coverage] ?: d.minCoverage,
                 maxTemperatureDistanceKm = this[K.tempDistance] ?: d.maxTemperatureDistanceKm,
             ),

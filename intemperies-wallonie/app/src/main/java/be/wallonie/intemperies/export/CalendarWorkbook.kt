@@ -5,6 +5,7 @@ import be.wallonie.intemperies.model.DayReport
 import be.wallonie.intemperies.model.DayStatus
 import be.wallonie.intemperies.model.MonthReport
 import be.wallonie.intemperies.ui.Fmt
+import be.wallonie.intemperies.ui.legal.HowItWorks
 import be.wallonie.intemperies.ui.legal.RegulatoryBasis
 
 /**
@@ -12,12 +13,13 @@ import be.wallonie.intemperies.ui.legal.RegulatoryBasis
  * et une feuille « Base réglementaire ». Code Kotlin pur (testable sur JVM).
  */
 object CalendarWorkbook {
-    private const val LAST_COL = 13 // A..M
+    private const val LAST_COL = 14 // A..N
 
     fun build(reports: List<MonthReport>, generatedAt: String): ByteArray {
         require(reports.isNotEmpty())
         val xlsx = XlsxWriter()
         reports.forEach { addCommuneSheet(xlsx, it, generatedAt, multi = reports.size > 1) }
+        addHowItWorksSheet(xlsx, reports.first())
         addRegulatorySheet(xlsx)
         return xlsx.toByteArray()
     }
@@ -25,7 +27,7 @@ object CalendarWorkbook {
     private fun addCommuneSheet(xlsx: XlsxWriter, r: MonthReport, generatedAt: String, multi: Boolean) {
         val sh = xlsx.sheet(if (multi) r.commune.name else "${r.commune.name} ${r.month}")
         sh.landscape = true
-        listOf(19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 12.0, 11.0, 10.0, 44.0, 11.0, 13.0)
+        listOf(19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 12.0, 11.0, 12.0, 12.0, 44.0, 11.0, 13.0)
             .forEachIndexed { i, w -> sh.width(i + 1, w) }
 
         var row = 1
@@ -79,10 +81,10 @@ object CalendarWorkbook {
         // --- Légende ---------------------------------------------------------------------------------
         sh.text(row, 1, "Légende :", Style.BOLD)
         sh.text(row, 2, "Sec", Style.ST_DRY)
-        sh.text(row, 3, "Pluie (orange)", Style.ST_WARNING)
+        sh.text(row, 3, "Précipitations (orange)", Style.ST_WARNING)
         sh.text(row, 4, "Intempérie", Style.ST_INTEMPERIE)
         sh.text(row, 5, "Sans données", Style.ST_NO_DATA)
-        sh.text(row, 6, "« gel » : T moy. sous le seuil · * : données de pluie non validées par le SPW", Style.DEFAULT)
+        sh.text(row, 6, "« gel » / « chaud » : seuil de température atteint · * : précipitations non validées par le SPW", Style.DEFAULT)
         row += 2
 
         // --- Tableau journalier ------------------------------------------------------------------------
@@ -90,8 +92,9 @@ object CalendarWorkbook {
         sh.text(row, 1, "Détail journalier", Style.BOLD)
         row++
         val headers = listOf(
-            "Date", "Jour", "Jour ouvrable", "Statut", "Pluie plage (mm)", "Durée pluie (h)", "Pluie consécutive max (h)",
-            "Pluie 24 h (mm)", "T moy. plage (°C)", "T sous seuil", "Motif", "Données dispo.", "Validation SPW",
+            "Date", "Jour", "Jour ouvrable", "Statut", "Précip. plage (mm)", "Durée précip. (h)", "Précip. consécutives max (h)",
+            "Précip. 24 h (mm)", "T moy. plage (°C)", "Durée T < ${Fmt.deg(r.criteria.coldThresholdC)} (h)",
+            "Durée T > ${Fmt.deg(r.criteria.heatThresholdC)} (h)", "Motif", "Données dispo.", "Validation SPW",
         )
         headers.forEachIndexed { i, h -> sh.text(row, i + 1, h, Style.HEADER) }
         sh.height(row, 30.0)
@@ -109,10 +112,11 @@ object CalendarWorkbook {
                 sh.num(row, 7, d.maxConsecutiveRainHours)
                 sh.num(row, 8, d.dayRainMm)
                 sh.num(row, 9, d.meanTemperatureC)
-                sh.text(row, 10, when (d.belowFrostThreshold) { true -> "Oui"; false -> "Non"; null -> "—" })
-                sh.text(row, 11, d.reasons.joinToString(" + ") { Fmt.reason(it, r.criteria) })
-                sh.num(row, 12, d.coverage, Style.PERCENT)
-                sh.text(row, 13, if (d.provisional) "Provisoires *" else "Validées")
+                if (d.coldHours != null) sh.num(row, 10, d.coldHours) else sh.text(row, 10, "—")
+                if (d.heatHours != null) sh.num(row, 11, d.heatHours) else sh.text(row, 11, "—")
+                sh.text(row, 12, d.reasons.joinToString(" + ") { Fmt.reason(it, r.criteria) })
+                sh.num(row, 13, d.coverage, Style.PERCENT)
+                sh.text(row, 14, if (d.provisional) "Provisoires *" else "Validées")
             } else {
                 for (c in 5..LAST_COL) sh.text(row, c, "")
             }
@@ -132,7 +136,7 @@ object CalendarWorkbook {
             "Jours de pluie (orange)" to "COUNTIF($st,\"${Fmt.status(DayStatus.WARNING)}\")",
             "Jours secs" to "COUNTIF($st,\"${Fmt.status(DayStatus.DRY)}\")",
             "Jours sans données" to "COUNTIF($st,\"${Fmt.status(DayStatus.NO_DATA)}\")",
-            "Pluie cumulée dans la plage (mm)" to "SUM(\$E\$$first:\$E\$$last)",
+            "Précipitations cumulées dans la plage (mm)" to "SUM(\$E\$$first:\$E\$$last)",
         )
         for ((label, f) in summary) {
             sh.text(row, 1, label, Style.TEXT)
@@ -147,6 +151,25 @@ object CalendarWorkbook {
         sh.text(row, 1, "* : contient des données non encore validées par le SPW (code qualité ≥ 200). Généré le $generatedAt — Intempéries Wallonie.", Style.SMALL)
         sh.merge(row, 1, row, LAST_COL)
         check(tableTitleRow > 0)
+    }
+
+    private fun addHowItWorksSheet(xlsx: XlsxWriter, r: MonthReport) {
+        val sh = xlsx.sheet("Mode de fonctionnement")
+        sh.width(1, 34.0)
+        sh.width(2, 100.0)
+        var row = 1
+        sh.text(row, 1, "Mode de fonctionnement de l'application", Style.TITLE)
+        sh.height(row, 24.0)
+        row++
+        sh.text(row, 1, "Paramètres en vigueur lors de l'export", Style.CAPTION)
+        row += 2
+        for (section in HowItWorks.sections(r.criteria, null)) {
+            val text = section.lines.joinToString("\n") { "• $it" }
+            sh.text(row, 1, section.title, Style.WRAP)
+            sh.text(row, 2, text, Style.WRAP)
+            sh.height(row, rowHeight(section.title to 36, text to 112))
+            row++
+        }
     }
 
     private fun addRegulatorySheet(xlsx: XlsxWriter) {
@@ -217,7 +240,8 @@ object CalendarWorkbook {
         }
         d.meanTemperatureC?.let {
             append("\nT ").append(Fmt.temp(it))
-            if (d.belowFrostThreshold == true) append(" gel")
+            if (d.coldReached == true) append(" gel")
+            if (d.heatReached == true) append(" chaud")
         }
         }
         return XlsxWriter.Value.Rich(listOf(head to true, detail to false))

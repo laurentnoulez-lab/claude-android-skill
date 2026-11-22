@@ -19,6 +19,7 @@ import be.wallonie.intemperies.ui.calendar.CalendarRoute
 import be.wallonie.intemperies.ui.calendar.CalendarViewModel
 import be.wallonie.intemperies.ui.home.HomeRoute
 import be.wallonie.intemperies.ui.home.HomeViewModel
+import be.wallonie.intemperies.ui.legal.HowItWorksRoute
 import be.wallonie.intemperies.ui.legal.RegulatoryRoute
 import be.wallonie.intemperies.ui.settings.CommunePickerRoute
 import be.wallonie.intemperies.ui.settings.SettingsRoute
@@ -32,6 +33,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsDest
 @Serializable data object PickerDest
 @Serializable data object RegulatoryDest
+@Serializable data object HowItWorksDest
 
 class MainActivity : ComponentActivity() {
     private var pendingNis by mutableStateOf<String?>(null)
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     onOpenCommune = { nav.navigate(CalendarDest(it)) },
                     onOpenSettings = { nav.navigate(SettingsDest) },
                     onPickCommunes = { nav.navigate(PickerDest) },
+                    onOpenHowItWorks = { nav.navigate(HowItWorksDest) },
                 )
             }
             composable<CalendarDest> { entry ->
@@ -91,9 +94,18 @@ class MainActivity : ComponentActivity() {
                     onBack = { nav.popBackStack() },
                     onPickCommunes = { nav.navigate(PickerDest) },
                     onOpenRegulatory = { nav.navigate(RegulatoryDest) },
+                    onOpenHowItWorks = { nav.navigate(HowItWorksDest) },
                 )
             }
             composable<RegulatoryDest> { RegulatoryRoute(onBack = { nav.popBackStack() }) }
+            composable<HowItWorksDest> {
+                HowItWorksRoute(
+                    container.settingsRepository,
+                    onBack = { nav.popBackStack() },
+                    onOpenSettings = { nav.navigate(SettingsDest) { launchSingleTop = true } },
+                    onOpenRegulatory = { nav.navigate(RegulatoryDest) },
+                )
+            }
             composable<PickerDest> {
                 val vm = viewModel { SettingsViewModel(container.settingsRepository, container.catalogRepository, requestSync) }
                 CommunePickerRoute(vm, onBack = { nav.popBackStack() })

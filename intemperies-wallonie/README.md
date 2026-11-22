@@ -15,24 +15,38 @@ collecte les mesures en continu et qualifie chaque journée (vert / orange / rou
 | Stockage | Mois en cours + 6 mois précédents (paramétrable 1–12) ; purge automatique ; seules les stations utilisées sont conservées |
 | Calendrier | Grille mensuelle colorée, détail par jour (pas pluvieux, cumuls, température, couverture), jours fériés légaux |
 | PDF | Calendrier A4 par commune (ou toutes les communes du mois en un seul PDF), liste des jours d'intempéries avec indications pluviométriques, mention de la source SPW ; partage par mail/Teams/Drive |
-| Excel (.xlsx) | Même calendrier coloré + tableau journalier chiffré (date, jour ouvrable, statut, mm, durées, T moy., motif, couverture, validation SPW) + synthèse par formules (`NB.SI`) qui se recalcule si un statut est corrigé ; une feuille par commune + feuille « Base réglementaire ». Généré sans bibliothèque externe |
+| Excel (.xlsx) | Même calendrier coloré + tableau journalier chiffré (date, jour ouvrable, statut, mm, durées, T moy., motif, couverture, validation SPW) + synthèse par formules (`NB.SI`) qui se recalcule si un statut est corrigé ; une feuille par commune + feuilles « Mode de fonctionnement » et « Base réglementaire ». Généré sans bibliothèque externe |
 | Widget | Un widget par commune : statut du jour, 7 derniers jours, bilan du mois |
+| Fonctionnement | Écran dédié expliquant la méthode avec les paramètres en vigueur |
 | Base réglementaire | Écran dédié : définition du jour d'intempérie selon le CCT Qualiroutes (ch. A, art. 76 § 4, 4°) |
 
 ## Règles de qualification (toutes paramétrables)
 
-Plage analysée : **07:30–16:00**, découpée en pas de **30 min** (15 / 30 / 60 min au choix) alignés sur 07:30.
-Un pas est « pluvieux » si son cumul ≥ **0,1 mm**.
+L'écran **« Fonctionnement »** (icône « ? » de l'accueil, ou Paramètres) explique la méthode avec les valeurs
+**actuellement en vigueur** ; la même explication figure dans la feuille « Mode de fonctionnement » des exports Excel.
 
-| Couleur | Condition par défaut |
-|---|---|
-| 🔴 Intempérie | pluie consécutive **> 3 h** OU pluie totale dans la plage **> 4 h** (option : ≥) — OU, si la case est cochée, température moyenne 07:30–16:00 **< 0 °C** |
-| 🟠 Pluie | pluie totale **≥ 2 h** sans atteindre les seuils rouges |
-| 🟢 Sec | autres cas |
-| ⚪ Données insuffisantes | moins de 80 % des mesures disponibles dans la plage |
+Une journée est une **intempérie** si les **précipitations** (pluie, neige ou grêle) **ou** la **température**
+atteignent les seuils activés. Valeurs par défaut :
 
-La température moyenne est pondérée par le recouvrement de chaque heure avec la plage (07:00–08:00 compte pour 30 min).
-Un astérisque (*) signale les journées dont les données de **pluie** ne sont pas encore validées par le SPW (code qualité ≥ 200). Les séries de température SPW restant au code 200, elles n'entrent pas dans cet indicateur.
+| Origine | Paramètres (par défaut) | Effet par défaut |
+|---|---|---|
+| Précipitations | plage **07:30–16:00**, pas de **30 min** (15 / 30 / 60), pas « avec précipitations » si cumul ≥ **0,1 mm** ; consécutives **> 3 h** ou totales **> 4 h** (option ≥) | 🔴 intempérie |
+| Précipitations | totales **≥ 2 h** sans intempérie | 🟠 orange |
+| Température — seuil bas (gel) | T **< 0 °C** pendant **≥ 4 h** cumulées dans la plage | signalé ❄, case à cocher pour 🔴 |
+| Température — seuil haut (canicule) | T **> 30 °C** pendant **≥ 4 h** cumulées dans la plage | signalé ☀, case à cocher pour 🔴 |
+| Données | < **80 %** des mesures de précipitations disponibles | ⚪ gris |
+
+Les valeurs 30 °C et 4 h pour la température sont des valeurs de départ proposées (non imposées par un texte) ;
+les cases « provoque une intempérie » sont décochées par défaut, conformément à la demande initiale.
+
+- **Précipitations** : les pluviomètres SPW sont « à pesée » (source : hydrometrie.wallonie.be › Réseaux de mesure).
+  *Interprétation* : ce principe pèse les précipitations liquides et solides (équivalent eau) ; l'application ne distingue
+  donc pas pluie, neige et grêle.
+- **Température** : moyennes horaires, chacune pondérée par son recouvrement avec la plage (07:00–08:00 compte pour 30 min).
+  La durée sous le seuil bas (au-dessus du seuil haut) est la somme de ces recouvrements. La moyenne de la plage et les
+  T min./max. horaires restent affichées à titre d'information.
+- Un astérisque (*) signale les journées dont les données de **précipitations** ne sont pas encore validées par le SPW
+  (code qualité ≥ 200). Les séries de température SPW restant au code 200, elles n'entrent pas dans cet indicateur.
 
 ## Base réglementaire (écran « Base réglementaire »)
 
@@ -90,7 +104,7 @@ Prérequis : JDK 17+, Android SDK (plateforme 36).
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
-./gradlew testDebugUnitTest      # 22 tests (classification, jours fériés, parseur KiWIS, classeur Excel)
+./gradlew testDebugUnitTest      # 25 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ```
 

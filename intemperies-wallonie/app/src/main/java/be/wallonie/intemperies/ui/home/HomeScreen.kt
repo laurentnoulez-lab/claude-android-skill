@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -69,6 +71,7 @@ fun HomeRoute(
     onOpenCommune: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onPickCommunes: () -> Unit,
+    onOpenHowItWorks: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
@@ -83,7 +86,7 @@ fun HomeRoute(
             }
         }
     }
-    HomeScreen(state, syncing, syncStatus, snackbar, viewModel::refresh, viewModel::exportAll, onOpenCommune, onOpenSettings, onPickCommunes)
+    HomeScreen(state, syncing, syncStatus, snackbar, viewModel::refresh, viewModel::exportAll, onOpenCommune, onOpenSettings, onPickCommunes, onOpenHowItWorks)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +101,7 @@ fun HomeScreen(
     onOpenCommune: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onPickCommunes: () -> Unit,
+    onOpenHowItWorks: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -120,6 +124,7 @@ fun HomeScreen(
                         if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         else Icon(Icons.Default.Refresh, "Actualiser")
                     }
+                    IconButton(onClick = onOpenHowItWorks) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Fonctionnement de l'application") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Paramètres") }
                 },
             )
@@ -207,7 +212,8 @@ private fun CommuneCard(report: MonthReport, onClick: () -> Unit) {
             today?.let { d ->
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Aujourd'hui : ${Fmt.hours(d.rainHours)} de pluie · ${Fmt.mm(d.windowRainMm)}", style = MaterialTheme.typography.bodyMedium)
-                    if (d.belowFrostThreshold == true) Icon(Icons.Default.AcUnit, "Gel", tint = StatusColors.Frost, modifier = Modifier.size(18.dp))
+                    if (d.coldReached == true) Icon(Icons.Default.AcUnit, "Seuil bas (gel) atteint", tint = StatusColors.Frost, modifier = Modifier.size(18.dp))
+                    if (d.heatReached == true) Icon(Icons.Default.WbSunny, "Seuil haut (canicule) atteint", tint = StatusColors.Heat, modifier = Modifier.size(18.dp))
                 }
             }
             yesterday?.let { d ->

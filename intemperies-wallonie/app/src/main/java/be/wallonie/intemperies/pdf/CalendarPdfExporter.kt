@@ -140,7 +140,8 @@ class CalendarPdfExporter(private val context: Context) {
             c.drawText("Sans données", rect.left + 4f, y, tiny); y += 9f
         }
         d.meanTemperatureC?.let {
-            c.drawText("T ${Fmt.temp(it)}" + if (d.belowFrostThreshold == true) " gel" else "", rect.left + 4f, y, if (d.belowFrostThreshold == true) tinyBlue else tiny)
+            val flag = when { d.coldReached == true -> " gel"; d.heatReached == true -> " chaud"; else -> "" }
+            c.drawText("T ${Fmt.temp(it)}$flag", rect.left + 4f, y, if (flag.isNotEmpty()) tinyBlue else tiny)
         }
         if (d.provisional) c.drawText("*", rect.right - 5f, rect.bottom - 4f, bold.alignRight())
     }
@@ -160,7 +161,7 @@ class CalendarPdfExporter(private val context: Context) {
             c.drawText(label, x + 14f, top + 8.5f, small)
             x += 22f + small.measureText(label)
         }
-        c.drawText("gel : T moy. sous le seuil · * : données non validées", PAGE_W - MARGIN, top + 8.5f, small.alignRight())
+        c.drawText("gel / chaud : seuil de température atteint · * : précipitations non validées", PAGE_W - MARGIN, top + 8.5f, small.alignRight())
         return top + 10f
     }
 

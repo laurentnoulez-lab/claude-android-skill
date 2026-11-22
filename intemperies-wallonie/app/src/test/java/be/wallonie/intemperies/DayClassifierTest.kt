@@ -98,14 +98,56 @@ class DayClassifierTest {
     }
 
     @Test
-    fun frostIsInformativeByDefaultAndBlockingWhenChecked() {
+    fun coldIsInformativeByDefaultAndBlockingWhenChecked() {
         val r1 = DayClassifier.classify(day, samples(), temps(-1.5), criteria, zone, later)
         assertEquals(DayStatus.DRY, r1.status)
-        assertTrue(r1.belowFrostThreshold == true)
+        assertTrue(r1.coldReached == true)
+        assertEquals(8.5, r1.coldHours!!, 1e-9)
         assertEquals(-1.5, r1.meanTemperatureC!!, 1e-9)
-        val r2 = DayClassifier.classify(day, samples(), temps(-1.5), criteria.copy(frostCountsAsIntemperie = true), zone, later)
+        val r2 = DayClassifier.classify(day, samples(), temps(-1.5), criteria.copy(coldCountsAsIntemperie = true), zone, later)
         assertEquals(DayStatus.INTEMPERIE, r2.status)
-        assertEquals(setOf(Reason.FROST), r2.reasons)
+        assertEquals(setOf(Reason.COLD), r2.reasons)
+    }
+
+    /** Moyennes horaires : [cold] heures (à partir de 08:00) sous 0 °C, le reste à 5 °C. */
+    private fun tempsWithColdHours(cold: Int, value: Double = -2.0): List<Sample> {
+        val start = day.atStartOfDay(zone).toEpochSecond()
+        return (0 until 24).map { h -> Sample(start + h * 3600L, if (h in 8 until 8 + cold) value else 5.0, 200) }
+    }
+
+    @Test
+    fun coldDurationMustReachMinimum() {
+        val c = criteria.copy(coldCountsAsIntemperie = true)
+        val three = DayClassifier.classify(day, samples(), tempsWithColdHours(3), c, zone, later)
+        assertEquals(3.0, three.coldHours!!, 1e-9)
+        assertEquals(DayStatus.DRY, three.status)
+        val four = DayClassifier.classify(day, samples(), tempsWithColdHours(4), c, zone, later)
+        assertEquals(DayStatus.INTEMPERIE, four.status) // durée ≥ 4 h
+        val shorter = DayClassifier.classify(day, samples(), tempsWithColdHours(3), c.copy(coldMinHours = 2.5), zone, later)
+        assertEquals(DayStatus.INTEMPERIE, shorter.status)
+    }
+
+    @Test
+    fun heatThresholdIsBlockingWhenChecked() {
+        val start = day.atStartOfDay(zone).toEpochSecond()
+        // 11:00–16:00 à 33 °C (5 h), sinon 25 °C.
+        val hot = (0 until 24).map { h -> Sample(start + h * 3600L, if (h in 11..15) 33.0 else 25.0, 40) }
+        val info = DayClassifier.classify(day, samples(), hot, criteria, zone, later)
+        assertEquals(5.0, info.heatHours!!, 1e-9)
+        assertTrue(info.heatReached == true)
+        assertEquals(DayStatus.DRY, info.status)
+        assertEquals(33.0, info.maxTemperatureC!!, 1e-9)
+        val blocking = DayClassifier.classify(day, samples(), hot, criteria.copy(heatCountsAsIntemperie = true), zone, later)
+        assertEquals(setOf(Reason.HEAT), blocking.reasons)
+        val higher = DayClassifier.classify(day, samples(), hot, criteria.copy(heatCountsAsIntemperie = true, heatThresholdC = 35.0), zone, later)
+        assertEquals(DayStatus.DRY, higher.status)
+    }
+
+    @Test
+    fun rainAndTemperatureReasonsCombine() {
+        val c = criteria.copy(coldCountsAsIntemperie = true)
+        val r = DayClassifier.classify(day, samples(t(8) to t(11, 30)), tempsWithColdHours(5), c, zone, later)
+        assertEquals(setOf(Reason.CONSECUTIVE_RAIN, Reason.COLD), r.reasons)
     }
 
     @Test
