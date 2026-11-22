@@ -22,11 +22,11 @@ data class Reading(val point: Point, val trend: Trend)
 data class DayStats(val p15: Double, val median: Double, val p85: Double, val p90: Double)
 
 /** Classement du débit actuel par rapport aux statistiques du jour (P15 / P85 / P90). */
-enum class FlowClass(val label: String) {
-    FAIBLE("Courant faible"),
-    NORMAL("Courant normal"),
-    FORT("Courant fort"),
-    TRES_FORT("Courant très fort"),
+enum class FlowClass(val label: String, val shortLabel: String) {
+    FAIBLE("Courant faible", "Faible"),
+    NORMAL("Courant normal", "Normal"),
+    FORT("Courant fort", "Fort"),
+    TRES_FORT("Courant très fort", "Très fort"),
     ;
 
     companion object {

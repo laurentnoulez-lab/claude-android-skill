@@ -49,6 +49,7 @@ class ScreenRenderTest {
                     state = MeuseUiState(snapshot = snapshot(), reference = reference),
                     onRefresh = {},
                     onReference = {},
+                    fixedNow = java.time.ZonedDateTime.parse("2026-11-22T10:00:00+01:00[Europe/Brussels]"),
                 )
             }
         }

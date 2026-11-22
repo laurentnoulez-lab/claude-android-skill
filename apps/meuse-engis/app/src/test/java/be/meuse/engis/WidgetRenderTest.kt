@@ -25,13 +25,13 @@ import java.io.File
 class WidgetRenderTest {
 
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
-    private fun render(name: String, w: Int, h: Int): Unit = runBlocking {
+    private fun render(name: String, w: Int, h: Int, now: String = "2026-11-22T10:00:00+01:00[Europe/Brussels]"): Unit = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         context.getSharedPreferences("meuse_cache", Context.MODE_PRIVATE).edit()
             .putString("json", javaClass.getResource("/kiwis_2026-11-22.json")!!.readText())
             .putLong("time", System.currentTimeMillis())
             .commit()
-        val rv = MeuseWidget().compose(context, size = DpSize(w.dp, h.dp))
+        val rv = MeuseWidget(clock = { java.time.ZonedDateTime.parse(now) }).compose(context, size = DpSize(w.dp, h.dp))
         val density = context.resources.displayMetrics.density
         val parent = FrameLayout(context)
         val view = rv.apply(context, parent)
@@ -53,4 +53,8 @@ class WidgetRenderTest {
     @Test fun grand() { render("widget_3x2", 250, 200) }
 
     @Test fun petit() { render("widget_2x1", 150, 80) }
+
+    @Test fun nuit() { render("widget_3x2_nuit", 250, 200, "2026-11-22T19:30:00+01:00[Europe/Brussels]") }
+
+    @Test fun fermeture() { render("widget_2x1_fermeture", 150, 80, "2026-03-15T12:00:00+01:00[Europe/Brussels]") }
 }

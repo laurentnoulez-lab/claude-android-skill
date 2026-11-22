@@ -25,17 +25,43 @@ Pour chaque jour du calendrier, le SPW publie les débits statistiques observés
 
 Ces seuils sont les miens, posés sur les statistiques du SPW. Ils disent si le débit est **inhabituel pour la saison**, pas s'il permet de pêcher : un « courant normal » de novembre peut déjà être fort au bord de l'eau. L'écran affiche les valeurs de seuil du jour pour que chacun se fasse son propre repère.
 
+## Réglementation de la pêche au carnassier
+
+L'application applique les règles de l'**AGW du 8 décembre 2016 relatif aux conditions d'ouverture et aux modalités d'exercice de la pêche**, dans sa version consolidée en vigueur depuis le 01/01/2025 (Wallex, consultée le 22/11/2026). Elle les applique à la Meuse, qui relève de la zone d'eaux calmes (annexe 3).
+
+| Règle | Article |
+|---|---|
+| Carnassiers (brochet, sandre, perche, aspe : groupe 2) ouverts **du 1er samedi de juin au 31 janvier** | Art. 4, 2°, c) et d) |
+| Fermés du 1er février jusqu'à la veille du 1er samedi de juin | Art. 4, 2°, a) et b) |
+| Pêche de jour : **de 1 h avant l'heure officielle du lever du soleil à 1 h après l'heure officielle du coucher** | Art. 1er, 6° |
+| Pêche de nuit interdite pour ces espèces | Art. 5 |
+
+La rubrique « Voir les règles principales » rappelle aussi les autres points utiles :
+- pas de pêche du haut des ponts, ni à moins de 50 m en aval des barrages ;
+- brochet : aucun prélèvement autorisé jusqu'au 31/12/2027 ;
+- sandre et perche : tailles minimales et nombre maximal par jour ;
+- leurres interdits pendant la fermeture du brochet.
+
+Ce qui relève de mon interprétation, et non du texte :
+- **L'heure officielle** du lever et du coucher n'est pas définie géographiquement par l'arrêté. L'application calcule le lever et le coucher pour Uccle (référence de l'IRM) et pour Engis, et retient la plage la plus courte des deux.
+- J'ajoute une **marge de sécurité d'1 minute** de chaque côté : mon calcul diffère d'environ ±20 s des éphémérides de référence.
+- Les heures affichées sont donc toujours un peu plus prudentes que la règle stricte.
+- Les interdictions temporaires locales (art. 7) ne peuvent pas être connues de l'application : il faut respecter la signalisation sur place.
+
 ## Widget d'écran d'accueil
 
 Appui long sur l'écran d'accueil, puis **Widgets**, puis **Meuse Engis**, puis **Meuse · courant**.
 
-- Taille 2×1 : débit actuel, tendance et appréciation du courant.
+- **Pêcheur vert « Fish! »** : la pêche au carnassier est autorisée maintenant et le courant est normal.
+- **Pêcheur endormi « Zzz »** : la pêche est interdite maintenant, la nuit ou pendant la fermeture. Le widget affiche l'heure ou la date de reprise.
+- Aucun pêcheur : la pêche est autorisée, mais le courant est faible, fort ou très fort.
+- Taille 2×1 : débit actuel, tendance, appréciation du courant et pêcheur.
 - Taille 3×2 ou plus : en plus, les barres des 7 derniers jours et d'aujourd'hui, avec la moyenne habituelle du mois.
-- Le widget se met à jour toutes les 30 minutes environ (rythme minimal autorisé par Android), à chaque actualisation dans l'application, et quand on touche ⟳. Toucher le reste du widget ouvre l'application.
+- Le widget se met à jour toutes les 30 minutes environ (rythme minimal autorisé par Android), à chaque actualisation dans l'application, et quand on touche ⟳. Il se met aussi à jour aux heures d'ouverture et de fermeture de la pêche, avec une alarme Android qui peut avoir jusqu'à 5 minutes de décalage. Toucher le reste du widget ouvre l'application.
 
 ## Installation sur le téléphone
 
-1. Copier `release/MeuseEngis-1.2.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
+1. Copier `release/MeuseEngis-1.3.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
 2. Ouvrir le fichier. Android demande d'autoriser l'installation depuis cette source (« sources inconnues ») : accepter.
 3. Lancer **Meuse Engis**.
 

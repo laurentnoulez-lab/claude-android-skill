@@ -32,6 +32,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.delay
+import be.meuse.engis.domain.CarnassierRules
+import be.meuse.engis.domain.FishingStatus
+import java.time.ZonedDateTime
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,7 +63,15 @@ fun MeuseScreen(
     state: MeuseUiState,
     onRefresh: () -> Unit,
     onReference: (Reference) -> Unit,
+    fixedNow: ZonedDateTime? = null,
 ) {
+    // Horloge : le statut réglementaire est réévalué toutes les 30 s.
+    val now by produceState(fixedNow ?: ZonedDateTime.now(BRUSSELS), fixedNow) {
+        while (fixedNow == null) {
+            delay(30_000)
+            value = ZonedDateTime.now(BRUSSELS)
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,6 +109,7 @@ fun MeuseScreen(
             ) {
                 state.error?.let { ErrorCard(it, hasCache = state.snapshot != null) }
                 val s = state.snapshot
+                RegulationCard(now, s?.flowClass)
                 if (s == null) {
                     if (!state.loading && state.error == null) Text("Aucune donnée pour l'instant.")
                 } else {
@@ -275,3 +296,75 @@ private fun SourceFooter(fetchedAt: Instant) {
         )
     }
 }
+
+@Composable
+private fun RegulationCard(now: ZonedDateTime, flowClass: FlowClass?) = InfoCard {
+    val status = CarnassierRules.status(now)
+    val mood = FisherMood.of(status, flowClass)
+    Caption("PÊCHE AU CARNASSIER — MEUSE (ZONE D'EAUX CALMES)")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (mood.drawable != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painterResource(mood.drawable),
+                    contentDescription = if (mood == FisherMood.FISH) "Pêcheur : Fish!" else "Pêcheur endormi",
+                    modifier = Modifier.size(56.dp),
+                )
+                Text(
+                    mood.label.orEmpty(),
+                    fontWeight = FontWeight.Bold,
+                    color = if (mood == FisherMood.FISH) Color(0xFF0CA30C) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(
+            status.headline(now),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    if (CarnassierRules.isSeasonOpen(now.toLocalDate())) {
+        val (start, end) = CarnassierRules.dayWindow(now.toLocalDate(), now.zone)
+        Text(
+            "Aujourd'hui : pêche de jour de ${start.format(HOUR)} à ${end.format(HOUR)}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    Caption("Saison carnassiers ${seasonText(now)}.")
+
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }) {
+        Text(if (open) "Masquer les règles" else "Voir les règles principales")
+    }
+    if (open) {
+        RULES.forEach { (rule, ref) ->
+            Text("• $rule", style = MaterialTheme.typography.bodySmall)
+            Caption("   $ref")
+        }
+        Spacer(Modifier.height(4.dp))
+        Caption(
+            "Heures : 1 h avant le lever et 1 h après le coucher du soleil (art. 1er, 6°). L'arrêté ne précise pas le " +
+                "lieu de référence de l'« heure officielle » : l'application retient la plage la plus courte entre " +
+                "Uccle (IRM) et Engis, soit quelques minutes de marge.",
+        )
+        Caption(
+            "Source : AGW du 8 décembre 2016 relatif aux conditions d'ouverture et aux modalités d'exercice de la " +
+                "pêche, version en vigueur depuis le 01/01/2025 (wallex.wallonie.be, consultée le 22/11/2026). " +
+                "Des interdictions temporaires locales restent possibles (art. 7) : respectez la signalisation sur place. " +
+                "Permis de pêche obligatoire.",
+        )
+    }
+}
+
+/** Règles explicites de l'AGW du 08/12/2016 (version au 01/01/2025) utiles au pêcheur de carnassiers en Meuse. */
+private val RULES = listOf(
+    "Carnassiers (brochet, sandre, perche, aspe = groupe 2) : ouverts du 1er samedi de juin au 31 janvier en eaux calmes ; fermés du 1er février à la veille du 1er samedi de juin." to "Art. 4, 2° ; annexes 2 et 3",
+    "Pêche de nuit interdite pour ces espèces (seule la carpe commune peut être pêchée de nuit)." to "Art. 5",
+    "Pendant la fermeture du brochet : ni poissons-appâts (vivants ou morts), ni leurres ; seule exception en eaux calmes : leurre ≤ 7 cm à hameçon simple, avec un matériel de pêche à la mouche." to "Art. 10, §2",
+    "Interdit de pêcher du haut des ponts et passerelles qui enjambent la Meuse (donc pas depuis le pont d'Engis), dans les écluses, et sur ou à moins de 50 m en aval des barrages." to "Art. 6, 1°, 3° et 4°",
+    "Brochet : tout prélèvement interdit en Meuse du 01/01/2025 au 31/12/2027 — remise à l'eau obligatoire." to "Art. 13, al. 1er, 6°",
+    "Sandre : au moins 50 cm et 2 par jour au maximum. Perche : au moins 24 cm et 5 par jour au maximum." to "Art. 13",
+    "Brochet et sandre : interdiction de les garder vivants (bourriche, panier ou autre contenant)." to "Art. 13",
+    "Meuse : poissons pris hors du lit principal non prélevables ; pêche au vif uniquement dans le lit principal." to "Art. 13, 1° ; art. 9, 3°",
+)

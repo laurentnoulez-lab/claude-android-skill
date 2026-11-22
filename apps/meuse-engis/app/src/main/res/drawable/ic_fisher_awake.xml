@@ -1,0 +1,26 @@
+<!-- Pêcheur debout, canne levée, poisson au bout de la ligne (pêche autorisée et courant normal). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <!-- chapeau -->
+    <path android:fillColor="#0CA30C" android:pathData="M11,2.5h6v3h-6z" />
+    <path android:strokeColor="#0CA30C" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M8.5,5.5h11" />
+    <!-- tête -->
+    <path android:fillColor="#0CA30C" android:pathData="M14,10.5m-3.5,0a3.5,3.5 0,1 0,7 0a3.5,3.5 0,1 0,-7 0" />
+    <!-- corps, jambes, bras -->
+    <path android:strokeColor="#0CA30C" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:pathData="M14,15.5L14,28M14,28L10,40M14,28L18,40" />
+    <path android:strokeColor="#0CA30C" android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M14,19L21,22" />
+    <!-- canne et fil -->
+    <path android:strokeColor="#0CA30C" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M18,24L43,6" />
+    <path android:strokeColor="#0CA30C" android:strokeWidth="1.2" android:pathData="M43,6L43,31" />
+    <!-- poisson -->
+    <path android:fillColor="#0CA30C"
+        android:pathData="M39,35c2,-2.6 6,-2.6 8,0c-2,2.6 -6,2.6 -8,0zM39.5,35l-2.5,-2.2v4.4z" />
+    <!-- eau -->
+    <path android:strokeColor="#0CA30C" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M3,44.5q2.5,-2 5,0t5,0t5,0t5,0t5,0t5,0t5,0t5,0" />
+</vector>
