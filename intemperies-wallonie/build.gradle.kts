@@ -10,8 +10,8 @@ plugins {
 // Génère les deux applications en une commande :
 //   ./gradlew buildAll
 //   → app/build/outputs/apk/debug/app-debug.apk  (Android)
-//   → desktop/build/distributions/IntemperiesWallonie-Windows.zip  (Windows : IntemperiesWallonie.exe + Java intégré)
+//   → desktop/build/distributions/IntemperiesWallonie-Setup-<version>.exe  (installateur Windows, Java inclus)
 tasks.register("buildAll") {
     group = "distribution"
-    dependsOn(":core:test", ":app:assembleDebug", ":desktop:windowsZip")
+    dependsOn(":core:test", ":app:assembleDebug", ":desktop:windowsInstaller")
 }

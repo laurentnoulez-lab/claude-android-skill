@@ -89,6 +89,7 @@ fun downloadVerified(url: String, sha: String, dest: File) {
     if (digest != sha) { dest.delete(); throw GradleException("Empreinte SHA-256 inattendue pour $url : $digest") }
 }
 
+val appVersion = "1.1.0"
 val winDir = layout.buildDirectory.dir("windows/IntemperiesWallonie")
 
 val windowsRuntimeImage by tasks.registering {
@@ -110,11 +111,18 @@ val windowsRuntimeImage by tasks.registering {
         val certifi = layout.buildDirectory.file("cache/certifi.whl").get().asFile
         downloadVerified(certifiWheelUrl, certifiWheelSha, certifi)
         val pem = project.zipTree(certifi).matching { include("certifi/cacert.pem") }.singleFile
-        val ks = KeyStore.getInstance("PKCS12").apply { load(null, null) }
+        // Format JKS : les certificats de confiance y sont lisibles sans mot de passe (un PKCS12 généré ici chiffre
+        // les certificats et Java, qui ouvre cacerts sans mot de passe, le verrait vide).
+        val ks = KeyStore.getInstance("JKS").apply { load(null, null) }
         val certs = CertificateFactory.getInstance("X.509").generateCertificates(pem.inputStream())
         certs.forEachIndexed { i: Int, c: Certificate -> ks.setCertificateEntry("mozilla-$i", c) }
         File(target, "lib/security").mkdirs()
-        File(target, "lib/security/cacerts").outputStream().use { ks.store(it, "changeit".toCharArray()) }
+        val cacerts = File(target, "lib/security/cacerts")
+        cacerts.outputStream().use { ks.store(it, "changeit".toCharArray()) }
+        // Contrôle : rechargement SANS mot de passe, comme le fait Java au démarrage de l'application.
+        val reread = KeyStore.getInstance(KeyStore.getDefaultType()).apply { cacerts.inputStream().use { load(it, null) } }
+        val anchors = reread.aliases().toList().count { a: String -> reread.isCertificateEntry(a) }
+        if (anchors < 100) throw GradleException("Magasin de certificats illisible sans mot de passe ($anchors autorités)")
         logger.lifecycle("Environnement Java Windows prêt (${certs.size} autorités de certification).")
     }
 }
@@ -173,14 +181,15 @@ val windowsExe by tasks.registering(JavaExec::class) {
                 <minVersion>17</minVersion>
                 <maxHeapPercent>50</maxHeapPercent>
                 <opt>-Dfile.encoding=UTF-8</opt>
+                <opt>-Djavax.net.ssl.trustStoreType=JKS</opt>
               </jre>
               <versionInfo>
-                <fileVersion>1.0.0.0</fileVersion>
-                <txtFileVersion>1.0.0</txtFileVersion>
+                <fileVersion>$appVersion.0</fileVersion>
+                <txtFileVersion>$appVersion</txtFileVersion>
                 <fileDescription>Intemperies Wallonie</fileDescription>
                 <copyright>Sources des donnees : SPW</copyright>
-                <productVersion>1.0.0.0</productVersion>
-                <txtProductVersion>1.0.0</txtProductVersion>
+                <productVersion>$appVersion.0</productVersion>
+                <txtProductVersion>$appVersion</txtProductVersion>
                 <productName>Intemperies Wallonie</productName>
                 <internalName>IntemperiesWallonie</internalName>
                 <originalFilename>IntemperiesWallonie.exe</originalFilename>
@@ -202,4 +211,21 @@ tasks.register<Zip>("windowsZip") {
     from(winDir) { into("IntemperiesWallonie") }
     from(project.file("packaging/LISEZMOI.txt")) { into("IntemperiesWallonie") }
     from(project.file("src/main/resources/fonts/DejaVu-LICENSE.txt")) { into("IntemperiesWallonie/licences") }
+}
+
+// Installateur Windows (NSIS) : IntemperiesWallonie-Setup-<version>.exe — requiert makensis (apt install nsis).
+tasks.register<Exec>("windowsInstaller") {
+    group = "distribution"
+    dependsOn(windowsRuntimeImage, windowsExe)
+    val out = layout.buildDirectory.file("distributions/IntemperiesWallonie-Setup-$appVersion.exe")
+    outputs.file(out)
+    doFirst { out.get().asFile.parentFile.mkdirs() }
+    commandLine(
+        "makensis", "-V2",
+        "-DVERSION=$appVersion",
+        "-DSRC=${winDir.get().asFile.absolutePath}",
+        "-DICON=${project.file("packaging/icon.ico").absolutePath}",
+        "-DOUTFILE=${out.get().asFile.absolutePath}",
+        project.file("packaging/installer.nsi").absolutePath,
+    )
 }

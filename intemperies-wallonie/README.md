@@ -105,26 +105,27 @@ Même moteur de calcul (module `core`) et mêmes écrans (`shared-ui`) que l'app
 communes à gauche, calendrier au centre, détail du jour (graphique) à droite ; paramètres, Fonctionnement,
 Base réglementaire ; exports PDF (PDFBox, polices DejaVu embarquées) et Excel identiques.
 
-- **Livrable** : `IntemperiesWallonie-Windows.zip` → dossier `IntemperiesWallonie` avec `IntemperiesWallonie.exe`
-  (lanceur Launch4j) et l'environnement Java 25 intégré (`runtime`, OpenJDK issu du paquet PyPI `jdk4py`, épinglé par
-  SHA-256). Aucune installation de Java requise.
+- **Livrable** : `IntemperiesWallonie-Setup-<version>.exe`, installateur Windows (NSIS) : installation par utilisateur
+  sans droits administrateur (`%LOCALAPPDATA%\Programs\IntemperiesWallonie`), raccourcis menu Démarrer et Bureau,
+  désinstallation depuis « Applications installées ». Java 25 inclus (OpenJDK issu du paquet PyPI `jdk4py`, épinglé par
+  SHA-256). Une version portable (ZIP) reste disponible : `./gradlew :desktop:windowsZip`.
 - **Mémoire** : paramètres, communes et mesures dans `%APPDATA%\IntemperiesWallonie` (fichiers JSON et binaires,
   écriture atomique) ; synchronisation au démarrage puis toutes les heures tant que l'application est ouverte.
 - **Certificats HTTPS** : l'environnement Java fourni n'ayant pas de magasin de certificats, un magasin est généré à partir
-  des autorités Mozilla (paquet `certifi`, épinglé par SHA-256).
+  des autorités Mozilla (paquet `certifi`, épinglé par SHA-256), au format JKS lisible sans mot de passe (vérifié à la construction).
 - **Autodiagnostic** : `IntemperiesWallonie.exe --selfcheck C:\Temp\diag` (connexion SPW, synchro, exports, rendu).
 
 ## Construire et installer
 
-Prérequis : JDK 17+, Android SDK (plateforme 36) ; pour le .exe sous Linux : `apt install binutils-mingw-w64-i686`.
+Prérequis : JDK 17+, Android SDK (plateforme 36) ; pour Windows sous Linux : `apt install binutils-mingw-w64-i686 nsis`.
 
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
 ./gradlew :core:test             # tests du cœur commun (classification, synchro, exports, parseur KiWIS…)
-./gradlew buildAll               # les deux applications : APK Android + ZIP Windows (.exe)
+./gradlew buildAll               # les deux applications : APK Android + installateur Windows
 ./gradlew assembleDebug          # Android seul : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :desktop:windowsZip    # Windows seul : desktop/build/distributions/IntemperiesWallonie-Windows.zip
+./gradlew :desktop:windowsInstaller  # Windows seul : desktop/build/distributions/IntemperiesWallonie-Setup-<version>.exe
 ```
 
 Captures du graphique journalier (Robolectric, réseau requis) :
