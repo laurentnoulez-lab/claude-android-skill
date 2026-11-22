@@ -28,7 +28,11 @@ object DayClassifier {
     const val TEMPERATURE_STEP_SEC = 3600L
     private const val EPS = 1e-9
 
-    /** Code qualité SPW : les données validées ont un code < 200 (mentions légales hydrometrie.wallonie.be). */
+    /**
+     * Code qualité SPW : les données validées ont un code < 200 (mentions légales hydrometrie.wallonie.be).
+     * Seule la pluie (critère déterminant) alimente l'indicateur « provisoire » : les séries de température
+     * SPW restent au code 200 (constat du 22/11/2026).
+     */
     const val VALIDATED_QUALITY_LIMIT = 200
 
     fun classify(
@@ -106,7 +110,6 @@ object DayClassifier {
                 if (overlap > 0) {
                     weighted += t.value * overlap
                     weight += overlap
-                    if (t.quality >= VALIDATED_QUALITY_LIMIT) provisional = true
                 }
             }
         }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.WaterDrop
@@ -52,7 +51,12 @@ import be.wallonie.intemperies.ui.Fmt
 import be.wallonie.intemperies.ui.components.CountBadge
 import be.wallonie.intemperies.ui.components.MonthStrip
 import be.wallonie.intemperies.ui.components.StatusChip
-import be.wallonie.intemperies.ui.sharePdf
+import be.wallonie.intemperies.ui.shareExport
+import be.wallonie.intemperies.ui.components.ExportMenu
+import be.wallonie.intemperies.export.ExportFormat
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.FileDownload
 import be.wallonie.intemperies.ui.theme.StatusColors
 import java.time.Instant
 import java.time.LocalDate
@@ -74,7 +78,7 @@ fun HomeRoute(
     LaunchedEffect(Unit) {
         viewModel.events.collect { e ->
             when (e) {
-                is HomeEvent.Share -> sharePdf(context, e.file)
+                is HomeEvent.Share -> shareExport(context, e.export)
                 is HomeEvent.Message -> snackbar.showSnackbar(e.text)
             }
         }
@@ -90,7 +94,7 @@ fun HomeScreen(
     syncStatus: SyncStatus?,
     snackbar: SnackbarHostState,
     onRefresh: () -> Unit,
-    onExportAll: () -> Unit,
+    onExportAll: (ExportFormat) -> Unit,
     onOpenCommune: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onPickCommunes: () -> Unit,
@@ -106,7 +110,11 @@ fun HomeScreen(
                 },
                 actions = {
                     if (state is HomeUiState.Content) {
-                        IconButton(onClick = onExportAll) { Icon(Icons.Default.PictureAsPdf, "PDF de toutes les communes (mois en cours)") }
+                        var menu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Default.FileDownload, "Exporter toutes les communes (mois en cours)") }
+                            ExportMenu(menu, onDismiss = { menu = false }, onSelect = onExportAll, subtitle = "toutes les communes")
+                        }
                     }
                     IconButton(onClick = onRefresh, enabled = !syncing) {
                         if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)

@@ -9,7 +9,9 @@ import be.wallonie.intemperies.domain.StationMatcher
 import be.wallonie.intemperies.model.MonthReport
 import be.wallonie.intemperies.model.StationAssignment
 import be.wallonie.intemperies.model.StationKind
-import be.wallonie.intemperies.pdf.CalendarPdfExporter
+import be.wallonie.intemperies.export.CalendarExporter
+import be.wallonie.intemperies.export.ExportFormat
+import be.wallonie.intemperies.export.ExportedFile
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +24,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
 import java.time.YearMonth
 
 data class StationChoices(val rain: List<StationAssignment>, val temperature: List<StationAssignment>)
@@ -32,7 +33,7 @@ class CalendarViewModel(
     private val weather: WeatherRepository,
     private val settings: SettingsRepository,
     catalog: CatalogRepository,
-    private val pdf: CalendarPdfExporter,
+    private val exporter: CalendarExporter,
     private val onStationsChanged: () -> Unit,
 ) : ViewModel() {
     private val current = YearMonth.now(WeatherRepository.BRUSSELS)
@@ -60,8 +61,8 @@ class CalendarViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val _share = MutableSharedFlow<File>(extraBufferCapacity = 1)
-    val share: SharedFlow<File> = _share
+    private val _share = MutableSharedFlow<ExportedFile>(extraBufferCapacity = 1)
+    val share: SharedFlow<ExportedFile> = _share
     private val _exporting = MutableStateFlow(false)
     val exporting: StateFlow<Boolean> = _exporting.asStateFlow()
 
@@ -78,11 +79,11 @@ class CalendarViewModel(
         onStationsChanged()
     }
 
-    fun exportPdf() = viewModelScope.launch {
+    fun export(format: ExportFormat) = viewModelScope.launch {
         val r = report.value ?: return@launch
         _exporting.value = true
         try {
-            _share.emit(pdf.export(listOf(r)))
+            _share.emit(exporter.export(listOf(r), format))
         } finally {
             _exporting.value = false
         }

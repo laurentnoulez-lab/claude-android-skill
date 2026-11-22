@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
         NavHost(navController = nav, startDestination = HomeDest) {
             composable<HomeDest> {
                 val vm = viewModel {
-                    HomeViewModel(container.weatherRepository, container.settingsRepository, container.pdfExporter)
+                    HomeViewModel(container.weatherRepository, container.settingsRepository, container.exporter)
                 }
                 HomeRoute(
                     viewModel = vm,
@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
                 val vm = viewModel(key = "cal_$nis") {
                     CalendarViewModel(
                         nis, container.weatherRepository, container.settingsRepository, container.catalogRepository,
-                        container.pdfExporter, onStationsChanged = { requestSync(false) },
+                        container.exporter, onStationsChanged = { requestSync(false) },
                     )
                 }
                 CalendarRoute(vm, onBack = { nav.popBackStack() }, onOpenRegulatory = { nav.navigate(RegulatoryDest) })

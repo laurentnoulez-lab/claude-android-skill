@@ -89,7 +89,7 @@ object RegulatoryBasis {
         Note(
             "Jours déjà non ouvrables",
             "Samedis, dimanches et jours fériés légaux (1° et 2°) ne sont de toute façon pas des jours ouvrables : " +
-                "l’application les signale mais le PDF distingue les intempéries « ouvrables ». Les congés annuels et " +
+                "l’application les signale, et les exports PDF et Excel comptent à part les intempéries « ouvrables ». Les congés annuels et " +
                 "repos compensatoires du secteur (3°) ne sont pas intégrés.",
         ),
         Note(

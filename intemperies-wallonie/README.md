@@ -15,6 +15,7 @@ collecte les mesures en continu et qualifie chaque journée (vert / orange / rou
 | Stockage | Mois en cours + 6 mois précédents (paramétrable 1–12) ; purge automatique ; seules les stations utilisées sont conservées |
 | Calendrier | Grille mensuelle colorée, détail par jour (pas pluvieux, cumuls, température, couverture), jours fériés légaux |
 | PDF | Calendrier A4 par commune (ou toutes les communes du mois en un seul PDF), liste des jours d'intempéries avec indications pluviométriques, mention de la source SPW ; partage par mail/Teams/Drive |
+| Excel (.xlsx) | Même calendrier coloré + tableau journalier chiffré (date, jour ouvrable, statut, mm, durées, T moy., motif, couverture, validation SPW) + synthèse par formules (`NB.SI`) qui se recalcule si un statut est corrigé ; une feuille par commune + feuille « Base réglementaire ». Généré sans bibliothèque externe |
 | Widget | Un widget par commune : statut du jour, 7 derniers jours, bilan du mois |
 | Base réglementaire | Écran dédié : définition du jour d'intempérie selon le CCT Qualiroutes (ch. A, art. 76 § 4, 4°) |
 
@@ -31,7 +32,7 @@ Un pas est « pluvieux » si son cumul ≥ **0,1 mm**.
 | ⚪ Données insuffisantes | moins de 80 % des mesures disponibles dans la plage |
 
 La température moyenne est pondérée par le recouvrement de chaque heure avec la plage (07:00–08:00 compte pour 30 min).
-Un astérisque (*) signale les journées contenant des données **non encore validées** par le SPW (code qualité ≥ 200).
+Un astérisque (*) signale les journées dont les données de **pluie** ne sont pas encore validées par le SPW (code qualité ≥ 200). Les séries de température SPW restant au code 200, elles n'entrent pas dans cet indicateur.
 
 ## Base réglementaire (écran « Base réglementaire »)
 
@@ -89,12 +90,12 @@ Prérequis : JDK 17+, Android SDK (plateforme 36).
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
-./gradlew testDebugUnitTest      # 19 tests (classification, jours fériés, parseur KiWIS)
+./gradlew testDebugUnitTest      # 22 tests (classification, jours fériés, parseur KiWIS, classeur Excel)
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Contrôle sur données réelles (réseau requis) :
-`LIVE_SPW=1 ./gradlew testDebugUnitTest --tests '*LiveSpwCheck*'`
+`LIVE_SPW=1 XLSX_OUT=/tmp/Wavre.xlsx ./gradlew testDebugUnitTest --tests '*LiveSpwCheck*'` (affiche le mois en cours de Wavre et écrit le classeur Excel correspondant)
 
 ## Architecture
 
@@ -107,6 +108,7 @@ app/src/main/java/be/wallonie/intemperies/
 ├── domain/      DayClassifier (règles), StationMatcher, BelgianHolidays, Geo
 ├── data/        KiwisClient, Room (mesures, stations), SettingsRepository, WeatherRepository (synchro)
 ├── work/        SyncWorker (horaire)
+├── export/      CalendarExporter (PDF / Excel), CalendarWorkbook, XlsxWriter (OOXML sans dépendance)
 ├── pdf/         CalendarPdfExporter (A4)
 ├── ui/          home, calendar, settings, legal (base réglementaire), theme
 └── widget/      Widget Glance + écran de configuration

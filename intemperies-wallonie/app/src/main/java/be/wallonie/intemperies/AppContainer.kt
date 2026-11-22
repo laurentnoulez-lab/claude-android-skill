@@ -6,6 +6,7 @@ import be.wallonie.intemperies.data.SettingsRepository
 import be.wallonie.intemperies.data.WeatherRepository
 import be.wallonie.intemperies.data.db.AppDatabase
 import be.wallonie.intemperies.data.remote.KiwisClient
+import be.wallonie.intemperies.export.CalendarExporter
 import be.wallonie.intemperies.pdf.CalendarPdfExporter
 
 /** Injection de dépendances manuelle (application mono-module, pas besoin de Hilt). */
@@ -20,5 +21,5 @@ class AppContainer(context: Context) {
     val weatherRepository: WeatherRepository by lazy {
         WeatherRepository(database.sampleDao(), kiwisClient, catalogRepository, settingsRepository)
     }
-    val pdfExporter: CalendarPdfExporter by lazy { CalendarPdfExporter(appContext) }
+    val exporter: CalendarExporter by lazy { CalendarExporter(appContext, CalendarPdfExporter(appContext)) }
 }

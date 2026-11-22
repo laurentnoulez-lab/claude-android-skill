@@ -7,6 +7,8 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import be.wallonie.intemperies.export.CalendarExporter
+import be.wallonie.intemperies.export.ExportFormat
 import be.wallonie.intemperies.model.DayReport
 import be.wallonie.intemperies.model.DayStatus
 import be.wallonie.intemperies.model.MonthReport
@@ -61,21 +63,11 @@ class CalendarPdfExporter(private val context: Context) {
             drawFooter(page.canvas, pageNo, generated)
             doc.finishPage(page)
         }
-        val dir = File(context.cacheDir, "pdf").apply { mkdirs() }
-        dir.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > 86_400_000L) it.delete() }
-        val first = reports.first()
-        val name = if (reports.size == 1) {
-            "Intemperies_${safe(first.commune.name)}_${first.month}.pdf"
-        } else {
-            "Intemperies_${reports.size}_communes_${first.month}.pdf"
-        }
-        val file = File(dir, name)
+        val file = File(CalendarExporter.exportDir(context), CalendarExporter.fileName(reports, ExportFormat.PDF))
         file.outputStream().use { doc.writeTo(it) }
         doc.close()
         file
     }
-
-    private fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9-]+"), "_")
 
     // ---------------------------------------------------------------------------------------------
 

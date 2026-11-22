@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -65,7 +64,9 @@ import be.wallonie.intemperies.model.StationKind
 import be.wallonie.intemperies.ui.Fmt
 import be.wallonie.intemperies.ui.components.CountBadge
 import be.wallonie.intemperies.ui.components.StatusChip
-import be.wallonie.intemperies.ui.sharePdf
+import be.wallonie.intemperies.ui.shareExport
+import be.wallonie.intemperies.ui.components.ExportMenu
+import androidx.compose.material.icons.filled.FileDownload
 import be.wallonie.intemperies.ui.theme.StatusColors
 import java.time.LocalDate
 import java.time.LocalTime
@@ -82,7 +83,8 @@ fun CalendarRoute(viewModel: CalendarViewModel, onBack: () -> Unit, onOpenRegula
     var selectedDay by remember { mutableStateOf<DayReport?>(null) }
     var stationDialog by remember { mutableStateOf<StationKind?>(null) }
 
-    LaunchedEffect(Unit) { viewModel.share.collect { sharePdf(context, it) } }
+    LaunchedEffect(Unit) { viewModel.share.collect { shareExport(context, it) } }
+    var exportMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -92,14 +94,17 @@ fun CalendarRoute(viewModel: CalendarViewModel, onBack: () -> Unit, onOpenRegula
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { if (!exporting) viewModel.exportPdf() },
-                icon = {
-                    if (exporting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.PictureAsPdf, null)
-                },
-                text = { Text("PDF du mois") },
-            )
+            Box {
+                ExtendedFloatingActionButton(
+                    onClick = { if (!exporting) exportMenu = true },
+                    icon = {
+                        if (exporting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Default.FileDownload, null)
+                    },
+                    text = { Text("Exporter le mois") },
+                )
+                ExportMenu(exportMenu, onDismiss = { exportMenu = false }, onSelect = viewModel::export)
+            }
         },
     ) { padding ->
         Column(

@@ -7,7 +7,9 @@ import be.wallonie.intemperies.data.SyncOutcome
 import be.wallonie.intemperies.data.SyncStatus
 import be.wallonie.intemperies.data.WeatherRepository
 import be.wallonie.intemperies.model.MonthReport
-import be.wallonie.intemperies.pdf.CalendarPdfExporter
+import be.wallonie.intemperies.export.CalendarExporter
+import be.wallonie.intemperies.export.ExportFormat
+import be.wallonie.intemperies.export.ExportedFile
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,7 +21,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
 import java.time.YearMonth
 
 sealed interface HomeUiState {
@@ -29,14 +30,14 @@ sealed interface HomeUiState {
 }
 
 sealed interface HomeEvent {
-    data class Share(val file: File) : HomeEvent
+    data class Share(val export: ExportedFile) : HomeEvent
     data class Message(val text: String) : HomeEvent
 }
 
 class HomeViewModel(
     private val weather: WeatherRepository,
     settings: SettingsRepository,
-    private val pdf: CalendarPdfExporter,
+    private val exporter: CalendarExporter,
 ) : ViewModel() {
     private val month = YearMonth.now(WeatherRepository.BRUSSELS)
 
@@ -68,11 +69,11 @@ class HomeViewModel(
         }
     }
 
-    fun exportAll() = viewModelScope.launch {
+    fun exportAll(format: ExportFormat) = viewModelScope.launch {
         val reports = (uiState.value as? HomeUiState.Content)?.reports.orEmpty()
         if (reports.isEmpty()) return@launch
-        runCatching { pdf.export(reports) }
+        runCatching { exporter.export(reports, format) }
             .onSuccess { _events.emit(HomeEvent.Share(it)) }
-            .onFailure { _events.emit(HomeEvent.Message("Erreur PDF : ${it.message}")) }
+            .onFailure { _events.emit(HomeEvent.Message("Erreur d'export : ${it.message}")) }
     }
 }
