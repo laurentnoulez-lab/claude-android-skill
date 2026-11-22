@@ -1,0 +1,26 @@
+<!-- Pêcheur assis endormi, canne posée, « Zzz » (pêche non autorisée en ce moment). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <!-- Zzz -->
+    <path android:strokeColor="#898781" android:strokeWidth="1.8" android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M16,10.5h5l-5,5.5h5M24,4.5h4l-4,4.5h4M31,1.5h3l-3,3.2h3" />
+    <!-- tête penchée, œil fermé -->
+    <path android:strokeColor="#898781" android:strokeWidth="2.2"
+        android:pathData="M11,23m-4,0a4,4 0,1 0,8 0a4,4 0,1 0,-8 0" />
+    <path android:strokeColor="#898781" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:pathData="M9.5,22.5q1.3,1.2 2.6,0" />
+    <!-- corps assis, jambes, bras au repos -->
+    <path android:strokeColor="#898781" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:pathData="M13.5,27.5L20,38L31,38L33,43" />
+    <path android:strokeColor="#898781" android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M16,31L23,33" />
+    <!-- canne posée et fil -->
+    <path android:strokeColor="#898781" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M21,35L45,27" />
+    <path android:strokeColor="#898781" android:strokeWidth="1.2" android:pathData="M45,27L45,41" />
+    <!-- sol / eau -->
+    <path android:strokeColor="#898781" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M3,44.5q2.5,-2 5,0t5,0t5,0t5,0t5,0t5,0t5,0t5,0" />
+</vector>
