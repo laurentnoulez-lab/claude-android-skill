@@ -51,7 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -73,7 +72,7 @@ import java.time.LocalTime
 
 
 @Composable
-fun MonthGrid(r: MonthReport, onDayClick: (DayReport) -> Unit) {
+fun MonthGrid(r: MonthReport, onDayClick: (DayReport) -> Unit, cellAspect: Float = 0.82f) {
     val headers = listOf("L", "M", "M", "J", "V", "S", "D")
     Row(Modifier.fillMaxWidth()) {
         headers.forEach {
@@ -88,7 +87,7 @@ fun MonthGrid(r: MonthReport, onDayClick: (DayReport) -> Unit) {
             for (i in 0 until 7) {
                 val d = week.getOrNull(i)
                 Box(Modifier.weight(1f).padding(2.dp)) {
-                    if (d != null) DayCell(d, onClick = { onDayClick(d) })
+                    if (d != null) DayCell(d, onClick = { onDayClick(d) }, aspect = cellAspect)
                 }
             }
         }
@@ -96,7 +95,7 @@ fun MonthGrid(r: MonthReport, onDayClick: (DayReport) -> Unit) {
 }
 
 @Composable
-fun DayCell(d: DayReport, onClick: () -> Unit) {
+fun DayCell(d: DayReport, onClick: () -> Unit, aspect: Float = 0.82f) {
     val color = StatusColors.of(d.status)
     val pending = d.status == DayStatus.FUTURE || d.status == DayStatus.IN_PROGRESS
     val isToday = d.date == LocalDate.now(be.wallonie.intemperies.data.BRUSSELS)
@@ -104,7 +103,7 @@ fun DayCell(d: DayReport, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(0.82f)
+            .aspectRatio(aspect)
             .clip(RoundedCornerShape(8.dp))
             .background(if (pending) MaterialTheme.colorScheme.surfaceContainer else color)
             .border(

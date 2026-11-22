@@ -1,0 +1,21 @@
+INTEMPÉRIES WALLONIE — version Windows
+======================================
+
+Installation : décompresser le dossier « IntemperiesWallonie » où vous voulez
+(par ex. Documents ou C:\Outils), puis double-cliquer sur IntemperiesWallonie.exe.
+Aucune installation de Java n'est nécessaire : l'environnement Java est fourni
+dans le sous-dossier « runtime ». Créez un raccourci vers le .exe si souhaité.
+
+Mémoire : paramètres, communes suivies et mesures téléchargées sont conservés dans
+%APPDATA%\IntemperiesWallonie (ils survivent à la fermeture et aux mises à jour).
+
+Mise à jour : remplacer le dossier IntemperiesWallonie par la nouvelle version ;
+les données de %APPDATA% sont conservées.
+
+Autodiagnostic (en cas de problème) : dans une invite de commandes, depuis le dossier :
+  IntemperiesWallonie.exe --selfcheck C:\Temp\diag
+puis consulter C:\Temp\diag\selfcheck.txt.
+
+Sources des données : SPW — hydrometrie.wallonie.be. Données indicatives, sans valeur légale.
+Licences : environnement Java OpenJDK (GPL v2 + Classpath Exception, notices dans runtime\legal),
+polices DejaVu (licence dans licences\), magasin de certificats issu de certifi (MPL 2.0).

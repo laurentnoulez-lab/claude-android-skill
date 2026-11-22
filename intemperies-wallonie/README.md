@@ -99,15 +99,32 @@ indicateurs objectifs pour documenter la reconnaissance par l'adjudicateur, pas 
   de développement). Sans impact sur la recherche de station (localisation par centroïde).
 - Les congés du bâtiment ne sont pas intégrés (seuls les 10 jours fériés légaux).
 
+## Version Windows
+
+Même moteur de calcul (module `core`) et mêmes écrans (`shared-ui`) que l'application Android, en Compose Desktop :
+communes à gauche, calendrier au centre, détail du jour (graphique) à droite ; paramètres, Fonctionnement,
+Base réglementaire ; exports PDF (PDFBox, polices DejaVu embarquées) et Excel identiques.
+
+- **Livrable** : `IntemperiesWallonie-Windows.zip` → dossier `IntemperiesWallonie` avec `IntemperiesWallonie.exe`
+  (lanceur Launch4j) et l'environnement Java 25 intégré (`runtime`, OpenJDK issu du paquet PyPI `jdk4py`, épinglé par
+  SHA-256). Aucune installation de Java requise.
+- **Mémoire** : paramètres, communes et mesures dans `%APPDATA%\IntemperiesWallonie` (fichiers JSON et binaires,
+  écriture atomique) ; synchronisation au démarrage puis toutes les heures tant que l'application est ouverte.
+- **Certificats HTTPS** : l'environnement Java fourni n'ayant pas de magasin de certificats, un magasin est généré à partir
+  des autorités Mozilla (paquet `certifi`, épinglé par SHA-256).
+- **Autodiagnostic** : `IntemperiesWallonie.exe --selfcheck C:\Temp\diag` (connexion SPW, synchro, exports, rendu).
+
 ## Construire et installer
 
-Prérequis : JDK 17+, Android SDK (plateforme 36).
+Prérequis : JDK 17+, Android SDK (plateforme 36) ; pour le .exe sous Linux : `apt install binutils-mingw-w64-i686`.
 
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
-./gradlew testDebugUnitTest      # 30 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
-./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :core:test             # tests du cœur commun (classification, synchro, exports, parseur KiWIS…)
+./gradlew buildAll               # les deux applications : APK Android + ZIP Windows (.exe)
+./gradlew assembleDebug          # Android seul : app/build/outputs/apk/debug/app-debug.apk
+./gradlew :desktop:windowsZip    # Windows seul : desktop/build/distributions/IntemperiesWallonie-Windows.zip
 ```
 
 Captures du graphique journalier (Robolectric, réseau requis) :
@@ -118,17 +135,12 @@ Contrôle sur données réelles (réseau requis) :
 
 ## Architecture
 
-Module unique, couches séparées (UI Compose + ViewModel / domaine pur Kotlin / données Room + DataStore + KiWIS),
-injection manuelle (`AppContainer`) — volontairement plus léger que la structure multi-modules du skill pour une
-application de cette taille.
+```
+core/        Kotlin pur commun : modèle, règles (DayClassifier), client SPW (KiwisClient), moteur de synchronisation
+             (SyncEngine + interfaces de stockage), rapports, exports Excel et mise en page PDF, textes, référentiels
+shared-ui/   écrans Compose communs (calendrier, détail du jour + graphique, paramètres, Fonctionnement, Base réglementaire)
+app/         Android : Room, DataStore, WorkManager, widget Glance, partage, rendu PDF android.graphics.pdf
+desktop/     Windows : Compose Desktop, stockage fichiers %APPDATA%, PDFBox, paquet .exe (Launch4j + Java intégré)
+```
 
-```
-app/src/main/java/be/wallonie/intemperies/
-├── domain/      DayClassifier (règles), StationMatcher, BelgianHolidays, Geo
-├── data/        KiwisClient, Room (mesures, stations), SettingsRepository, WeatherRepository (synchro)
-├── work/        SyncWorker (horaire)
-├── export/      CalendarExporter (PDF / Excel), CalendarWorkbook, XlsxWriter (OOXML sans dépendance)
-├── pdf/         CalendarPdfExporter (A4)
-├── ui/          home, calendar, settings, legal (base réglementaire), theme
-└── widget/      Widget Glance + écran de configuration
-```
+Toute évolution des règles ou des écrans communs s'applique aux deux applications ; `./gradlew buildAll` les régénère ensemble.

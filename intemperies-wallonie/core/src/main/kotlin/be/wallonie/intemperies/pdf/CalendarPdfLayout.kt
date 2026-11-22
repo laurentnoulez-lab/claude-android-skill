@@ -124,18 +124,19 @@ object CalendarPdfLayout {
         y += 13f
         c.text(temp, MARGIN, y, body)
         y += 12f
-        c.text(Fmt.freshness(r), MARGIN, y, small)
+        y = drawWrapped(c, Fmt.freshness(r), MARGIN, y, PAGE_W - 2 * MARGIN, small)
         y += 6f
-        val boxBottom = y + 52f
-        c.rect(MARGIN, y, PAGE_W - MARGIN, boxBottom, fill = BOX_BG, stroke = null, radius = 4f)
+        // Encadré dimensionné d'après le texte (aucun débordement quels que soient les paramètres).
         val w = PAGE_W - 2 * MARGIN - 12f
-        val yy = drawWrapped(c, "Critères : " + Fmt.criteriaSummary(r.criteria), MARGIN + 6f, y + 12f, w, small)
-        drawWrapped(
-            c,
-            "Base réglementaire : ${RegulatoryBasis.SHORT_REF} — jour où le travail a été rendu impossible pendant " +
-                "quatre heures au moins par suite de conditions météorologiques défavorables, sur reconnaissance de l'adjudicateur.",
-            MARGIN + 6f, yy + 10f, w, tiny,
-        )
+        val criteria = "Critères : " + Fmt.criteriaSummary(r.criteria)
+        val basis = "Base réglementaire : ${RegulatoryBasis.SHORT_REF} — jour où le travail a été rendu impossible pendant " +
+            "quatre heures au moins par suite de conditions météorologiques défavorables, sur reconnaissance de l'adjudicateur."
+        val h1 = wrap(c, criteria, w, small).size * (small.size + 2f)
+        val h2 = wrap(c, basis, w, tiny).size * (tiny.size + 2f)
+        val boxBottom = y + 6f + h1 + 2f + h2 + 4f
+        c.rect(MARGIN, y, PAGE_W - MARGIN, boxBottom, fill = BOX_BG, stroke = null, radius = 4f)
+        val yy = drawWrapped(c, criteria, MARGIN + 6f, y + 12f, w, small)
+        drawWrapped(c, basis, MARGIN + 6f, yy + 10f, w, tiny)
         return boxBottom
     }
 
@@ -194,8 +195,8 @@ object CalendarPdfLayout {
             c.text(label, x + 14f, top + 8.5f, small)
             x += 22f + c.measure(label, small)
         }
-        c.text("gel / chaud : seuil de température atteint · * : précipitations non validées", PAGE_W - MARGIN, top + 8.5f, small, PdfAlign.RIGHT)
-        return top + 10f
+        c.text("gel / chaud : seuil de température atteint · * : précipitations non validées par le SPW", MARGIN, top + 20f, small)
+        return top + 22f
     }
 
     private fun drawSummary(c: PdfCanvas, r: MonthReport, top: Float): Float {
@@ -258,21 +259,29 @@ object CalendarPdfLayout {
         c.text("p. $page", PAGE_W - MARGIN, y - 3f, tiny, PdfAlign.RIGHT)
     }
 
-    /** Texte renvoyé à la ligne ; renvoie l'ordonnée de la dernière ligne. */
-    private fun drawWrapped(c: PdfCanvas, text: String, x: Float, top: Float, width: Float, style: PdfText): Float {
-        var y = top
-        var line = StringBuilder()
+    private fun wrap(c: PdfCanvas, text: String, width: Float, style: PdfText): List<String> {
+        val lines = ArrayList<String>()
+        var line = ""
         for (word in text.split(' ')) {
             val candidate = if (line.isEmpty()) word else "$line $word"
             if (c.measure(candidate, style) > width && line.isNotEmpty()) {
-                c.text(line.toString(), x, y, style)
-                y += style.size + 2f
-                line = StringBuilder(word)
+                lines += line
+                line = word
             } else {
-                line = StringBuilder(candidate)
+                line = candidate
             }
         }
-        if (line.isNotEmpty()) c.text(line.toString(), x, y, style)
+        if (line.isNotEmpty()) lines += line
+        return lines
+    }
+
+    /** Texte renvoyé à la ligne ; renvoie l'ordonnée de la dernière ligne. */
+    private fun drawWrapped(c: PdfCanvas, text: String, x: Float, top: Float, width: Float, style: PdfText): Float {
+        var y = top
+        wrap(c, text, width, style).forEachIndexed { i, l ->
+            if (i > 0) y += style.size + 2f
+            c.text(l, x, y, style)
+        }
         return y
     }
 }
