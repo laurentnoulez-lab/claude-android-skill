@@ -95,8 +95,6 @@ import be.wallonie.intemperies.ui.theme.IntemperiesTheme
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.awt.Desktop
-import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
 import java.time.LocalDateTime
@@ -149,15 +147,12 @@ fun DesktopApp(repo: DesktopRepository, frame: Frame?) {
         selectedNis?.let { repo.observeMonth(it, month) } ?: flowOf(null)
     }.collectAsState(null)
 
+    var exported by remember { mutableStateOf<File?>(null) }
+
+    // Export : création dans le dossier de l'application (toujours autorisé), puis choix de la destination.
     fun export(format: ExportFormat, reports: List<MonthReport>) {
         if (reports.isEmpty()) return
-        val dialog = FileDialog(frame, "Enregistrer le calendrier", FileDialog.SAVE).apply {
-            file = ExportNames.fileName(reports, format)
-            directory = File(System.getProperty("user.home"), "Documents").takeIf { it.isDirectory }?.path ?: System.getProperty("user.home")
-            isVisible = true
-        }
-        val name = dialog.file ?: return
-        val target = File(dialog.directory, if (name.endsWith(".${format.extension}")) name else "$name.${format.extension}")
+        val target = File(ExportActions.dir, ExportNames.fileName(reports, format))
         scope.launch {
             runCatching {
                 when (format) {
@@ -166,8 +161,7 @@ fun DesktopApp(repo: DesktopRepository, frame: Frame?) {
                         CalendarWorkbook.build(reports, LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))),
                     )
                 }
-                if (Desktop.isDesktopSupported()) runCatching { Desktop.getDesktop().open(target) }
-            }.onSuccess { snackbar.showSnackbar("Enregistré : ${target.path}") }
+            }.onSuccess { exported = target }
                 .onFailure { snackbar.showSnackbar("Erreur d'export : ${it.message}") }
         }
     }
@@ -325,6 +319,7 @@ fun DesktopApp(repo: DesktopRepository, frame: Frame?) {
         }
     }
 
+    exported?.let { f -> ExportDoneDialog(f, onClose = { exported = null }) }
     if (picker) CommunePickerDialog(settings.selectedCommunes, onToggle = { repo.toggleCommune(it) }, onClose = { picker = false })
     stationDialog?.let { kind ->
         val r = report

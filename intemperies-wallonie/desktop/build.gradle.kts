@@ -89,7 +89,7 @@ fun downloadVerified(url: String, sha: String, dest: File) {
     if (digest != sha) { dest.delete(); throw GradleException("Empreinte SHA-256 inattendue pour $url : $digest") }
 }
 
-val appVersion = "1.1.0"
+val appVersion = "1.1.1"
 val winDir = layout.buildDirectory.dir("windows/IntemperiesWallonie")
 
 val windowsRuntimeImage by tasks.registering {
