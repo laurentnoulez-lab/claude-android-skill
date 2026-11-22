@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MeuseEngis" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F3F3F1</item>
+    </style>
+</resources>
