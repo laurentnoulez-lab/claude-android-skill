@@ -13,4 +13,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "IntemperiesWallonie"
+include(":core")
 include(":app")

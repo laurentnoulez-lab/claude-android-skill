@@ -15,9 +15,7 @@ class AppContainer(context: Context) {
     val database: AppDatabase by lazy { AppDatabase.build(appContext) }
     val kiwisClient: KiwisClient by lazy { KiwisClient() }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(appContext) }
-    val catalogRepository: CatalogRepository by lazy {
-        CatalogRepository(appContext, database.stationDao(), kiwisClient, settingsRepository)
-    }
+    val catalogRepository: CatalogRepository by lazy { CatalogRepository(database.stationDao()) }
     val weatherRepository: WeatherRepository by lazy {
         WeatherRepository(database.sampleDao(), kiwisClient, catalogRepository, settingsRepository)
     }

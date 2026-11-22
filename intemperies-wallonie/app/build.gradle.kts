@@ -32,6 +32,10 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets {
+        // Écrans Compose communs avec l'application Windows.
+        getByName("main").java.srcDir("../shared-ui/src/main/kotlin")
+    }
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
@@ -49,6 +53,7 @@ ksp {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

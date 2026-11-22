@@ -23,13 +23,7 @@ import java.time.LocalTime
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 private val Context.syncStore: DataStore<Preferences> by preferencesDataStore(name = "sync_state")
 
-data class SyncStatus(
-    val lastSuccessEpochSec: Long?,
-    val lastError: String?,
-    val running: Boolean = false,
-)
-
-class SettingsRepository(context: Context) {
+class SettingsRepository(context: Context) : SyncStateStore {
     private val store = context.settingsStore
     private val syncStore = context.syncStore
 
@@ -111,24 +105,31 @@ class SettingsRepository(context: Context) {
 
     val syncStatus: Flow<SyncStatus> = syncStore.data.map { SyncStatus(it[S.lastSuccess], it[S.lastError]) }
 
-    suspend fun markSyncSuccess(epochSec: Long, deep: Boolean) = syncStore.edit {
-        it[S.lastSuccess] = epochSec
-        it.remove(S.lastError)
-        if (deep) it[S.lastDeep] = epochSec
+    override suspend fun markSyncSuccess(epochSec: Long, deep: Boolean) {
+        syncStore.edit {
+            it[S.lastSuccess] = epochSec
+            it.remove(S.lastError)
+            if (deep) it[S.lastDeep] = epochSec
+        }
     }
 
-    suspend fun markSyncError(message: String) = syncStore.edit { it[S.lastError] = message }
+    override suspend fun markSyncError(message: String) {
+        syncStore.edit { it[S.lastError] = message }
+    }
 
-    suspend fun lastDeepSync(): Long? = syncStore.data.first()[S.lastDeep]
+    override suspend fun lastDeepSync(): Long? = syncStore.data.first()[S.lastDeep]
 
-    suspend fun lastStationRefresh(): Long? = syncStore.data.first()[S.lastStationRefresh]
+    override suspend fun lastStationRefresh(): Long? = syncStore.data.first()[S.lastStationRefresh]
 
-    suspend fun markStationRefresh(epochSec: Long) = syncStore.edit { it[S.lastStationRefresh] = epochSec }
+    override suspend fun markStationRefresh(epochSec: Long) {
+        syncStore.edit { it[S.lastStationRefresh] = epochSec }
+    }
 
-    suspend fun historyStart(kind: StationKind, stationNo: String): Long? = syncStore.data.first()[S.history(kind, stationNo)]
+    override suspend fun historyStart(kind: StationKind, stationNo: String): Long? = syncStore.data.first()[S.history(kind, stationNo)]
 
-    suspend fun setHistoryStart(kind: StationKind, stationNo: String, epochSec: Long) =
+    override suspend fun setHistoryStart(kind: StationKind, stationNo: String, epochSec: Long) {
         syncStore.edit { it[S.history(kind, stationNo)] = epochSec }
+    }
 
     private fun String?.toNisList(): List<String> = this?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
 

@@ -46,7 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import be.wallonie.intemperies.data.WeatherRepository
+import be.wallonie.intemperies.data.BRUSSELS
 import be.wallonie.intemperies.domain.DayClassifier
 import be.wallonie.intemperies.model.Criteria
 import be.wallonie.intemperies.model.DayReport
@@ -76,7 +76,7 @@ fun DayChart(day: DayReport, criteria: Criteria, temperatureStationLabel: String
     val ws = criteria.windowStart.toSecondOfDay().toDouble()
     val we = criteria.windowEnd.toSecondOfDay().toDouble()
     val stepSec = criteria.stepMinutes.coerceAtLeast(5) * 60.0
-    val zone = WeatherRepository.BRUSSELS
+    val zone = BRUSSELS
     // Températures exprimées en secondes depuis minuit (début d'heure), limitées à la plage.
     val temps = day.temperaturePoints.map {
         Instant.ofEpochSecond(it.epochSec).atZone(zone).toLocalTime().toSecondOfDay().toDouble() to it.value

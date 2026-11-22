@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import be.wallonie.intemperies.data.SettingsRepository
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HowItWorksRoute(settings: SettingsRepository, onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenRegulatory: () -> Unit) {
@@ -41,32 +42,6 @@ fun HowItWorksRoute(settings: SettingsRepository, onBack: () -> Unit, onOpenSett
         },
     ) { padding ->
         val current = s ?: return@Scaffold
-        Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        ) {
-            Text(
-                "Valeurs affichées = paramètres actuellement en vigueur",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-            HowItWorks.sections(current.criteria, current.retentionMonths).forEach { section ->
-                Card(
-                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(section.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        section.lines.forEach { line ->
-                            Text("• $line", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
-                        }
-                    }
-                }
-            }
-            TextButton(onClick = onOpenSettings) { Text("Modifier les paramètres") }
-            TextButton(onClick = onOpenRegulatory) { Text("Base réglementaire (CCT Qualiroutes)") }
-            Spacer(Modifier.height(24.dp))
-        }
+        HowItWorksContent(current, onOpenSettings, onOpenRegulatory, Modifier.padding(padding))
     }
 }
