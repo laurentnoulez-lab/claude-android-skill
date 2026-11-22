@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Calendrier -->
+    <path android:fillColor="#FFFFFF" android:pathData="M30,36h48a4,4 0,0 1,4 4v34a4,4 0,0 1,-4 4H30a4,4 0,0 1,-4 -4V40a4,4 0,0 1,4 -4z"/>
+    <path android:fillColor="#E57373" android:pathData="M26,40a4,4 0,0 1,4 -4h48a4,4 0,0 1,4 4v6H26z"/>
+    <path android:fillColor="#81C784" android:pathData="M32,52h10v8H32z"/>
+    <path android:fillColor="#FFB74D" android:pathData="M45,52h10v8H45z"/>
+    <path android:fillColor="#E57373" android:pathData="M58,52h10v8H58z"/>
+    <path android:fillColor="#81C784" android:pathData="M32,64h10v8H32z"/>
+    <!-- Goutte -->
+    <path android:fillColor="#1E88E5" android:pathData="M66,60c0,0 -7,8 -7,12.5a7,7 0,0 0,14 0C73,68 66,60 66,60z"/>
+</vector>

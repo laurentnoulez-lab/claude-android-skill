@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Intempéries</string>
+    <string name="widget_label">Intempéries – commune</string>
+    <string name="widget_description">Statut du jour, 7 derniers jours et bilan du mois pour une commune</string>
+</resources>
