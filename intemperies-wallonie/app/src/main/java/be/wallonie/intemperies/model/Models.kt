@@ -63,12 +63,12 @@ data class Criteria(
      * (moyenne horaire) est strictement inférieure au seuil. Atteint si durée ≥ [coldMinHours].
      */
     val coldThresholdC: Double = 0.0,
-    val coldMinHours: Double = 4.0,
+    val coldMinHours: Double = 3.0,
     /** Si coché, le seuil bas atteint rend la journée « intempérie ». */
     val coldCountsAsIntemperie: Boolean = false,
     /** Seuil haut (canicule) : température (moyenne horaire) strictement supérieure au seuil. */
-    val heatThresholdC: Double = 30.0,
-    val heatMinHours: Double = 4.0,
+    val heatThresholdC: Double = 32.0,
+    val heatMinHours: Double = 3.0,
     /** Si coché, le seuil haut atteint rend la journée « intempérie ». */
     val heatCountsAsIntemperie: Boolean = false,
     /** Part minimale de données disponibles dans la plage pour statuer. */

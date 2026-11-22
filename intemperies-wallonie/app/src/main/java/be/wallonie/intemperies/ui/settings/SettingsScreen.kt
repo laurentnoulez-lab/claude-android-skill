@@ -224,7 +224,7 @@ fun SettingsRoute(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Rétablir les valeurs par défaut ?") },
-            text = { Text("07:30–16:00, précipitations consécutives > 3 h ou totales > 4 h, orange ≥ 2 h ; gel < 0 °C et canicule > 30 °C pendant ≥ 4 h, signalés sans être bloquants.") },
+            text = { Text("07:30–16:00, précipitations consécutives > 3 h ou totales > 4 h, orange ≥ 2 h ; gel < 0 °C et canicule > 32 °C pendant ≥ 3 h, signalés sans être bloquants.") },
             confirmButton = { TextButton(onClick = { viewModel.resetCriteria(); confirmReset = false }) { Text("Rétablir") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Annuler") } },
         )

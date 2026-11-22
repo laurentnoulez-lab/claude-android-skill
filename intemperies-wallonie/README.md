@@ -32,11 +32,11 @@ atteignent les seuils activés. Valeurs par défaut :
 |---|---|---|
 | Précipitations | plage **07:30–16:00**, pas de **30 min** (15 / 30 / 60), pas « avec précipitations » si cumul ≥ **0,1 mm** ; consécutives **> 3 h** ou totales **> 4 h** (option ≥) | 🔴 intempérie |
 | Précipitations | totales **≥ 2 h** sans intempérie | 🟠 orange |
-| Température — seuil bas (gel) | T **< 0 °C** pendant **≥ 4 h** cumulées dans la plage | signalé ❄, case à cocher pour 🔴 |
-| Température — seuil haut (canicule) | T **> 30 °C** pendant **≥ 4 h** cumulées dans la plage | signalé ☀, case à cocher pour 🔴 |
+| Température — seuil bas (gel) | T **< 0 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ❄, case à cocher pour 🔴 |
+| Température — seuil haut (canicule) | T **> 32 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ☀, case à cocher pour 🔴 |
 | Données | < **80 %** des mesures de précipitations disponibles | ⚪ gris |
 
-Les valeurs 30 °C et 4 h pour la température sont des valeurs de départ proposées (non imposées par un texte) ;
+Les valeurs de température (0 °C, 32 °C, 3 h) sont les réglages par défaut choisis par l'utilisateur (non imposés par un texte) ;
 les cases « provoque une intempérie » sont décochées par défaut, conformément à la demande initiale.
 
 - **Précipitations** : les pluviomètres SPW sont « à pesée » (source : hydrometrie.wallonie.be › Réseaux de mesure).
@@ -104,7 +104,7 @@ Prérequis : JDK 17+, Android SDK (plateforme 36).
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
-./gradlew testDebugUnitTest      # 25 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
+./gradlew testDebugUnitTest      # 26 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ```
 

@@ -118,13 +118,13 @@ class DayClassifierTest {
     @Test
     fun coldDurationMustReachMinimum() {
         val c = criteria.copy(coldCountsAsIntemperie = true)
+        val two = DayClassifier.classify(day, samples(), tempsWithColdHours(2), c, zone, later)
+        assertEquals(2.0, two.coldHours!!, 1e-9)
+        assertEquals(DayStatus.DRY, two.status)
         val three = DayClassifier.classify(day, samples(), tempsWithColdHours(3), c, zone, later)
-        assertEquals(3.0, three.coldHours!!, 1e-9)
-        assertEquals(DayStatus.DRY, three.status)
-        val four = DayClassifier.classify(day, samples(), tempsWithColdHours(4), c, zone, later)
-        assertEquals(DayStatus.INTEMPERIE, four.status) // durée ≥ 4 h
-        val shorter = DayClassifier.classify(day, samples(), tempsWithColdHours(3), c.copy(coldMinHours = 2.5), zone, later)
-        assertEquals(DayStatus.INTEMPERIE, shorter.status)
+        assertEquals(DayStatus.INTEMPERIE, three.status) // durée ≥ 3 h (défaut)
+        val longer = DayClassifier.classify(day, samples(), tempsWithColdHours(3), c.copy(coldMinHours = 3.5), zone, later)
+        assertEquals(DayStatus.DRY, longer.status)
     }
 
     @Test
@@ -141,6 +141,20 @@ class DayClassifierTest {
         assertEquals(setOf(Reason.HEAT), blocking.reasons)
         val higher = DayClassifier.classify(day, samples(), hot, criteria.copy(heatCountsAsIntemperie = true, heatThresholdC = 35.0), zone, later)
         assertEquals(DayStatus.DRY, higher.status)
+    }
+
+    @Test
+    fun defaultTemperatureCriteria() {
+        val d = Criteria()
+        assertEquals(0.0, d.coldThresholdC, 0.0)
+        assertEquals(32.0, d.heatThresholdC, 0.0)
+        assertEquals(3.0, d.coldMinHours, 0.0)
+        assertEquals(3.0, d.heatMinHours, 0.0)
+        assertFalse(d.coldCountsAsIntemperie || d.heatCountsAsIntemperie)
+        // Exactement 32 °C ne dépasse pas le seuil haut (« supérieure à »).
+        val start = day.atStartOfDay(zone).toEpochSecond()
+        val at32 = (0 until 24).map { h -> Sample(start + h * 3600L, 32.0, 40) }
+        assertEquals(0.0, DayClassifier.classify(day, samples(), at32, d, zone, later).heatHours!!, 1e-9)
     }
 
     @Test
