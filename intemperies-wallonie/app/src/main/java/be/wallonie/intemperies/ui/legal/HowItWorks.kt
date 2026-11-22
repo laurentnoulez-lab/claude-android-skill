@@ -82,6 +82,16 @@ object HowItWorks {
                 ),
             ),
             Section(
+                "Détail d'une journée",
+                listOf(
+                    "Toucher un jour du calendrier affiche deux graphiques superposés sur la plage de travail " +
+                        "${c.windowStart}–${c.windowEnd} : les précipitations par pas de ${c.stepMinutes} min (barre pleine = pas compté, " +
+                        "barre claire = sous le seuil de ${Fmt.num(c.wetStepThresholdMm)} mm) et la température horaire avec les seuils gel / canicule.",
+                    "L'axe horaire suit automatiquement la plage paramétrée. Toucher ou glisser sur le graphique affiche les valeurs ; " +
+                        "un tableau des valeurs est aussi disponible.",
+                ),
+            ),
+            Section(
                 "6. Jours ouvrables",
                 listOf(
                     "Samedis, dimanches et les 10 jours fériés légaux sont signalés ; les exports comptent à part les " +

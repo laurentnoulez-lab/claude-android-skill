@@ -285,7 +285,7 @@ private fun IntemperieList(r: MonthReport, onDayClick: (DayReport) -> Unit) {
 
 @Composable
 private fun DayDetail(d: DayReport, r: MonthReport?) {
-    Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
         Text(Fmt.longDate(d.date), style = MaterialTheme.typography.titleLarge)
         d.holidayName?.let { Text("Jour férié : $it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
@@ -295,6 +295,14 @@ private fun DayDetail(d: DayReport, r: MonthReport?) {
         }
         Spacer(Modifier.height(12.dp))
         val c = r?.criteria
+        if (c != null && d.status != DayStatus.FUTURE) {
+            DayChart(
+                day = d,
+                criteria = c,
+                temperatureStationLabel = r.temperatureStation?.let { "${it.station.name}, ${Fmt.num(it.distanceKm)} km" },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         Metric("Précipitations dans la plage ${c?.windowStart ?: ""}–${c?.windowEnd ?: ""}", Fmt.mm(d.windowRainMm))
         Metric("Durée de précipitations", Fmt.hours(d.rainHours))
         Metric("Précipitations consécutives max.", Fmt.hours(d.maxConsecutiveRainHours))
@@ -305,33 +313,8 @@ private fun DayDetail(d: DayReport, r: MonthReport?) {
         if (c != null && d.heatHours != null) Metric("Durée T > ${Fmt.deg(c.heatThresholdC)} (canicule)", Fmt.hours(d.heatHours))
         Metric("Données disponibles", "${(d.coverage * 100).toInt()} %")
         if (d.provisional) Metric("Validation SPW", "non encore validées")
-        if (c != null && d.wetSteps.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Text("Pas de ${c.stepMinutes} min avec précipitations (≥ ${Fmt.num(c.wetStepThresholdMm)} mm)", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                d.wetSteps.forEach { wet ->
-                    Box(
-                        Modifier.weight(1f).height(22.dp).clip(RoundedCornerShape(3.dp))
-                            .background(if (wet) Color0x1E88E5 else MaterialTheme.colorScheme.surfaceContainerHigh),
-                    )
-                }
-            }
-            Row(Modifier.fillMaxWidth()) {
-                Text(c.windowStart.toString(), style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.weight(1f))
-                Text(midTime(c.windowStart, c.windowEnd).toString(), style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.weight(1f))
-                Text(c.windowEnd.toString(), style = MaterialTheme.typography.labelSmall)
-            }
-        }
     }
 }
-
-private val Color0x1E88E5 = androidx.compose.ui.graphics.Color(0xFF1E88E5)
-
-private fun midTime(a: LocalTime, b: LocalTime): LocalTime =
-    LocalTime.ofSecondOfDay(((a.toSecondOfDay() + b.toSecondOfDay()) / 2).toLong())
 
 @Composable
 private fun Metric(label: String, value: String) {

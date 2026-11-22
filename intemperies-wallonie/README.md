@@ -13,7 +13,7 @@ collecte les mesures en continu et qualifie chaque journée (vert / orange / rou
 | Stations | Pluviomètre SPW le plus proche du centroïde de la commune (choix manuel possible) ; station de température de l'air la plus proche dans un rayon paramétrable |
 | Données | Pluie au pas de 5 min, température horaire ; synchro horaire en arrière-plan (WorkManager), incrémentale ; rechargement quotidien des 35 derniers jours pour intégrer les validations SPW |
 | Stockage | Mois en cours + 6 mois précédents (paramétrable 1–12) ; purge automatique ; seules les stations utilisées sont conservées |
-| Calendrier | Grille mensuelle colorée, détail par jour (pas pluvieux, cumuls, température, couverture), jours fériés légaux |
+| Calendrier | Grille mensuelle colorée, jours fériés légaux ; un toucher sur un jour ouvre le détail avec **graphique de la journée de travail** (précipitations par pas d'analyse + température horaire avec seuils gel/canicule, lecture au doigt, tableau des valeurs). L'axe horaire suit la plage paramétrée |
 | PDF | Calendrier A4 par commune (ou toutes les communes du mois en un seul PDF), liste des jours d'intempéries avec indications pluviométriques, mention de la source SPW ; partage par mail/Teams/Drive |
 | Excel (.xlsx) | Même calendrier coloré + tableau journalier chiffré (date, jour ouvrable, statut, mm, durées, T moy., motif, couverture, validation SPW) + synthèse par formules (`NB.SI`) qui se recalcule si un statut est corrigé ; une feuille par commune + feuilles « Mode de fonctionnement » et « Base réglementaire ». Généré sans bibliothèque externe |
 | Widget | Un widget par commune : statut du jour, 7 derniers jours, bilan du mois |
@@ -104,9 +104,12 @@ Prérequis : JDK 17+, Android SDK (plateforme 36).
 ```bash
 cd intemperies-wallonie
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
-./gradlew testDebugUnitTest      # 26 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
+./gradlew testDebugUnitTest      # 30 tests (classification pluie/gel/canicule, jours fériés, parseur KiWIS, classeur Excel)
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Captures du graphique journalier (Robolectric, réseau requis) :
+`SCREENSHOT_OUT=/tmp/captures ./gradlew testDebugUnitTest -Pscreenshots --tests '*DayChartScreenshotTest*'`
 
 Contrôle sur données réelles (réseau requis) :
 `LIVE_SPW=1 XLSX_OUT=/tmp/Wavre.xlsx ./gradlew testDebugUnitTest --tests '*LiveSpwCheck*'` (affiche le mois en cours de Wavre et écrit le classeur Excel correspondant)

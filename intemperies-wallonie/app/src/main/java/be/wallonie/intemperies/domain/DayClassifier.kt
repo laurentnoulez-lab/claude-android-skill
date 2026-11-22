@@ -65,6 +65,7 @@ object DayClassifier {
             }
         }
         val stepSums = DoubleArray(stepBounds.size)
+        val stepCounts = IntArray(stepBounds.size)
         var windowRain = 0.0
         var dayRain = 0.0
         var samplesInWindow = 0
@@ -77,7 +78,10 @@ object DayClassifier {
                 samplesInWindow++
                 if (sample.quality >= VALIDATED_QUALITY_LIMIT) provisional = true
                 val idx = ((sample.epochSec - windowStart) / stepSec).toInt()
-                if (idx in stepSums.indices) stepSums[idx] += sample.value
+                if (idx in stepSums.indices) {
+                    stepSums[idx] += sample.value
+                    stepCounts[idx]++
+                }
             }
         }
         val wet = stepSums.map { it + EPS >= criteria.wetStepThresholdMm }
@@ -106,6 +110,7 @@ object DayClassifier {
         var weight = 0L
         var coldSec = 0L
         var heatSec = 0L
+        val tempPoints = ArrayList<Sample>()
         var minT = Double.POSITIVE_INFINITY
         var maxT = Double.NEGATIVE_INFINITY
         if (temperatureAvailable) {
@@ -117,6 +122,7 @@ object DayClassifier {
                     weight += overlap
                     if (t.value < criteria.coldThresholdC - EPS) coldSec += overlap
                     if (t.value > criteria.heatThresholdC + EPS) heatSec += overlap
+                    tempPoints += t
                     minT = minOf(minT, t.value)
                     maxT = maxOf(maxT, t.value)
                 }
@@ -161,6 +167,8 @@ object DayClassifier {
             coverage = coverage,
             provisional = provisional,
             wetSteps = wet,
+            stepRainMm = stepSums.indices.map { if (stepCounts[it] == 0) Double.NaN else stepSums[it] },
+            temperaturePoints = tempPoints.sortedBy { it.epochSec },
             holidayName = holiday,
         )
     }
@@ -172,6 +180,7 @@ object DayClassifier {
         date = date, status = status, windowRainMm = 0.0, dayRainMm = 0.0, rainHours = 0.0,
         maxConsecutiveRainHours = 0.0, meanTemperatureC = null, minTemperatureC = null, maxTemperatureC = null,
         coldHours = null, heatHours = null, coldReached = null, heatReached = null,
-        reasons = emptySet(), coverage = 0.0, provisional = false, wetSteps = emptyList(), holidayName = holiday,
+        reasons = emptySet(), coverage = 0.0, provisional = false, wetSteps = emptyList(),
+        stepRainMm = emptyList(), temperaturePoints = emptyList(), holidayName = holiday,
     )
 }

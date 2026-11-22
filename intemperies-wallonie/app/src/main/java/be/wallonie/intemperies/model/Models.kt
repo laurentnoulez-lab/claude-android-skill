@@ -134,6 +134,10 @@ data class DayReport(
     val provisional: Boolean,
     /** Pas d'analyse pluvieux (index) — utile pour le détail. */
     val wetSteps: List<Boolean>,
+    /** Cumul (mm) de chaque pas d'analyse de la plage ; NaN si aucune mesure dans le pas. */
+    val stepRainMm: List<Double>,
+    /** Moyennes horaires de température recouvrant la plage (horodatage = début d'heure). */
+    val temperaturePoints: List<Sample>,
     val holidayName: String?,
 ) {
     val isWeekend: Boolean

@@ -215,7 +215,16 @@ fun SettingsRoute(
     editTime?.let { isStart ->
         val s0 = s?.criteria ?: Criteria()
         val initial = if (isStart) s0.windowStart else s0.windowEnd
-        TimeDialog(initial, onDismiss = { editTime = null }) { t ->
+        TimeDialog(
+            initial = initial,
+            title = if (isStart) "Début de la plage de travail" else "Fin de la plage de travail",
+            validate = { t ->
+                val start = if (isStart) t else s0.windowStart
+                val end = if (isStart) s0.windowEnd else t
+                if (end.isAfter(start)) null else "La fin doit être postérieure au début (${s0.windowStart}–${s0.windowEnd} actuellement)."
+            },
+            onDismiss = { editTime = null },
+        ) { t ->
             viewModel.updateCriteria { if (isStart) it.copy(windowStart = t) else it.copy(windowEnd = t) }
             editTime = null
         }
@@ -244,12 +253,27 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeDialog(initial: LocalTime, onDismiss: () -> Unit, onConfirm: (LocalTime) -> Unit) {
+private fun TimeDialog(
+    initial: LocalTime,
+    title: String,
+    validate: (LocalTime) -> String?,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalTime) -> Unit,
+) {
     val state = rememberTimePickerState(initial.hour, initial.minute, is24Hour = true)
+    val chosen = LocalTime.of(state.hour, state.minute)
+    val error = validate(chosen)
     AlertDialog(
         onDismissRequest = onDismiss,
-        text = { TimePicker(state = state) },
-        confirmButton = { TextButton(onClick = { onConfirm(LocalTime.of(state.hour, state.minute)) }) { Text("OK") } },
+        title = { Text(title) },
+        text = {
+            Column {
+                TimePicker(state = state)
+                if (error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                else Text("Les calculs, graphiques et exports suivront cette plage.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(chosen) }, enabled = error == null) { Text("OK") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

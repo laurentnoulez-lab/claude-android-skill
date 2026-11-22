@@ -34,6 +34,7 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -74,4 +75,14 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// Captures d'écran Robolectric (lentes, réseau requis) : uniquement avec -Pscreenshots
+tasks.withType<Test>().configureEach {
+    if (!project.hasProperty("screenshots")) exclude("**/*Screenshot*")
+    providers.environmentVariable("SCREENSHOT_OUT").orNull?.let { environment("SCREENSHOT_OUT", it) }
 }
