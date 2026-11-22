@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -79,8 +81,12 @@ class WeatherRepository(
                 val lastFlow = st.rain?.let {
                     sampleDao.observeLastEpoch(StationKind.RAIN.name, it.station.stationNo)
                 } ?: flowOf(null)
-                combine(rainFlow, tempFlow, lastFlow) { rain, temp, last ->
-                    buildReport(st, month, s, rain, temp, last)
+                val lastTempFlow = st.temperature?.let {
+                    sampleDao.observeLastEpoch(StationKind.TEMPERATURE.name, it.station.stationNo)
+                } ?: flowOf(null)
+                val syncFlow = settings.syncStatus.map { it.lastSuccessEpochSec }.distinctUntilChanged()
+                combine(rainFlow, tempFlow, lastFlow, lastTempFlow, syncFlow) { rain, temp, last, lastTemp, sync ->
+                    buildReport(st, month, s, rain, temp, last).copy(lastTemperatureDataEpochSec = lastTemp, lastSyncEpochSec = sync)
                 }
             }
             .flowOn(Dispatchers.Default)

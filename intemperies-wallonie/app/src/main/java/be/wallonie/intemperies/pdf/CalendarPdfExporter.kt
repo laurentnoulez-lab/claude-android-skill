@@ -87,6 +87,8 @@ class CalendarPdfExporter(private val context: Context) {
         c.drawText(rain, MARGIN, y, body)
         y += 13f
         c.drawText(temp, MARGIN, y, body)
+        y += 12f
+        c.drawText(Fmt.freshness(r), MARGIN, y, small)
         y += 6f
         val box = RectF(MARGIN, y, PAGE_W - MARGIN, y + 52f)
         c.drawRoundRect(box, 4f, 4f, boxFill)

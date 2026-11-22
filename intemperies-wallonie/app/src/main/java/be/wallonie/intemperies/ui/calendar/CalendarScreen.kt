@@ -65,6 +65,7 @@ import be.wallonie.intemperies.model.StationKind
 import be.wallonie.intemperies.ui.Fmt
 import be.wallonie.intemperies.ui.components.CountBadge
 import be.wallonie.intemperies.ui.components.StatusChip
+import be.wallonie.intemperies.ui.home.FreshnessLine
 import be.wallonie.intemperies.ui.shareExport
 import be.wallonie.intemperies.ui.components.ExportMenu
 import androidx.compose.material.icons.filled.FileDownload
@@ -130,6 +131,13 @@ fun CalendarRoute(viewModel: CalendarViewModel, onBack: () -> Unit, onOpenRegula
                     CountBadge(r.count(DayStatus.DRY), DayStatus.DRY, "sec")
                     if (r.count(DayStatus.NO_DATA) > 0) CountBadge(r.count(DayStatus.NO_DATA), DayStatus.NO_DATA, "sans données")
                 }
+                FreshnessLine(r)
+                Text(
+                    r.lastSyncEpochSec?.let { "Mise à jour depuis le SPW le ${Fmt.dateTime(it)}" } ?: "Données pas encore téléchargées",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
                 MonthGrid(r, onDayClick = { selectedDay = it })
                 Spacer(Modifier.height(16.dp))
                 StationsCard(r, onEdit = { stationDialog = it })
@@ -313,6 +321,9 @@ private fun DayDetail(d: DayReport, r: MonthReport?) {
         if (c != null && d.heatHours != null) Metric("Durée T > ${Fmt.deg(c.heatThresholdC)} (canicule)", Fmt.hours(d.heatHours))
         Metric("Données disponibles", "${(d.coverage * 100).toInt()} %")
         if (d.provisional) Metric("Validation SPW", "non encore validées")
+        if (r != null && d.status == DayStatus.IN_PROGRESS) {
+            Metric("Mesures disponibles jusqu'à", r.lastRainDataEpochSec?.let { Fmt.dateTime(Fmt.rainDataEnd(it)) } ?: "—")
+        }
     }
 }
 

@@ -19,6 +19,30 @@ object Fmt {
     fun mm(v: Double): String = num(v, 1) + " mm"
     fun temp(v: Double?): String = v?.let { num(it, 1) + " °C" } ?: "—"
     fun date(d: LocalDate): String = d.format(dateFmt)
+
+    private val zone: java.time.ZoneId = java.time.ZoneId.of("Europe/Brussels")
+    private val dateTimeFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy 'à' HH:mm", locale)
+
+    /** « 22/11/2026 à 10:40 » (heure belge). */
+    fun dateTime(epochSec: Long): String = java.time.Instant.ofEpochSecond(epochSec).atZone(zone).format(dateTimeFmt)
+
+    /** Fin de la dernière mesure disponible (la valeur horodatée 10:35 couvre 10:35–10:40). */
+    fun rainDataEnd(epochSec: Long): Long = epochSec + 300
+    fun temperatureDataEnd(epochSec: Long): Long = epochSec + 3600
+
+    /** Plus aucune nouvelle mesure de pluie depuis plus de [STALE_HOURS] heures. */
+    const val STALE_HOURS = 3
+    fun isStale(lastRainEpochSec: Long?, nowSec: Long = java.time.Instant.now().epochSecond): Boolean =
+        lastRainEpochSec == null || nowSec - rainDataEnd(lastRainEpochSec) > STALE_HOURS * 3600L
+
+    /** Ligne de fraîcheur des données d'un rapport mensuel. */
+    fun freshness(r: be.wallonie.intemperies.model.MonthReport): String = buildString {
+        append("Mesures disponibles jusqu'au ")
+        append(r.lastRainDataEpochSec?.let { dateTime(rainDataEnd(it)) + " (pluie)" } ?: "— (pluie)")
+        r.lastTemperatureDataEpochSec?.let { append(", ").append(dateTime(temperatureDataEnd(it))).append(" (température)") }
+        append(" · mise à jour depuis le SPW le ")
+        append(r.lastSyncEpochSec?.let { dateTime(it) } ?: "—")
+    }
     fun longDate(d: LocalDate): String = d.format(dayFmt).replaceFirstChar { it.titlecase(locale) }
     fun month(m: YearMonth): String =
         m.month.getDisplayName(TextStyle.FULL_STANDALONE, locale).replaceFirstChar { it.titlecase(locale) } + " " + m.year
@@ -53,6 +77,27 @@ object Fmt {
     /** Température : « 0 °C », « -2,5 °C ». */
     fun deg(v: Double): String = (if (v % 1.0 == 0.0) v.toInt().toString() else num(v)) + " °C"
 
+    /** mm avec 2 décimales seulement si nécessaire : 0,3 / 0,25 / 0,125 → 0,13. */
+    fun mmPrecise(v: Double): String {
+        val r1 = Math.round(v * 10) / 10.0
+        return if (kotlin.math.abs(v - r1) < 1e-9) num(v, 1) else num(v, 2)
+    }
+
+    /** « 0,5 mm/h » */
+    fun intensity(c: Criteria): String = "${mmPrecise(c.wetIntensityMmH)} mm/h"
+
+    /** Seuil court pour le graphique : « 0,25 mm / 30 min » */
+    fun wetThreshold(c: Criteria): String = "${mmPrecise(c.wetStepThresholdMm)} mm / ${c.stepMinutes} min"
+
+    /** « le plus souvent ≥ 0,3 mm » si le cumul théorique n'est pas un multiple de 0,1 mm, sinon vide. */
+    fun practicalNote(c: Criteria): String =
+        if (kotlin.math.abs(c.effectiveStepThresholdMm - c.wetStepThresholdMm) < 1e-9) ""
+        else " (mesures SPW le plus souvent par paliers de 0,1 mm : seuil atteint en général à ${num(c.effectiveStepThresholdMm, 1)} mm)"
+
+    /** « intensité ≥ 0,5 mm/h, soit un cumul ≥ 0,25 mm sur un pas de 30 min (… en pratique ≥ 0,3 mm) » */
+    fun wetThresholdLong(c: Criteria): String =
+        "intensité ≥ ${intensity(c)}, soit un cumul ≥ ${mmPrecise(c.wetStepThresholdMm)} mm sur un pas de ${c.stepMinutes} min${practicalNote(c)}"
+
     fun hoursShort(v: Double): String = if (v % 1.0 == 0.0) "${v.toInt()} h" else hours(v)
 
     fun criteriaSummary(c: Criteria): String {
@@ -65,7 +110,7 @@ object Fmt {
             if (!c.coldCountsAsIntemperie) add("gel T < ${deg(c.coldThresholdC)} ≥ ${hoursShort(c.coldMinHours)}")
             if (!c.heatCountsAsIntemperie) add("canicule T > ${deg(c.heatThresholdC)} ≥ ${hoursShort(c.heatMinHours)}")
         }
-        return "Plage ${c.windowStart}–${c.windowEnd} · pas de ${c.stepMinutes} min avec précipitations si ≥ ${num(c.wetStepThresholdMm)} mm · " +
+        return "Plage ${c.windowStart}–${c.windowEnd} · un pas de ${c.stepMinutes} min compte comme précipitation si ${wetThresholdLong(c)} · " +
             "Intempérie : précipitations consécutives $op ${hoursShort(c.consecutiveRainHours)} ou totales $op ${hoursShort(c.totalRainHours)}$temp · " +
             "Orange : précipitations ≥ ${hoursShort(c.warningRainHours)}" +
             (if (info.isNotEmpty()) " · Signalé sans être bloquant : ${info.joinToString(", ")}" else "")

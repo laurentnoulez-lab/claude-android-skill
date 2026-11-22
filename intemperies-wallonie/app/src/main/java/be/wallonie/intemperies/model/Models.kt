@@ -47,9 +47,13 @@ data class Sample(
 data class Criteria(
     val windowStart: LocalTime = LocalTime.of(7, 30),
     val windowEnd: LocalTime = LocalTime.of(16, 0),
-    /** Pas d'analyse (min) : un pas est « pluvieux » si le cumul du pas ≥ [wetStepThresholdMm]. */
+    /** Pas d'analyse (min) : la plage est découpée en pas de cette durée. */
     val stepMinutes: Int = 30,
-    val wetStepThresholdMm: Double = 0.1,
+    /**
+     * Intensité minimale (mm/h, équivalent eau) pour qu'un pas compte comme « précipitation ».
+     * Le cumul à atteindre sur un pas vaut intensité × durée du pas (cf. [wetStepThresholdMm]).
+     */
+    val wetIntensityMmH: Double = 1.0,
     /** Rouge si pluie consécutive > (ou ≥) ce nombre d'heures. */
     val consecutiveRainHours: Double = 3.0,
     /** Rouge si durée totale de pluie dans la plage > (ou ≥) ce nombre d'heures. */
@@ -75,7 +79,19 @@ data class Criteria(
     val minCoverage: Double = 0.8,
     /** Distance max. de la station de température retenue automatiquement. */
     val maxTemperatureDistanceKm: Double = 40.0,
-)
+) {
+    /** Cumul (mm) à atteindre sur un pas complet : 1 mm/h × 30 min = 0,5 mm. */
+    val wetStepThresholdMm: Double
+        get() = wetIntensityMmH * stepMinutes / 60.0
+
+    /**
+     * Cumul arrondi au 0,1 mm supérieur (0,25 → 0,3 mm). Indicatif : les mesures SPW sont le plus souvent
+     * publiées par paliers de 0,1 mm (constat : 98,4 % des valeurs non nulles à Wavre du 22/05 au 22/11/2026).
+     * Le calcul compare toujours le cumul au seuil exact [wetStepThresholdMm].
+     */
+    val effectiveStepThresholdMm: Double
+        get() = kotlin.math.ceil(wetStepThresholdMm * 10 - 1e-9) / 10.0
+}
 
 data class AppSettings(
     val selectedCommunes: List<String> = emptyList(),
@@ -151,7 +167,11 @@ data class MonthReport(
     val temperatureStation: StationAssignment?,
     val days: List<DayReport>,
     val criteria: Criteria,
+    /** Horodatage (début de pas) de la dernière mesure de pluie / de température disponible. */
     val lastRainDataEpochSec: Long?,
+    val lastTemperatureDataEpochSec: Long? = null,
+    /** Dernière synchronisation réussie avec le SPW. */
+    val lastSyncEpochSec: Long? = null,
 ) {
     fun count(status: DayStatus) = days.count { it.status == status }
 }

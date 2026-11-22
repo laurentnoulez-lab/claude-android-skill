@@ -160,10 +160,10 @@ fun HomeScreen(
 
 private fun syncLabel(s: SyncStatus?): String {
     if (s == null) return ""
-    if (s.lastError != null) return "Dernière synchro en erreur"
-    val last = s.lastSuccessEpochSec ?: return "Jamais synchronisé"
-    val t = Instant.ofEpochSecond(last).atZone(ZoneId.systemDefault())
-    return "Synchronisé le " + t.format(DateTimeFormatter.ofPattern("dd/MM à HH:mm"))
+    val last = s.lastSuccessEpochSec
+    if (s.lastError != null) return "Échec de la dernière mise à jour" + (last?.let { " — données du ${Fmt.dateTime(it)}" } ?: "")
+    if (last == null) return "Données pas encore téléchargées"
+    return "Mise à jour le ${Fmt.dateTime(last)}"
 }
 
 @Composable
@@ -223,7 +223,9 @@ private fun CommuneCard(report: MonthReport, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
+            FreshnessLine(report)
+            Spacer(Modifier.height(10.dp))
             Text(Fmt.month(report.month), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
             MonthStrip(report.days.map { it.status })
@@ -235,4 +237,19 @@ private fun CommuneCard(report: MonthReport, onClick: () -> Unit) {
             }
         }
     }
+}
+
+/** Date et heure de la dernière mesure disponible, avec alerte si la station ne transmet plus. */
+@Composable
+fun FreshnessLine(report: MonthReport, modifier: Modifier = Modifier) {
+    val last = report.lastRainDataEpochSec
+    val stale = Fmt.isStale(last)
+    Text(
+        (if (stale) "⚠ " else "") + "Mesures jusqu'au " +
+            (last?.let { Fmt.dateTime(Fmt.rainDataEnd(it)) } ?: "—") +
+            (if (stale) " — aucune nouvelle mesure depuis plus de ${Fmt.STALE_HOURS} h" else ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (stale) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+    )
 }

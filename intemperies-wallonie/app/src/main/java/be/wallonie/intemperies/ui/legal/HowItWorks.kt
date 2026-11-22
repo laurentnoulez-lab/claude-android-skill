@@ -51,8 +51,12 @@ object HowItWorks {
                 listOf(
                     "Les pluviomètres SPW sont des pluviomètres à pesée : ils pèsent toutes les précipitations recueillies, " +
                         "liquides ou solides, exprimées en mm d'équivalent eau. L'application ne distingue donc pas pluie, neige et grêle.",
-                    "La plage ${c.windowStart}–${c.windowEnd} est découpée en pas de ${c.stepMinutes} min. Un pas compte comme " +
-                        "« précipitation » si son cumul atteint ${Fmt.num(c.wetStepThresholdMm)} mm.",
+                    "La plage ${c.windowStart}–${c.windowEnd} est découpée en pas de ${c.stepMinutes} min. Pour chaque pas, les mesures " +
+                        "du pluviomètre (une valeur toutes les 5 min) sont additionnées. Le pas compte comme temps de précipitation si ce " +
+                        "cumul atteint l'intensité minimale × la durée du pas : ${Fmt.intensity(c)} × ${c.stepMinutes} min = " +
+                        "${Fmt.mmPrecise(c.wetStepThresholdMm)} mm ; sinon il compte comme sec.",
+                    "Les mesures SPW étant le plus souvent publiées par paliers de 0,1 mm, ce seuil est en général atteint à " +
+                        "${Fmt.num(c.effectiveStepThresholdMm, 1)} mm par pas de ${c.stepMinutes} min (le calcul utilise la valeur exacte).",
                     "Durée totale = somme des pas avec précipitations ; durée consécutive = plus longue suite ininterrompue de ces pas.",
                     "Intempérie si précipitations consécutives $op ${Fmt.hoursShort(c.consecutiveRainHours)} " +
                         "OU précipitations totales $op ${Fmt.hoursShort(c.totalRainHours)}.",
@@ -86,7 +90,7 @@ object HowItWorks {
                 listOf(
                     "Toucher un jour du calendrier affiche deux graphiques superposés sur la plage de travail " +
                         "${c.windowStart}–${c.windowEnd} : les précipitations par pas de ${c.stepMinutes} min (barre pleine = pas compté, " +
-                        "barre claire = sous le seuil de ${Fmt.num(c.wetStepThresholdMm)} mm) et la température horaire avec les seuils gel / canicule.",
+                        "barre claire = sous le seuil de ${Fmt.wetThreshold(c)}) et la température horaire avec les seuils gel / canicule.",
                     "L'axe horaire suit automatiquement la plage paramétrée. Toucher ou glisser sur le graphique affiche les valeurs ; " +
                         "un tableau des valeurs est aussi disponible.",
                 ),

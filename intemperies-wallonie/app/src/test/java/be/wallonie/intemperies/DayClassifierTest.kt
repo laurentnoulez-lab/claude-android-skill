@@ -90,11 +90,47 @@ class DayClassifierTest {
     }
 
     @Test
-    fun belowWetThresholdStepIsDry() {
-        // 0,02 mm / 5 min → 0,12 mm / 30 min ≥ 0,1 → pluvieux ; avec seuil 0,2 mm il ne l'est plus.
-        val s = samples(t(8) to t(12), mmPer5 = 0.02)
-        assertEquals(DayStatus.INTEMPERIE, DayClassifier.classify(day, s, temps(8.0), criteria, zone, later).status)
-        assertEquals(DayStatus.DRY, DayClassifier.classify(day, s, temps(8.0), criteria.copy(wetStepThresholdMm = 0.2), zone, later).status)
+    fun wetThresholdIsAnIntensity() {
+        // Défaut 1 mm/h → 0,5 mm par pas de 30 min.
+        assertEquals(1.0, criteria.wetIntensityMmH, 0.0)
+        assertEquals(0.5, criteria.wetStepThresholdMm, 1e-9)
+        assertEquals(0.25, criteria.copy(stepMinutes = 15).wetStepThresholdMm, 1e-9)
+        assertEquals(0.3, criteria.copy(stepMinutes = 15).effectiveStepThresholdMm, 1e-9)
+        // 0,1 mm / 5 min = 0,6 mm / 30 min (1,2 mm/h) : pluvieux.
+        val moderate = samples(t(8) to t(12), mmPer5 = 0.1)
+        assertEquals(DayStatus.INTEMPERIE, DayClassifier.classify(day, moderate, temps(8.0), criteria, zone, later).status)
+        // 0,05 mm / 5 min = 0,3 mm / 30 min (0,6 mm/h) : sous le seuil par défaut…
+        val light = samples(t(8) to t(12), mmPer5 = 0.05)
+        assertEquals(DayStatus.DRY, DayClassifier.classify(day, light, temps(8.0), criteria, zone, later).status)
+        // … mais pluvieux si l'utilisateur abaisse le seuil à 0,5 mm/h.
+        assertEquals(DayStatus.INTEMPERIE, DayClassifier.classify(day, light, temps(8.0), criteria.copy(wetIntensityMmH = 0.5), zone, later).status)
+    }
+
+    @Test
+    fun stepAtExactThresholdCounts() {
+        // 5 × 0,1 mm = 0,5 mm sur le pas 09:00–09:30 : compté (≥ 0,5 mm) ; 4 × 0,1 mm : non compté.
+        val start = day.atStartOfDay(zone).toEpochSecond()
+        val nine = day.atTime(9, 0).atZone(zone).toEpochSecond()
+        fun withTips(n: Int) = (0 until 288).map { i ->
+            val ts = start + i * 300L
+            Sample(ts, if (ts >= nine && ts < nine + n * 300L) 0.1 else 0.0, 40)
+        }
+        assertEquals(0.5, DayClassifier.classify(day, withTips(5), temps(8.0), criteria, zone, later).rainHours, 1e-9)
+        assertEquals(0.0, DayClassifier.classify(day, withTips(4), temps(8.0), criteria, zone, later).rainHours, 1e-9)
+    }
+
+    @Test
+    fun shortLastStepHasProportionalThreshold() {
+        // Pas de 60 min : dernier pas 15:30–16:00 (30 min) → seuil 0,5 mm (et non 1 mm).
+        val start = day.atStartOfDay(zone).toEpochSecond()
+        val t1530 = day.atTime(15, 30).atZone(zone).toEpochSecond()
+        val s = (0 until 288).map { i ->
+            val ts = start + i * 300L
+            Sample(ts, if (ts >= t1530 && ts < t1530 + 1800) 0.1 else 0.0, 40) // 0,6 mm
+        }
+        val r = DayClassifier.classify(day, s, temps(8.0), criteria.copy(stepMinutes = 60), zone, later)
+        assertEquals(true, r.wetSteps.last())
+        assertEquals(0.5, r.rainHours, 1e-9)
     }
 
     @Test

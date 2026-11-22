@@ -136,7 +136,12 @@ class IntemperieWidget : GlanceAppWidget() {
                 style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurface),
                 maxLines = 2,
             )
-            Text("Source : SPW", style = TextStyle(fontSize = 9.sp, color = GlanceTheme.colors.onSurfaceVariant))
+            Text(
+                "SPW · mesures jusqu'à " + (report.lastRainDataEpochSec?.let { Fmt.dateTime(Fmt.rainDataEnd(it)).substringAfter("à ") + " le " + Fmt.dateTime(it).take(5) } ?: "—") +
+                    if (Fmt.isStale(report.lastRainDataEpochSec)) " ⚠" else "",
+                style = TextStyle(fontSize = 9.sp, color = GlanceTheme.colors.onSurfaceVariant),
+                maxLines = 1,
+            )
         }
     }
 

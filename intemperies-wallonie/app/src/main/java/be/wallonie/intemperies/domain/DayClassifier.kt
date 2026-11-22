@@ -15,7 +15,7 @@ import java.time.ZoneId
  * Méthode (paramétrable via [Criteria]) :
  *  1. La plage horaire [windowStart ; windowEnd[ est découpée en pas de `stepMinutes`
  *     alignés sur windowStart (le dernier pas peut être plus court).
- *  2. Un pas est « pluvieux » si son cumul ≥ `wetStepThresholdMm`.
+ *  2. Un pas est « pluvieux » si son cumul ≥ intensité minimale (mm/h) × durée du pas (`wetStepThresholdMm`).
  *  3. Durée de pluie = somme des durées des pas pluvieux ;
  *     pluie consécutive max = plus longue suite ininterrompue de pas pluvieux.
  *  4. Rouge si pluie consécutive > seuil OU durée totale > seuil (≥ si comparaison non stricte),
@@ -84,7 +84,11 @@ object DayClassifier {
                 }
             }
         }
-        val wet = stepSums.map { it + EPS >= criteria.wetStepThresholdMm }
+        // Seuil = intensité minimale × durée réelle du pas (un dernier pas plus court a un seuil proportionnel).
+        val wet = stepSums.indices.map { i ->
+            val (s, e) = stepBounds[i]
+            stepSums[i] + EPS >= criteria.wetIntensityMmH * (e - s) / 3600.0
+        }
         var rainSec = 0L
         var maxRunSec = 0L
         var runSec = 0L

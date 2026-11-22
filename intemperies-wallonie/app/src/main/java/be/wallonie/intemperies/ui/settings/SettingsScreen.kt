@@ -139,9 +139,20 @@ fun SettingsRoute(
                 }
             }
             StepperRow(
-                "Seuil d'un pas pluvieux", c.wetStepThresholdMm, 0.1, 0.1, 5.0, Fmt::mm,
-                { v -> update { it.copy(wetStepThresholdMm = v) } },
-                subtitle = "Cumul minimal (équivalent eau) pour compter un pas comme « précipitation »",
+                "Intensité minimale de précipitation", c.wetIntensityMmH, 0.1, 0.1, 10.0, { Fmt.mmPrecise(it) + " mm/h" },
+                { v -> update { it.copy(wetIntensityMmH = v) } },
+                subtitle = "Soit un cumul ≥ ${Fmt.mmPrecise(c.wetStepThresholdMm)} mm par pas de ${c.stepMinutes} min${Fmt.practicalNote(c)}",
+            )
+            Text(
+                "Comment c'est calculé : la plage ${c.windowStart}–${c.windowEnd} est découpée en pas de ${c.stepMinutes} min. " +
+                    "Pour chaque pas, l'application additionne les mesures du pluviomètre (une valeur toutes les 5 min). " +
+                    "Le pas compte comme temps de précipitation si ce cumul atteint l'intensité minimale × la durée du pas : " +
+                    "${Fmt.intensity(c)} × ${c.stepMinutes} min = ${Fmt.mmPrecise(c.wetStepThresholdMm)} mm. " +
+                    "Les mesures SPW étant le plus souvent publiées par paliers de 0,1 mm, ce seuil est en général atteint " +
+                    "à ${Fmt.num(c.effectiveStepThresholdMm, 1)} mm.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
             )
 
             SectionTitle("Température — seuil bas (gel)")
@@ -233,7 +244,7 @@ fun SettingsRoute(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Rétablir les valeurs par défaut ?") },
-            text = { Text("07:30–16:00, précipitations consécutives > 3 h ou totales > 4 h, orange ≥ 2 h ; gel < 0 °C et canicule > 32 °C pendant ≥ 3 h, signalés sans être bloquants.") },
+            text = { Text("07:30–16:00, pas de 30 min, précipitations ≥ 1 mm/h, consécutives > 3 h ou totales > 4 h, orange ≥ 2 h ; gel < 0 °C et canicule > 32 °C pendant ≥ 3 h, signalés sans être bloquants.") },
             confirmButton = { TextButton(onClick = { viewModel.resetCriteria(); confirmReset = false }) { Text("Rétablir") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Annuler") } },
         )

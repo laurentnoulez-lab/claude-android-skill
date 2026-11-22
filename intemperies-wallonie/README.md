@@ -30,7 +30,7 @@ atteignent les seuils activés. Valeurs par défaut :
 
 | Origine | Paramètres (par défaut) | Effet par défaut |
 |---|---|---|
-| Précipitations | plage **07:30–16:00**, pas de **30 min** (15 / 30 / 60), pas « avec précipitations » si cumul ≥ **0,1 mm** ; consécutives **> 3 h** ou totales **> 4 h** (option ≥) | 🔴 intempérie |
+| Précipitations | plage **07:30–16:00**, pas de **30 min** (15 / 30 / 60) ; un pas compte comme précipitation si l'intensité atteint **1 mm/h** (réglable), soit un cumul ≥ **0,5 mm par pas de 30 min** ; consécutives **> 3 h** ou totales **> 4 h** (option ≥) | 🔴 intempérie |
 | Précipitations | totales **≥ 2 h** sans intempérie | 🟠 orange |
 | Température — seuil bas (gel) | T **< 0 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ❄, case à cocher pour 🔴 |
 | Température — seuil haut (canicule) | T **> 32 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ☀, case à cocher pour 🔴 |
@@ -39,6 +39,8 @@ atteignent les seuils activés. Valeurs par défaut :
 Les valeurs de température (0 °C, 32 °C, 3 h) sont les réglages par défaut choisis par l'utilisateur (non imposés par un texte) ;
 les cases « provoque une intempérie » sont décochées par défaut, conformément à la demande initiale.
 
+- **Seuil de pluie** : il est réglé en intensité (mm/h) ; le cumul à atteindre sur un pas = intensité × durée du pas (1 mm/h × 30 min = 0,5 mm ; × 15 min = 0,25 mm ; × 60 min = 1 mm ; un dernier pas plus court a un seuil proportionnel). Les mesures SPW étant le plus souvent publiées par paliers de 0,1 mm (constat : 98,4 % des valeurs non nulles à Wavre du 22/05 au 22/11/2026), un cumul théorique comme 0,25 mm est en général atteint au palier supérieur (0,3 mm) ; le calcul utilise la valeur exacte.
+- **Date de mise à jour** : l'accueil, les cartes communes, le calendrier, le widget et les exports PDF/Excel indiquent la date et l'heure de la dernière mesure disponible et de la dernière mise à jour depuis le SPW ; une alerte apparaît si une station n'a plus transmis depuis plus de 3 h.
 - **Précipitations** : les pluviomètres SPW sont « à pesée » (source : hydrometrie.wallonie.be › Réseaux de mesure).
   *Interprétation* : ce principe pèse les précipitations liquides et solides (équivalent eau) ; l'application ne distingue
   donc pas pluie, neige et grêle.

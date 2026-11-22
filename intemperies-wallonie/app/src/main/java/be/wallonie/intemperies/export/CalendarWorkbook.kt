@@ -46,6 +46,8 @@ object CalendarWorkbook {
             "Température de l'air : ${it.station.name} (SPW n° ${it.station.stationNo}, ${Fmt.num(it.distanceKm)} km${if (it.manual) ", choix manuel" else ""})"
         } ?: "Température de l'air : aucune station à moins de ${Fmt.num(r.criteria.maxTemperatureDistanceKm, 0)} km", Style.DEFAULT)
         row++
+        sh.text(row, 1, Fmt.freshness(r), Style.DEFAULT)
+        row++
         sh.text(row, 1, "Critères : " + Fmt.criteriaSummary(r.criteria), Style.BOX)
         sh.merge(row, 1, row, LAST_COL, Style.BOX)
         sh.height(row, 26.0)

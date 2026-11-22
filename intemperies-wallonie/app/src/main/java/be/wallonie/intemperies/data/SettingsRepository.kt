@@ -38,7 +38,7 @@ class SettingsRepository(context: Context) {
         val windowStart = stringPreferencesKey("window_start")
         val windowEnd = stringPreferencesKey("window_end")
         val step = intPreferencesKey("step_minutes")
-        val wetMm = doublePreferencesKey("wet_step_mm")
+        val wetMmH = doublePreferencesKey("wet_intensity_mmh")
         val consecutive = doublePreferencesKey("consecutive_h")
         val total = doublePreferencesKey("total_h")
         val strict = booleanPreferencesKey("strict")
@@ -81,7 +81,7 @@ class SettingsRepository(context: Context) {
         p[K.windowStart] = c.windowStart.toString()
         p[K.windowEnd] = c.windowEnd.toString()
         p[K.step] = c.stepMinutes
-        p[K.wetMm] = c.wetStepThresholdMm
+        p[K.wetMmH] = c.wetIntensityMmH
         p[K.consecutive] = c.consecutiveRainHours
         p[K.total] = c.totalRainHours
         p[K.strict] = c.strictComparison
@@ -143,7 +143,7 @@ class SettingsRepository(context: Context) {
                 windowStart = this[K.windowStart]?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: d.windowStart,
                 windowEnd = this[K.windowEnd]?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: d.windowEnd,
                 stepMinutes = this[K.step] ?: d.stepMinutes,
-                wetStepThresholdMm = this[K.wetMm] ?: d.wetStepThresholdMm,
+                wetIntensityMmH = this[K.wetMmH] ?: d.wetIntensityMmH,
                 consecutiveRainHours = this[K.consecutive] ?: d.consecutiveRainHours,
                 totalRainHours = this[K.total] ?: d.totalRainHours,
                 strictComparison = this[K.strict] ?: d.strictComparison,

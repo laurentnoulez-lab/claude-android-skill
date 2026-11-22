@@ -114,7 +114,7 @@ fun DayChart(day: DayReport, criteria: Criteria, temperatureStationLabel: String
                 }
             }
 
-        Text("Précipitations (mm par pas de ${criteria.stepMinutes} min)", style = MaterialTheme.typography.labelMedium, color = ink)
+        Text("Précipitations : cumul en mm par pas de ${criteria.stepMinutes} min", style = MaterialTheme.typography.labelMedium, color = ink)
         Canvas(Modifier.fillMaxWidth().height(120.dp).then(gesture)) {
             drawRain(day, criteria, ws, we, stepSec, rainColor, ink, muted, grid, measurer, selected)
         }
@@ -165,7 +165,7 @@ private fun readout(
     val rain = when {
         mm == null -> "—"
         mm.isNaN() -> "pas de mesure"
-        else -> Fmt.mm(mm) + if (day.wetSteps.getOrNull(i) == true) " (comptées)" else " (sous le seuil de ${Fmt.num(c.wetStepThresholdMm)} mm)"
+        else -> Fmt.mm(mm) + if (day.wetSteps.getOrNull(i) == true) " (≥ ${Fmt.wetThreshold(c)} : pas compté)" else " (< ${Fmt.wetThreshold(c)} : pas sec)"
     }
     val temp = temps.firstOrNull { (h, _) -> t >= h && t < h + 3600 }
         ?.let { (h, v) -> " · T ${Fmt.temp(v)} (moyenne ${hhmm(h)}–${hhmm(h + 3600)})" } ?: ""
@@ -271,7 +271,7 @@ private fun DrawScope.drawRain(
     // Seuil d'un pas « avec précipitations ».
     val ty = y(c.wetStepThresholdMm)
     drawLine(muted, Offset(left, ty), Offset(right, ty), strokeWidth = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
-    label(measurer, "seuil ${Fmt.num(c.wetStepThresholdMm)} mm", right, ty - 8.dp.toPx(), muted, alignEnd = true)
+    label(measurer, "seuil ${Fmt.wetThreshold(c)}", right, ty - 8.dp.toPx(), muted, alignEnd = true)
     drawLine(ink.copy(alpha = 0.5f), Offset(left, base), Offset(right, base), strokeWidth = 1.dp.toPx())
     timeAxis(measurer, ws, we, left, right, base, muted, grid, withLabels = true)
     crosshair(selected, ws, we, left, right, top, base, ink)
@@ -373,7 +373,7 @@ private fun ValuesTable(day: DayReport, c: Criteria, ws: Double, stepSec: Double
             }
         }
         Text(
-            "✔ = pas compté comme précipitation (≥ ${Fmt.num(c.wetStepThresholdMm)} mm). Pas de mesure de pluie : ${DayClassifier.RAIN_STEP_SEC / 60} min.",
+            "✔ = pas compté comme précipitation (cumul ${Fmt.wetThresholdLong(c)}). Le pluviomètre publie une valeur toutes les ${DayClassifier.RAIN_STEP_SEC / 60} min.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),

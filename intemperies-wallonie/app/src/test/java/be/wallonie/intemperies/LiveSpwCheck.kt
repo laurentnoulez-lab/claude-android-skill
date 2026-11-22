@@ -60,7 +60,9 @@ class LiveSpwCheck {
             val date = month.atDay(d)
             DayClassifier.classify(date, rain[date].orEmpty(), temp[date].orEmpty(), criteria, zone, Instant.now(), tempSt != null)
         }
-        val report = MonthReport(commune, month, rainSt, tempSt, days, criteria, null)
+        val lastRain = rain.values.flatten().filter { !it.value.isNaN() }.maxOfOrNull { it.epochSec }
+        val lastTemp = temp.values.flatten().filter { !it.value.isNaN() }.maxOfOrNull { it.epochSec }
+        val report = MonthReport(commune, month, rainSt, tempSt, days, criteria, lastRain, lastTemp, Instant.now().epochSecond)
         java.io.File(out).writeBytes(CalendarWorkbook.build(listOf(report), "contrôle"))
         println("Classeur écrit : $out (température : ${tempSt?.station?.name} ${tempSt?.distanceKm})")
     }
