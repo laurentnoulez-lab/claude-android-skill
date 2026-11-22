@@ -306,11 +306,11 @@ private fun DrawScope.drawTemperature(
     val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
     if (showCold) {
         drawLine(muted, Offset(left, y(c.coldThresholdC)), Offset(right, y(c.coldThresholdC)), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-        label(measurer, "gel ${Fmt.deg(c.coldThresholdC)}", right, y(c.coldThresholdC) + 8.dp.toPx(), muted, alignEnd = true)
+        label(measurer, "gel ${Fmt.deg(c.coldThresholdC)}", right, thresholdLabelY(y(c.coldThresholdC), top), muted, alignEnd = true)
     }
     if (showHeat) {
         drawLine(muted, Offset(left, y(c.heatThresholdC)), Offset(right, y(c.heatThresholdC)), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-        label(measurer, "canicule ${Fmt.deg(c.heatThresholdC)}", right, y(c.heatThresholdC) - 8.dp.toPx(), muted, alignEnd = true)
+        label(measurer, "canicule ${Fmt.deg(c.heatThresholdC)}", right, thresholdLabelY(y(c.heatThresholdC), top), muted, alignEnd = true)
     }
     // Chaque moyenne horaire est placée au milieu de la partie de l'heure comprise dans la plage.
     val pts = temps.map { (h, v) ->
@@ -341,6 +341,10 @@ private fun DrawScope.drawTemperature(
     timeAxis(measurer, ws, we, left, right, base, muted, grid, withLabels = true)
     crosshair(selected, ws, we, left, right, top, base, ink)
 }
+
+/** Étiquette de seuil au-dessus de sa ligne (jamais sur l'axe), sauf si la ligne touche le haut du graphique. */
+private fun DrawScope.thresholdLabelY(lineY: Float, top: Float): Float =
+    if (lineY - 8.dp.toPx() < top + 4.dp.toPx()) lineY + 8.dp.toPx() else lineY - 8.dp.toPx()
 
 @Composable
 private fun ValuesTable(day: DayReport, c: Criteria, ws: Double, stepSec: Double, temps: List<Pair<Double, Double>>) {

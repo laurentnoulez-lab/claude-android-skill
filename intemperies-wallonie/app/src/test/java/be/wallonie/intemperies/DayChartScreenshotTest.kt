@@ -6,9 +6,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.activity.ComponentActivity
+import android.graphics.Canvas
+import android.view.View
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
@@ -42,9 +43,9 @@ import java.time.ZoneId
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w400dp-h900dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w400dp-h900dp-xxhdpi", application = android.app.Application::class)
 class DayChartScreenshotTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val out: String? = System.getenv("SCREENSHOT_OUT")
 
@@ -77,7 +78,10 @@ class DayChartScreenshotTest {
             compose.onRoot().performTouchInput { click(Offset(width * tapFraction, height * 0.35f)) }
         }
         compose.waitForIdle()
-        val bmp = compose.onRoot().captureToImage().asAndroidBitmap()
+        // Rendu logiciel de la vue (captureToImage n'est pas supporté sous Robolectric).
+        val view = compose.activity.findViewById<View>(android.R.id.content)
+        val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        compose.runOnUiThread { view.draw(Canvas(bmp)) }
         File(out!!).mkdirs()
         File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         println("Capture : $name (${day.date}, ${day.status}, ${day.windowRainMm} mm, T moy ${day.meanTemperatureC})")
