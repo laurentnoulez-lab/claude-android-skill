@@ -61,7 +61,7 @@ Appui long sur l'écran d'accueil, puis **Widgets**, puis **Meuse Engis**, puis 
 
 ## Installation sur le téléphone
 
-1. Ouvrir sur le téléphone le lien direct <https://github.com/laurentnoulez-lab/claude-android-skill/raw/ccr-d5695511-sqnn3o/apps/meuse-engis/release/MeuseEngis-1.3.apk> ou scanner le QR code `release/telecharger-qr.png`. On peut aussi copier `release/MeuseEngis-1.3.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
+1. Ouvrir sur le téléphone le lien direct <https://github.com/laurentnoulez-lab/claude-android-skill/raw/ccr-d5695511-sqnn3o/apps/meuse-engis/release/MeuseEngis.apk> ou scanner le QR code `release/telecharger-qr.png`. On peut aussi copier `release/MeuseEngis.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
 2. Ouvrir le fichier. Android demande d'autoriser l'installation depuis cette source (« sources inconnues ») : accepter.
 3. Lancer **Meuse Engis**.
 
@@ -69,7 +69,8 @@ Configuration requise : Android 8.0 ou plus récent. L'application demande uniqu
 
 ## Utilisation
 
-- Les données sont rechargées à l'ouverture de l'application si elles datent de plus de 10 minutes. On peut aussi actualiser manuellement en tirant l'écran vers le bas ou avec le bouton ⟳.
+- Les données sont rechargées automatiquement : à l'ouverture, puis toutes les 10 minutes tant que l'application reste affichée. Le SPW publie une nouvelle valeur horaire environ chaque heure. On peut aussi actualiser à la main en tirant l'écran vers le bas ou avec le bouton ⟳.
+- Le bandeau du haut indique quand les données ont été reçues ; il passe en rouge au-delà de 20 minutes. Chaque mesure affiche son heure et son âge, par exemple « 09:00 (il y a 52 min) ».
 - Toucher une barre affiche le détail de la journée correspondante.
 - La dernière réponse reçue est conservée et reste affichée sans réseau, avec un avertissement.
 

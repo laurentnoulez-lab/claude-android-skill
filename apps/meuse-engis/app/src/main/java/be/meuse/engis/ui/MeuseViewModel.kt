@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
@@ -31,7 +34,28 @@ class MeuseViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(MeuseUiState(snapshot = repository.cached()))
     val state: StateFlow<MeuseUiState> = _state.asStateFlow()
 
-    /** Appelé à chaque retour au premier plan : recharge si les données ont plus de 10 minutes. */
+    private var autoRefresh: Job? = null
+
+    /**
+     * Tant que l'application est au premier plan : vérifie chaque minute et recharge dès que les
+     * données ont plus de 10 minutes (le SPW publie une nouvelle valeur horaire chaque heure).
+     */
+    fun startAutoRefresh() {
+        autoRefresh?.cancel()
+        autoRefresh = viewModelScope.launch {
+            while (isActive) {
+                refreshIfStale()
+                delay(60_000)
+            }
+        }
+    }
+
+    fun stopAutoRefresh() {
+        autoRefresh?.cancel()
+        autoRefresh = null
+    }
+
+    /** Recharge si les données ont plus de 10 minutes. */
     fun refreshIfStale() {
         val last = _state.value.snapshot?.fetchedAt
         if (last == null || Duration.between(last, Instant.now()) > Duration.ofMinutes(10)) refresh()

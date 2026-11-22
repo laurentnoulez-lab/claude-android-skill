@@ -24,3 +24,14 @@ fun Trend.label(): String = when (this) {
     Trend.STABLE -> "→ stable"
     Trend.INCONNUE -> "tendance inconnue"
 }
+
+/** Âge lisible, ex. « il y a 12 min », « il y a 1 h 05 ». */
+fun ago(from: java.time.Instant, now: java.time.ZonedDateTime): String {
+    val min = java.time.Duration.between(from, now.toInstant()).toMinutes().coerceAtLeast(0)
+    return when {
+        min < 1 -> "à l'instant"
+        min < 60 -> "il y a $min min"
+        min < 24 * 60 -> "il y a ${min / 60} h ${"%02d".format(min % 60)}"
+        else -> "il y a ${min / (24 * 60)} j"
+    }
+}

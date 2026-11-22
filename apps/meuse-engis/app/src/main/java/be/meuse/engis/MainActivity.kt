@@ -23,8 +23,8 @@ class MainActivity : ComponentActivity() {
             MeuseTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 LifecycleResumeEffect(Unit) {
-                    viewModel.refreshIfStale()
-                    onPauseOrDispose { }
+                    viewModel.startAutoRefresh()
+                    onPauseOrDispose { viewModel.stopAutoRefresh() }
                 }
                 MeuseScreen(
                     state = state,

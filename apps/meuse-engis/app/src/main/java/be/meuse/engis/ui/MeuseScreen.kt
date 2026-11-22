@@ -109,14 +109,15 @@ fun MeuseScreen(
             ) {
                 state.error?.let { ErrorCard(it, hasCache = state.snapshot != null) }
                 val s = state.snapshot
+                s?.let { DataStatus(it.fetchedAt, state.loading, now) }
                 RegulationCard(now, s?.flowClass)
                 if (s == null) {
                     if (!state.loading && state.error == null) Text("Aucune donnée pour l'instant.")
                 } else {
-                    FlowCard(s)
-                    LevelCard(s)
+                    FlowCard(s, now)
+                    LevelCard(s, now)
                     ChartCard(s, state.reference, onReference)
-                    SourceFooter(s.fetchedAt)
+                    SourceFooter()
                 }
                 Spacer(Modifier.height(16.dp))
             }
@@ -163,7 +164,7 @@ private fun StaleWarning(reading: Reading) {
 }
 
 @Composable
-private fun FlowCard(s: MeuseSnapshot) = InfoCard {
+private fun FlowCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
     Caption("DÉBIT DE LA MEUSE")
     val r = s.amayFlow
     if (r == null) {
@@ -172,7 +173,10 @@ private fun FlowCard(s: MeuseSnapshot) = InfoCard {
     }
     BigValue(flow(r.point.value), r)
     s.flowClass?.let { FlowClassBadge(it) }
-    Caption("Station SPW d'Amay · moyenne horaire de ${r.point.time.atZoneSameInstant(BRUSSELS).format(DAY_HOUR)}")
+    Caption(
+        "Station SPW d'Amay · dernière valeur horaire publiée : ${r.point.time.atZoneSameInstant(BRUSSELS).format(HOUR)} " +
+            "(${ago(r.point.time.toInstant(), now)})",
+    )
     s.monthNormal?.let { normal ->
         val pct = (r.point.value / normal * 100).roundToInt()
         val month = monthName(r.point.time.atZoneSameInstant(BRUSSELS).toLocalDate())
@@ -210,7 +214,7 @@ private fun FlowClassBadge(c: FlowClass) {
 }
 
 @Composable
-private fun LevelCard(s: MeuseSnapshot) = InfoCard {
+private fun LevelCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
     Caption("NIVEAU DU BIEF D'ENGIS")
     val h = s.ivozLevel
     if (h == null) {
@@ -218,8 +222,8 @@ private fun LevelCard(s: MeuseSnapshot) = InfoCard {
     } else {
         BigValue(level(h.point.value), h)
         Caption(
-            "Hauteur à l'échelle, station SPW Ivoz-Ramet bief amont · " +
-                h.point.time.atZoneSameInstant(BRUSSELS).format(DAY_HOUR),
+            "Hauteur à l'échelle, station SPW Ivoz-Ramet bief amont · dernière valeur horaire publiée : " +
+                "${h.point.time.atZoneSameInstant(BRUSSELS).format(HOUR)} (${ago(h.point.time.toInstant(), now)})",
         )
         StaleWarning(h)
     }
@@ -287,9 +291,8 @@ private fun ErrorCard(message: String, hasCache: Boolean) {
 }
 
 @Composable
-private fun SourceFooter(fetchedAt: Instant) {
+private fun SourceFooter() {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Caption("Mis à jour le ${fetchedAt.atZone(BRUSSELS).format(DAY_HOUR)}")
         Caption(
             "Source : SPW Mobilité et Infrastructures — hydrometrie.wallonie.be (service KiWIS). " +
                 "Données brutes en temps réel, non validées.",
@@ -368,3 +371,19 @@ private val RULES = listOf(
     "Brochet et sandre : interdiction de les garder vivants (bourriche, panier ou autre contenant)." to "Art. 13",
     "Meuse : poissons pris hors du lit principal non prélevables ; pêche au vif uniquement dans le lit principal." to "Art. 13, 1° ; art. 9, 3°",
 )
+
+/** Bandeau : quand les données ont été reçues du SPW, et rappel de l'actualisation automatique. */
+@Composable
+private fun DataStatus(fetchedAt: Instant, loading: Boolean, now: ZonedDateTime) {
+    val stale = Duration.between(fetchedAt, now.toInstant()) > Duration.ofMinutes(20)
+    Text(
+        if (loading) {
+            "Actualisation en cours…"
+        } else {
+            "Données SPW reçues à ${fetchedAt.atZone(BRUSSELS).format(HOUR)} (${ago(fetchedAt, now)}) · " +
+                "actualisation automatique toutes les 10 min"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (stale && !loading) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
