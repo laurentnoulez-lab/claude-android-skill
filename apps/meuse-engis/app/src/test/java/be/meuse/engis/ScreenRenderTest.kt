@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.core.view.drawToBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import be.meuse.engis.data.KiwisClient
+import be.meuse.engis.data.Series
+import be.meuse.engis.data.bySeries
 import be.meuse.engis.domain.SnapshotBuilder
 import be.meuse.engis.ui.MeuseScreen
 import be.meuse.engis.ui.MeuseTheme
@@ -33,7 +35,8 @@ class ScreenRenderTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private fun snapshot() = SnapshotBuilder.build(
-        series = KiwisClient.parse(javaClass.getResource("/kiwis_2026-11-22.json")!!.readText()),
+        series = KiwisClient.parse(javaClass.getResource("/kiwis_2026-11-22.json")!!.readText())
+            .bySeries(Series.entries.associateWith { it.defaultId }),
         today = LocalDate.of(2026, 11, 22),
         zone = ZoneId.of("Europe/Brussels"),
         fetchedAt = Instant.parse("2026-11-22T07:45:00Z"),

@@ -35,7 +35,7 @@ Appui long sur l'écran d'accueil, puis **Widgets**, puis **Meuse Engis**, puis 
 
 ## Installation sur le téléphone
 
-1. Copier `release/MeuseEngis-1.1.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
+1. Copier `release/MeuseEngis-1.2.apk` sur le téléphone, par exemple en le téléchargeant depuis GitHub ou en l'envoyant par e-mail.
 2. Ouvrir le fichier. Android demande d'autoriser l'installation depuis cette source (« sources inconnues ») : accepter.
 3. Lancer **Meuse Engis**.
 
@@ -46,6 +46,20 @@ Configuration requise : Android 8.0 ou plus récent. L'application demande uniqu
 - Les données sont rechargées à l'ouverture de l'application si elles datent de plus de 10 minutes. On peut aussi actualiser manuellement en tirant l'écran vers le bas ou avec le bouton ⟳.
 - Toucher une barre affiche le détail de la journée correspondante.
 - La dernière réponse reçue est conservée et reste affichée sans réseau, avec un avertissement.
+
+## Fonctionnement autonome
+
+L'application interroge **elle-même**, depuis le téléphone, le serveur public du SPW. Il n'y a ni serveur intermédiaire, ni compte, ni clé d'accès.
+
+- **Quand :** à l'ouverture de l'application (si les données ont plus de 10 min), en tirant l'écran vers le bas, et via le widget (environ toutes les 30 min, ou en touchant ⟳).
+- **Sans réseau :** la dernière réponse reçue reste affichée avec un avertissement. Un message apparaît aussi si une station ne transmet plus depuis plus de 3 h.
+- **Si le SPW renumérote ses séries :** il refuse alors toute la requête, avec une erreur HTTP 500. L'application retrouve d'elle-même les nouveaux identifiants à partir du numéro de station et du nom de la série, puis les mémorise. En dernier recours, elle demande chaque série séparément et affiche celles qui répondent.
+- **Certificat HTTPS :** celui du SPW (Let's Encrypt, rattaché à ISRG Root X1) est reconnu par Android 8 et plus.
+
+Ce fonctionnement a été vérifié le 22/11/2026 contre le vrai serveur, avec le test `LiveSpwTest` (`MEUSE_LIVE_TEST=1 ./gradlew testDebugUnitTest --tests '*LiveSpwTest*'`) :
+- la mesure de 09:00 a été obtenue 20 min plus tard ;
+- les 7 jours passés étaient complets (24 h chacun) ;
+- une renumérotation simulée a été réparée.
 
 ## Sources des données
 

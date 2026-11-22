@@ -1,7 +1,8 @@
 package be.meuse.engis
 
 import be.meuse.engis.data.KiwisClient
-import be.meuse.engis.data.Stations
+import be.meuse.engis.data.bySeries
+import be.meuse.engis.data.Series
 import be.meuse.engis.domain.Point
 import be.meuse.engis.domain.SnapshotBuilder
 import be.meuse.engis.domain.Trend
@@ -44,7 +45,7 @@ class SnapshotBuilderTest {
             p("2026-11-21T23:00:00Z", 300.0),
         )
         val s = SnapshotBuilder.build(
-            mapOf(Stations.AMAY_Q_1H to hourly),
+            mapOf(Series.AMAY_Q_1H to hourly),
             today = LocalDate.of(2026, 11, 22),
             zone = zone,
             fetchedAt = Instant.EPOCH,
@@ -66,7 +67,7 @@ class SnapshotBuilderTest {
             p("2026-12-01T00:00:00.000+01:00", 328.643),
         )
         val s = SnapshotBuilder.build(
-            mapOf(Stations.AMAY_Q_NORMALE_MOIS to normals),
+            mapOf(Series.AMAY_Q_NORMALE_MOIS to normals),
             today = LocalDate.of(2026, 11, 22),
             zone = zone,
             fetchedAt = Instant.EPOCH,
@@ -82,7 +83,7 @@ class SnapshotBuilderTest {
             p("2026-11-03T12:00:00+01:00", 300.0),
         )
         val s = SnapshotBuilder.build(
-            mapOf(Stations.AMAY_Q_1H to hourly),
+            mapOf(Series.AMAY_Q_1H to hourly),
             today = LocalDate.of(2026, 11, 3),
             zone = zone,
             fetchedAt = Instant.EPOCH,
@@ -121,7 +122,7 @@ class FlowClassTest {
     fun snapshot_readsTodayPercentiles_fromRealResponse() {
         val json = javaClass.getResource("/kiwis_2026-11-22.json")!!.readText()
         val s = SnapshotBuilder.build(
-            KiwisClient.parse(json),
+            KiwisClient.parse(json).bySeries(Series.entries.associateWith { it.defaultId }),
             today = LocalDate.of(2026, 11, 22),
             zone = ZoneId.of("Europe/Brussels"),
             fetchedAt = Instant.EPOCH,

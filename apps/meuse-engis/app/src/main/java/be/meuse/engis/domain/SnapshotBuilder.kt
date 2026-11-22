@@ -1,6 +1,6 @@
 package be.meuse.engis.domain
 
-import be.meuse.engis.data.Stations
+import be.meuse.engis.data.Series
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -16,12 +16,12 @@ object SnapshotBuilder {
         minOf(today.minusDays(PAST_DAYS), today.withDayOfMonth(1))
 
     fun build(
-        series: Map<String, List<Point>>,
+        series: Map<Series, List<Point>>,
         today: LocalDate,
         zone: ZoneId,
         fetchedAt: Instant,
     ): MeuseSnapshot {
-        val amayQ = series[Stations.AMAY_Q_1H].orEmpty()
+        val amayQ = series[Series.AMAY_Q_1H].orEmpty()
         val byDay = amayQ.groupBy { it.time.atZoneSameInstant(zone).toLocalDate() }
 
         val bars = (PAST_DAYS downTo 0).map { back ->
@@ -42,18 +42,18 @@ object SnapshotBuilder {
             .takeIf { it.isNotEmpty() }
             ?.average()
 
-        val monthNormal = series[Stations.AMAY_Q_NORMALE_MOIS].orEmpty()
+        val monthNormal = series[Series.AMAY_Q_NORMALE_MOIS].orEmpty()
             .firstOrNull {
                 val d = it.time.atZoneSameInstant(zone).toLocalDate()
                 d.year == today.year && d.month == today.month
             }?.value
 
-        fun todayValue(id: String) = series[id].orEmpty()
+        fun todayValue(id: Series) = series[id].orEmpty()
             .firstOrNull { it.time.atZoneSameInstant(zone).toLocalDate() == today }?.value
-        val p15 = todayValue(Stations.AMAY_Q_JOUR_P15)
-        val med = todayValue(Stations.AMAY_Q_JOUR_MEDIANE)
-        val p85 = todayValue(Stations.AMAY_Q_JOUR_P85)
-        val p90 = todayValue(Stations.AMAY_Q_JOUR_P90)
+        val p15 = todayValue(Series.AMAY_Q_JOUR_P15)
+        val med = todayValue(Series.AMAY_Q_JOUR_MEDIANE)
+        val p85 = todayValue(Series.AMAY_Q_JOUR_P85)
+        val p90 = todayValue(Series.AMAY_Q_JOUR_P90)
         val dayStats = if (p15 != null && med != null && p85 != null && p90 != null) {
             DayStats(p15, med, p85, p90)
         } else {
@@ -65,8 +65,8 @@ object SnapshotBuilder {
             monthNormal = monthNormal,
             monthToDate = monthToDate,
             amayFlow = reading(amayQ, relativeThreshold = 0.02),
-            ivozLevel = reading(series[Stations.IVOZ_H_1H].orEmpty(), absoluteThreshold = 0.02),
-            ivozFlow = reading(series[Stations.IVOZ_Q_1H].orEmpty(), relativeThreshold = 0.02),
+            ivozLevel = reading(series[Series.IVOZ_H_1H].orEmpty(), absoluteThreshold = 0.02),
+            ivozFlow = reading(series[Series.IVOZ_Q_1H].orEmpty(), relativeThreshold = 0.02),
             dayStats = dayStats,
             fetchedAt = fetchedAt,
         )
