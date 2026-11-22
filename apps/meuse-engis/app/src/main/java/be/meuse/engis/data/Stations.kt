@@ -19,5 +19,17 @@ object Stations {
     /** IVOZ-RAMET Bief Amont (7117) – "10-Debit.1h.Moyen" – débit axe hydraulique (m³/s). */
     const val IVOZ_Q_1H = "408403010"
 
-    val ALL = listOf(AMAY_Q_1H, AMAY_Q_NORMALE_MOIS, IVOZ_H_1H, IVOZ_Q_1H)
+    /**
+     * AMAY (7132) – débits journaliers interannuels du jour calendaire (m³/s) :
+     * "76-Debit ultrason.InterAn.Jour.P15", "73-…Median", "77-…P85", "78-…P90".
+     */
+    const val AMAY_Q_JOUR_P15 = "245502010"
+    const val AMAY_Q_JOUR_MEDIANE = "245520010"
+    const val AMAY_Q_JOUR_P85 = "245488010"
+    const val AMAY_Q_JOUR_P90 = "245531010"
+
+    val ALL = listOf(
+        AMAY_Q_1H, AMAY_Q_NORMALE_MOIS, IVOZ_H_1H, IVOZ_Q_1H,
+        AMAY_Q_JOUR_P15, AMAY_Q_JOUR_MEDIANE, AMAY_Q_JOUR_P85, AMAY_Q_JOUR_P90,
+    )
 }

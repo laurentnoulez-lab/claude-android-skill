@@ -3,6 +3,7 @@ package be.meuse.engis.data
 import android.content.Context
 import be.meuse.engis.domain.MeuseSnapshot
 import be.meuse.engis.domain.SnapshotBuilder
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -25,6 +26,13 @@ class MeuseRepository(
             .putLong(KEY_TIME, snapshot.fetchedAt.toEpochMilli())
             .apply()
         return snapshot
+    }
+
+    /** Pour le widget : données en cache si elles ont moins de [maxAge], sinon nouvelle requête (cache en secours). */
+    suspend fun cachedOrRefresh(maxAge: Duration): MeuseSnapshot? {
+        val cache = cached()
+        if (cache != null && Duration.between(cache.fetchedAt, Instant.now()) < maxAge) return cache
+        return runCatching { refresh() }.getOrElse { cache }
     }
 
     fun cached(): MeuseSnapshot? {

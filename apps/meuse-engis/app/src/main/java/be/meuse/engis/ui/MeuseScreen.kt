@@ -1,6 +1,12 @@
 package be.meuse.engis.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,8 +34,10 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import be.meuse.engis.domain.FlowClass
 import be.meuse.engis.domain.MeuseSnapshot
 import be.meuse.engis.domain.Reading
 import java.time.Duration
@@ -142,6 +150,7 @@ private fun FlowCard(s: MeuseSnapshot) = InfoCard {
         return@InfoCard
     }
     BigValue(flow(r.point.value), r)
+    s.flowClass?.let { FlowClassBadge(it) }
     Caption("Station SPW d'Amay · moyenne horaire de ${r.point.time.atZoneSameInstant(BRUSSELS).format(DAY_HOUR)}")
     s.monthNormal?.let { normal ->
         val pct = (r.point.value / normal * 100).roundToInt()
@@ -151,7 +160,32 @@ private fun FlowCard(s: MeuseSnapshot) = InfoCard {
             style = MaterialTheme.typography.bodyMedium,
         )
     }
+    s.dayStats?.let { st ->
+        Caption(
+            st.thresholdsText(r.point.time.atZoneSameInstant(BRUSSELS).toLocalDate()) +
+                " (statistiques SPW de ce jour, toutes années de mesure depuis 1995 : P15, P85, P90).",
+        )
+    }
     StaleWarning(r)
+}
+
+@Composable
+private fun FlowClassBadge(c: FlowClass) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .background(Color(c.argb()).copy(alpha = 0.16f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .background(Color(c.argb()), CircleShape),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(c.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
 }
 
 @Composable

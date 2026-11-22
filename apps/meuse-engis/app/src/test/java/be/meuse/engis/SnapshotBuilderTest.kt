@@ -105,3 +105,29 @@ class SnapshotBuilderTest {
         assertEquals(Trend.INCONNUE, SnapshotBuilder.reading(single, absoluteThreshold = 0.02)!!.trend)
     }
 }
+
+class FlowClassTest {
+    private val stats = be.meuse.engis.domain.DayStats(p15 = 65.751, median = 166.555, p85 = 329.895, p90 = 379.635)
+
+    @Test
+    fun classes_followSpwDailyPercentiles() {
+        assertEquals(be.meuse.engis.domain.FlowClass.FAIBLE, be.meuse.engis.domain.FlowClass.of(40.0, stats))
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(312.49, stats))
+        assertEquals(be.meuse.engis.domain.FlowClass.FORT, be.meuse.engis.domain.FlowClass.of(350.0, stats))
+        assertEquals(be.meuse.engis.domain.FlowClass.TRES_FORT, be.meuse.engis.domain.FlowClass.of(448.0, stats))
+    }
+
+    @Test
+    fun snapshot_readsTodayPercentiles_fromRealResponse() {
+        val json = javaClass.getResource("/kiwis_2026-11-22.json")!!.readText()
+        val s = SnapshotBuilder.build(
+            KiwisClient.parse(json),
+            today = LocalDate.of(2026, 11, 22),
+            zone = ZoneId.of("Europe/Brussels"),
+            fetchedAt = Instant.EPOCH,
+        )
+        assertEquals(stats, s.dayStats)
+        assertEquals(190.636, s.monthNormal!!, 1e-9)
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, s.flowClass)
+    }
+}

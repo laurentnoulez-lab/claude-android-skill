@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import be.meuse.engis.data.MeuseRepository
+import androidx.glance.appwidget.updateAll
 import be.meuse.engis.domain.MeuseSnapshot
+import be.meuse.engis.widget.MeuseWidget
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +44,7 @@ class MeuseViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val snapshot = repository.refresh()
                 _state.update { it.copy(snapshot = snapshot, loading = false) }
+                runCatching { MeuseWidget().updateAll(getApplication()) }
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
