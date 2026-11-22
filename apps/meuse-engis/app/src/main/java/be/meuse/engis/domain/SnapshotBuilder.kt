@@ -48,18 +48,6 @@ object SnapshotBuilder {
                 d.year == today.year && d.month == today.month
             }?.value
 
-        fun todayValue(id: Series) = series[id].orEmpty()
-            .firstOrNull { it.time.atZoneSameInstant(zone).toLocalDate() == today }?.value
-        val p15 = todayValue(Series.AMAY_Q_JOUR_P15)
-        val med = todayValue(Series.AMAY_Q_JOUR_MEDIANE)
-        val p85 = todayValue(Series.AMAY_Q_JOUR_P85)
-        val p90 = todayValue(Series.AMAY_Q_JOUR_P90)
-        val dayStats = if (p15 != null && med != null && p85 != null && p90 != null) {
-            DayStats(p15, med, p85, p90)
-        } else {
-            null
-        }
-
         return MeuseSnapshot(
             bars = bars,
             monthNormal = monthNormal,
@@ -67,7 +55,6 @@ object SnapshotBuilder {
             amayFlow = reading(amayQ, relativeThreshold = 0.02),
             ivozLevel = reading(series[Series.IVOZ_H_1H].orEmpty(), absoluteThreshold = 0.02),
             ivozFlow = reading(series[Series.IVOZ_Q_1H].orEmpty(), relativeThreshold = 0.02),
-            dayStats = dayStats,
             fetchedAt = fetchedAt,
         )
     }

@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     onRefresh = viewModel::refresh,
                     onReference = viewModel::setReference,
+                    onThresholds = viewModel::setThresholds,
                 )
             }
         }

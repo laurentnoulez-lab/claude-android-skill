@@ -36,13 +36,12 @@ class LiveSpwTest {
         val s = MeuseRepository(context).refresh()
         val flow = assertNotNull(s.amayFlow).let { s.amayFlow!! }
         val age = Duration.between(flow.point.time.toInstant(), Instant.now())
-        println("Amay : ${flow.point.value} m³/s à ${flow.point.time} (il y a ${age.toMinutes()} min), ${s.flowClass}")
-        println("Ivoz : ${s.ivozLevel?.point} / ${s.ivozFlow?.point} ; normale ${s.monthNormal} ; stats ${s.dayStats}")
+        println("Amay : ${flow.point.value} m³/s à ${flow.point.time} (il y a ${age.toMinutes()} min), ${s.flowClass(be.meuse.engis.domain.FlowThresholds())}")
+        println("Ivoz : ${s.ivozLevel?.point} / ${s.ivozFlow?.point} ; normale ${s.monthNormal}")
         println("Barres : " + s.bars.joinToString { "${it.date}=${it.mean?.toInt()}(${it.hours}h)" })
         assertTrue("mesure trop ancienne : $age", age < Duration.ofHours(3))
         assertNotNull(s.ivozLevel)
         assertNotNull(s.monthNormal)
-        assertNotNull(s.dayStats)
         assertEquals(8, s.bars.size)
         assertTrue(s.bars.dropLast(1).all { it.hours == 24 })
     }

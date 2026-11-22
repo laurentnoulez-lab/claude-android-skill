@@ -18,23 +18,31 @@ data class DayBar(
 
 data class Reading(val point: Point, val trend: Trend)
 
-/** Débits statistiques du SPW pour ce jour du calendrier, toutes années de mesure confondues. */
-data class DayStats(val p15: Double, val median: Double, val p85: Double, val p90: Double)
+/** Seuils de courant réglables, en % du débit moyen habituel du mois (défaut : 70 % et 130 %). */
+data class FlowThresholds(val lowPct: Int = 70, val highPct: Int = 130) {
+    companion object {
+        val DEFAULT = FlowThresholds()
+        const val MIN_PCT = 20
+        const val MAX_PCT = 300
+    }
+}
 
-/** Classement du débit actuel par rapport aux statistiques du jour (P15 / P85 / P90). */
+/** Classement du débit actuel par rapport au débit moyen habituel du mois. */
 enum class FlowClass(val label: String, val shortLabel: String) {
     FAIBLE("Courant faible", "Faible"),
     NORMAL("Courant normal", "Normal"),
-    FORT("Courant fort", "Fort"),
-    TRES_FORT("Courant très fort", "Très fort"),
+    ELEVE("Courant élevé", "Élevé"),
     ;
 
     companion object {
-        fun of(flow: Double, stats: DayStats): FlowClass = when {
-            flow < stats.p15 -> FAIBLE
-            flow <= stats.p85 -> NORMAL
-            flow <= stats.p90 -> FORT
-            else -> TRES_FORT
+        /** Faible si < seuil bas, élevé si > seuil haut (bornes incluses dans « normal »). */
+        fun of(flow: Double, monthMean: Double, t: FlowThresholds): FlowClass {
+            val pct = flow / monthMean * 100.0
+            return when {
+                pct < t.lowPct -> FAIBLE
+                pct > t.highPct -> ELEVE
+                else -> NORMAL
+            }
         }
     }
 }
@@ -48,9 +56,8 @@ data class MeuseSnapshot(
     val amayFlow: Reading?,
     val ivozLevel: Reading?,
     val ivozFlow: Reading?,
-    val dayStats: DayStats?,
     val fetchedAt: Instant,
 ) {
-    val flowClass: FlowClass?
-        get() = amayFlow?.let { f -> dayStats?.let { FlowClass.of(f.point.value, it) } }
+    fun flowClass(t: FlowThresholds): FlowClass? =
+        amayFlow?.let { f -> monthNormal?.let { FlowClass.of(f.point.value, it, t) } }
 }

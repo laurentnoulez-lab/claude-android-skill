@@ -18,6 +18,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RangeSlider
+import be.meuse.engis.domain.FlowThresholds
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,8 +67,18 @@ fun MeuseScreen(
     state: MeuseUiState,
     onRefresh: () -> Unit,
     onReference: (Reference) -> Unit,
+    onThresholds: (FlowThresholds) -> Unit = {},
     fixedNow: ZonedDateTime? = null,
 ) {
+    var showSettings by remember { mutableStateOf(false) }
+    if (showSettings) {
+        ThresholdsDialog(
+            current = state.thresholds,
+            monthMean = state.snapshot?.monthNormal,
+            onDismiss = { showSettings = false },
+            onSave = { onThresholds(it); showSettings = false },
+        )
+    }
     // Horloge : le statut réglementaire est réévalué toutes les 30 s.
     val now by produceState(fixedNow ?: ZonedDateTime.now(BRUSSELS), fixedNow) {
         while (fixedNow == null) {
@@ -86,6 +100,9 @@ fun MeuseScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Réglages des seuils de courant")
+                    }
                     IconButton(onClick = onRefresh) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Actualiser")
                     }
@@ -110,11 +127,11 @@ fun MeuseScreen(
                 state.error?.let { ErrorCard(it, hasCache = state.snapshot != null) }
                 val s = state.snapshot
                 s?.let { DataStatus(it.fetchedAt, state.loading, now) }
-                RegulationCard(now, s?.flowClass)
+                RegulationCard(now, s?.flowClass(state.thresholds))
                 if (s == null) {
                     if (!state.loading && state.error == null) Text("Aucune donnée pour l'instant.")
                 } else {
-                    FlowCard(s, now)
+                    FlowCard(s, now, state.thresholds) { showSettings = true }
                     LevelCard(s, now)
                     ChartCard(s, state.reference, onReference)
                     SourceFooter()
@@ -152,8 +169,8 @@ private fun BigValue(value: String, reading: Reading) {
 }
 
 @Composable
-private fun StaleWarning(reading: Reading) {
-    val age = Duration.between(reading.point.time.toInstant(), Instant.now())
+private fun StaleWarning(reading: Reading, now: ZonedDateTime) {
+    val age = Duration.between(reading.point.time.toInstant(), now.toInstant())
     if (age > Duration.ofHours(3)) {
         Text(
             "⚠ Dernière mesure il y a ${age.toHours()} h — la station ne transmet peut-être plus.",
@@ -164,7 +181,7 @@ private fun StaleWarning(reading: Reading) {
 }
 
 @Composable
-private fun FlowCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
+private fun FlowCard(s: MeuseSnapshot, now: ZonedDateTime, t: FlowThresholds, onSettings: () -> Unit) = InfoCard {
     Caption("DÉBIT DE LA MEUSE")
     val r = s.amayFlow
     if (r == null) {
@@ -172,7 +189,7 @@ private fun FlowCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
         return@InfoCard
     }
     BigValue(flow(r.point.value), r)
-    s.flowClass?.let { FlowClassBadge(it) }
+    s.flowClass(t)?.let { FlowClassBadge(it) }
     Caption(
         "Station SPW d'Amay · dernière valeur horaire publiée : ${r.point.time.atZoneSameInstant(BRUSSELS).format(HOUR)} " +
             "(${ago(r.point.time.toInstant(), now)})",
@@ -185,13 +202,18 @@ private fun FlowCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
             style = MaterialTheme.typography.bodyMedium,
         )
     }
-    s.dayStats?.let { st ->
-        Caption(
-            st.thresholdsText(r.point.time.atZoneSameInstant(BRUSSELS).toLocalDate()) +
-                " (statistiques SPW de ce jour, toutes années de mesure depuis 1995 : P15, P85, P90).",
-        )
+    s.monthNormal?.let { normal ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Seuils : ${t.text(normal)} de la moyenne habituelle du mois.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onSettings) { Text("Régler") }
+        }
     }
-    StaleWarning(r)
+    StaleWarning(r, now)
 }
 
 @Composable
@@ -225,7 +247,7 @@ private fun LevelCard(s: MeuseSnapshot, now: ZonedDateTime) = InfoCard {
             "Hauteur à l'échelle, station SPW Ivoz-Ramet bief amont · dernière valeur horaire publiée : " +
                 "${h.point.time.atZoneSameInstant(BRUSSELS).format(HOUR)} (${ago(h.point.time.toInstant(), now)})",
         )
-        StaleWarning(h)
+        StaleWarning(h, now)
     }
     s.ivozFlow?.let { q ->
         Spacer(Modifier.height(4.dp))
@@ -385,5 +407,46 @@ private fun DataStatus(fetchedAt: Instant, loading: Boolean, now: ZonedDateTime)
         },
         style = MaterialTheme.typography.bodySmall,
         color = if (stale && !loading) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Réglage des seuils « faible » et « élevé » en % du débit moyen habituel du mois. */
+@Composable
+private fun ThresholdsDialog(
+    current: FlowThresholds,
+    monthMean: Double?,
+    onDismiss: () -> Unit,
+    onSave: (FlowThresholds) -> Unit,
+) {
+    var range by remember {
+        mutableStateOf(current.lowPct.toFloat()..current.highPct.toFloat())
+    }
+    val t = FlowThresholds(range.start.roundToInt(), range.endInclusive.roundToInt())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Seuils de courant") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "En % du débit moyen habituel du mois" +
+                        (monthMean?.let { " (${flow(it)})" } ?: "") + ".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text("Faible : sous ${t.lowPct} %", fontWeight = FontWeight.SemiBold)
+                Text("Élevé : au-dessus de ${t.highPct} %", fontWeight = FontWeight.SemiBold)
+                RangeSlider(
+                    value = range,
+                    onValueChange = { range = it },
+                    valueRange = FlowThresholds.MIN_PCT.toFloat()..FlowThresholds.MAX_PCT.toFloat(),
+                    steps = (FlowThresholds.MAX_PCT - FlowThresholds.MIN_PCT) / 5 - 1,
+                )
+                monthMean?.let { Caption("Soit " + t.text(it) + ".") }
+                TextButton(onClick = {
+                    range = FlowThresholds.DEFAULT.lowPct.toFloat()..FlowThresholds.DEFAULT.highPct.toFloat()
+                }) { Text("Valeurs par défaut (70 % / 130 %)") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(t) }) { Text("Enregistrer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

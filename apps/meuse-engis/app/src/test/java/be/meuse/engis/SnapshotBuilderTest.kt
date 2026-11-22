@@ -108,18 +108,29 @@ class SnapshotBuilderTest {
 }
 
 class FlowClassTest {
-    private val stats = be.meuse.engis.domain.DayStats(p15 = 65.751, median = 166.555, p85 = 329.895, p90 = 379.635)
+    private val t = be.meuse.engis.domain.FlowThresholds() // 70 % / 130 %
+    private val mean = 190.636 // moyenne habituelle de novembre à Amay (SPW)
 
     @Test
-    fun classes_followSpwDailyPercentiles() {
-        assertEquals(be.meuse.engis.domain.FlowClass.FAIBLE, be.meuse.engis.domain.FlowClass.of(40.0, stats))
-        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(312.49, stats))
-        assertEquals(be.meuse.engis.domain.FlowClass.FORT, be.meuse.engis.domain.FlowClass.of(350.0, stats))
-        assertEquals(be.meuse.engis.domain.FlowClass.TRES_FORT, be.meuse.engis.domain.FlowClass.of(448.0, stats))
+    fun defaultThresholds_70_130_percentOfMonthMean() {
+        assertEquals(70, t.lowPct)
+        assertEquals(130, t.highPct)
+        assertEquals(be.meuse.engis.domain.FlowClass.FAIBLE, be.meuse.engis.domain.FlowClass.of(133.0, mean, t)) // 69,8 %
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(mean * 0.70, mean, t)) // borne incluse
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(190.0, mean, t))
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(mean * 1.30, mean, t)) // borne incluse
+        assertEquals(be.meuse.engis.domain.FlowClass.ELEVE, be.meuse.engis.domain.FlowClass.of(318.0, mean, t)) // 167 %
     }
 
     @Test
-    fun snapshot_readsTodayPercentiles_fromRealResponse() {
+    fun customThresholds() {
+        val custom = be.meuse.engis.domain.FlowThresholds(lowPct = 50, highPct = 200)
+        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, be.meuse.engis.domain.FlowClass.of(318.0, mean, custom))
+        assertEquals(be.meuse.engis.domain.FlowClass.FAIBLE, be.meuse.engis.domain.FlowClass.of(90.0, mean, custom))
+    }
+
+    @Test
+    fun snapshot_classifiesRealResponse() {
         val json = javaClass.getResource("/kiwis_2026-11-22.json")!!.readText()
         val s = SnapshotBuilder.build(
             KiwisClient.parse(json).bySeries(Series.entries.associateWith { it.defaultId }),
@@ -127,8 +138,7 @@ class FlowClassTest {
             zone = ZoneId.of("Europe/Brussels"),
             fetchedAt = Instant.EPOCH,
         )
-        assertEquals(stats, s.dayStats)
         assertEquals(190.636, s.monthNormal!!, 1e-9)
-        assertEquals(be.meuse.engis.domain.FlowClass.NORMAL, s.flowClass)
+        assertEquals(be.meuse.engis.domain.FlowClass.ELEVE, s.flowClass(t)) // 311 m³/s = 163 %
     }
 }

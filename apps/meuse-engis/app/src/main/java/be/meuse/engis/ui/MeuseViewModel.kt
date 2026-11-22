@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import be.meuse.engis.data.MeuseRepository
+import be.meuse.engis.data.SettingsStore
+import be.meuse.engis.domain.FlowThresholds
 import androidx.glance.appwidget.updateAll
 import be.meuse.engis.domain.MeuseSnapshot
 import be.meuse.engis.widget.MeuseWidget
@@ -25,13 +27,17 @@ data class MeuseUiState(
     val loading: Boolean = false,
     val error: String? = null,
     val reference: Reference = Reference.NORMALE,
+    val thresholds: FlowThresholds = FlowThresholds.DEFAULT,
 )
 
 class MeuseViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = MeuseRepository(app)
+    private val settings = SettingsStore(app)
 
-    private val _state = MutableStateFlow(MeuseUiState(snapshot = repository.cached()))
+    private val _state = MutableStateFlow(
+        MeuseUiState(snapshot = repository.cached(), thresholds = settings.thresholds()),
+    )
     val state: StateFlow<MeuseUiState> = _state.asStateFlow()
 
     private var autoRefresh: Job? = null
@@ -81,4 +87,10 @@ class MeuseViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setReference(reference: Reference) = _state.update { it.copy(reference = reference) }
+
+    fun setThresholds(t: FlowThresholds) {
+        settings.save(t)
+        _state.update { it.copy(thresholds = t) }
+        viewModelScope.launch { runCatching { MeuseWidget().updateAll(getApplication()) } }
+    }
 }

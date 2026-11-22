@@ -41,6 +41,8 @@ import androidx.glance.text.TextStyle
 import be.meuse.engis.MainActivity
 import be.meuse.engis.R
 import be.meuse.engis.data.MeuseRepository
+import be.meuse.engis.data.SettingsStore
+import be.meuse.engis.domain.FlowThresholds
 import be.meuse.engis.domain.CarnassierRules
 import be.meuse.engis.domain.MeuseSnapshot
 import be.meuse.engis.domain.Trend
@@ -69,7 +71,8 @@ class MeuseWidget(
         val snapshot = MeuseRepository(context).cachedOrRefresh(maxAge = Duration.ofMinutes(15))
         val now = clock()
         scheduleNextRegulationUpdate(context, CarnassierRules.nextChange(now))
-        provideContent { WidgetContent(snapshot, now) }
+        val thresholds = SettingsStore(context).thresholds()
+        provideContent { WidgetContent(snapshot, now, thresholds) }
     }
 }
 
@@ -86,12 +89,13 @@ class RefreshAction : ActionCallback {
 }
 
 @Composable
-private fun WidgetContent(s: MeuseSnapshot?, now: ZonedDateTime) {
+private fun WidgetContent(s: MeuseSnapshot?, now: ZonedDateTime, thresholds: FlowThresholds) {
     val size = LocalSize.current
     val context = LocalContext.current
     val compact = size.height < 110.dp
     val status = CarnassierRules.status(now)
-    val mood = FisherMood.of(status, s?.flowClass)
+    val flowClass = s?.flowClass(thresholds)
+    val mood = FisherMood.of(status, flowClass)
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -139,7 +143,7 @@ private fun WidgetContent(s: MeuseSnapshot?, now: ZonedDateTime) {
                             style = TextStyle(color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold),
                         )
                     }
-                    s.flowClass?.let { fc ->
+                    flowClass?.let { fc ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 GlanceModifier

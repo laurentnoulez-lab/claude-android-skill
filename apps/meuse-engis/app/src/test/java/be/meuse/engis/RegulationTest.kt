@@ -111,9 +111,9 @@ class RegulationTest {
         val open = CarnassierRules.status(at("2026-11-22T10:00:00"))
         val closed = CarnassierRules.status(at("2026-11-22T23:00:00"))
         assertEquals(FisherMood.FISH, FisherMood.of(open, FlowClass.NORMAL))
-        assertEquals(FisherMood.NONE, FisherMood.of(open, FlowClass.FORT))
+        assertEquals(FisherMood.NONE, FisherMood.of(open, FlowClass.ELEVE))
         assertEquals(FisherMood.NONE, FisherMood.of(open, null))
         assertEquals(FisherMood.SLEEP, FisherMood.of(closed, FlowClass.NORMAL))
-        assertEquals(FisherMood.SLEEP, FisherMood.of(closed, FlowClass.TRES_FORT))
+        assertEquals(FisherMood.SLEEP, FisherMood.of(closed, FlowClass.FAIBLE))
     }
 }

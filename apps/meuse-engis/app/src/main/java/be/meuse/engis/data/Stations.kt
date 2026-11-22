@@ -14,11 +14,6 @@ enum class Series(val stationNo: String, val tsNames: List<String>, val defaultI
     /** AMAY – débit moyen interannuel du mois (m³/s). */
     AMAY_Q_NORMALE_MOIS("7132", names("80-Debit ultrason.InterAn.Mois.Moyen"), "245483010"),
 
-    /** AMAY – débits journaliers interannuels du jour calendaire (m³/s). */
-    AMAY_Q_JOUR_P15("7132", names("76-Debit ultrason.InterAn.Jour.P15"), "245502010"),
-    AMAY_Q_JOUR_MEDIANE("7132", names("73-Debit ultrason.InterAn.Jour.Median"), "245520010"),
-    AMAY_Q_JOUR_P85("7132", names("77-Debit ultrason.InterAn.Jour.P85"), "245488010"),
-    AMAY_Q_JOUR_P90("7132", names("78-Debit ultrason.InterAn.Jour.P90"), "245531010"),
 
     /** IVOZ-RAMET Bief Amont (7117) – hauteur horaire moyenne (m). */
     IVOZ_H_1H("7117", listOf("10-Hauteur.1h.Moyen"), "245351010"),
