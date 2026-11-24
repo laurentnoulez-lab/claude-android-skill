@@ -25,6 +25,7 @@ class DesktopScreenshotTest {
         val repo = DesktopRepository()
         repo.toggleCommune("82003")
         repo.toggleCommune("25112")
+        repo.toggleCommune("54007") // Mouscron : aucune station de température dans le rayon par défaut
         runBlocking { repo.sync() }
 
         val scene = ImageComposeScene(1360, 880, Density(1f)) { IntemperiesTheme { DesktopApp(repo, null) } }

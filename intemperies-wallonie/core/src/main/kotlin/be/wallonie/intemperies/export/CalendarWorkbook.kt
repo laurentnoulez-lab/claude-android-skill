@@ -48,6 +48,10 @@ object CalendarWorkbook {
         row++
         sh.text(row, 1, Fmt.freshness(r), Style.DEFAULT)
         row++
+        for (alert in Fmt.stationAlerts(r)) {
+            sh.text(row, 1, "⚠ $alert", Style.BOLD)
+            row++
+        }
         sh.text(row, 1, "Critères : " + Fmt.criteriaSummary(r.criteria), Style.BOX)
         sh.merge(row, 1, row, LAST_COL, Style.BOX)
         sh.height(row, 26.0)

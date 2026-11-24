@@ -141,7 +141,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(state.reports, key = { it.commune.nis }) { report ->
-                        CommuneCard(report, onClick = { onOpenCommune(report.commune.nis) })
+                        CommuneCard(report, onClick = { onOpenCommune(report.commune.nis) }, onOpenSettings = onOpenSettings)
                     }
                     item {
                         Text(

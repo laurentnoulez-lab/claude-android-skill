@@ -36,6 +36,46 @@ object Fmt {
         lastRainEpochSec == null || nowSec - rainDataEnd(lastRainEpochSec) > STALE_HOURS * 3600L
 
     /** Ligne de fraîcheur des données d'un rapport mensuel. */
+    /** « T moy. 2,3 °C (min 0,5 / max 4,1) » sur la plage de travail ; « T non disponible » sinon. */
+    fun tempSummary(d: be.wallonie.intemperies.model.DayReport): String {
+        val min = d.minTemperatureC
+        val max = d.maxTemperatureC
+        val mean = d.meanTemperatureC ?: return if (min != null && max != null) {
+            "T ${temp(min)} à ${temp(max)} (journée en cours)"
+        } else {
+            "T non disponible"
+        }
+        return "T moy. ${temp(mean)}" + if (min != null && max != null) " (min ${temp(min)} / max ${temp(max)})" else ""
+    }
+
+    /** Résumé d'une journée : précipitations, température et motif d'intempérie éventuel. */
+    fun daySummary(d: be.wallonie.intemperies.model.DayReport): String =
+        "${hours(d.rainHours)} de pluie · ${mm(d.windowRainMm)} · ${tempSummary(d)}"
+
+    /**
+     * Alertes de fiabilité d'une commune : pas de pluviomètre, pas de station de température dans le rayon autorisé,
+     * station de température sans mesure récente. Reprises dans l'application, le PDF et l'Excel.
+     */
+    fun stationAlerts(r: be.wallonie.intemperies.model.MonthReport, nowSec: Long = java.time.Instant.now().epochSecond): List<String> = buildList {
+        if (r.rainStation == null) {
+            add("Aucun pluviomètre retenu pour cette commune : précipitations à contrôler manuellement.")
+        }
+        val t = r.temperatureStation
+        if (t == null) {
+            add(
+                "Aucune station de température à moins de ${num(r.criteria.maxTemperatureDistanceKm, 0)} km : augmentez la distance " +
+                    "maximale (Paramètres › Température — station) ou contrôlez les températures manuellement.",
+            )
+        } else {
+            val last = r.lastTemperatureDataEpochSec
+            if (last == null || nowSec - temperatureDataEnd(last) > TEMP_STALE_HOURS * 3600L) {
+                add("Station de température ${t.station.name} sans mesure depuis plus de $TEMP_STALE_HOURS h : températures à contrôler manuellement.")
+            }
+        }
+    }
+
+    const val TEMP_STALE_HOURS = 6
+
     fun freshness(r: be.wallonie.intemperies.model.MonthReport): String = buildString {
         append("Mesures disponibles jusqu'au ")
         append(r.lastRainDataEpochSec?.let { dateTime(rainDataEnd(it)) + " (pluie)" } ?: "— (pluie)")

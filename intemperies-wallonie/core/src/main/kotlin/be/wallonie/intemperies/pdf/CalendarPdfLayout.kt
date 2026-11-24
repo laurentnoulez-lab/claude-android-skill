@@ -58,6 +58,7 @@ object CalendarPdfLayout {
     private val small = PdfText(7.5f)
     private val tiny = PdfText(6.5f)
     private val tinyBlue = PdfText(6.5f, true, 0xFF1565C0.toInt())
+    private val alertStyle = PdfText(7.5f, true, 0xFFC62828.toInt())
 
     fun statusColor(s: DayStatus): Int = when (s) {
         DayStatus.DRY -> GREEN
@@ -125,6 +126,9 @@ object CalendarPdfLayout {
         c.text(temp, MARGIN, y, body)
         y += 12f
         y = drawWrapped(c, Fmt.freshness(r), MARGIN, y, PAGE_W - 2 * MARGIN, small)
+        for (alert in Fmt.stationAlerts(r)) {
+            y = drawWrapped(c, "⚠ $alert", MARGIN, y + 11f, PAGE_W - 2 * MARGIN, alertStyle)
+        }
         y += 6f
         // Encadré dimensionné d'après le texte (aucun débordement quels que soient les paramètres).
         val w = PAGE_W - 2 * MARGIN - 12f

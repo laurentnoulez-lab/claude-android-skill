@@ -133,3 +133,25 @@ fun MonthStrip(statuses: List<DayStatus>, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** Bannière d'alerte (station manquante, données à contrôler), avec action facultative. */
+@Composable
+fun AlertBanner(alerts: List<String>, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    if (alerts.isEmpty()) return
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            alerts.forEach {
+                Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            if (actionLabel != null && onAction != null) {
+                androidx.compose.material3.TextButton(onClick = onAction, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                    Text(actionLabel, color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}

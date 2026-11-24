@@ -61,6 +61,7 @@ import be.wallonie.intemperies.model.MonthReport
 import be.wallonie.intemperies.model.StationAssignment
 import be.wallonie.intemperies.model.StationKind
 import be.wallonie.intemperies.ui.Fmt
+import be.wallonie.intemperies.ui.components.AlertBanner
 import be.wallonie.intemperies.ui.components.CountBadge
 import be.wallonie.intemperies.ui.components.StatusChip
 import be.wallonie.intemperies.ui.home.FreshnessLine
@@ -138,6 +139,7 @@ fun DayCell(d: DayReport, onClick: () -> Unit, aspect: Float = 0.82f) {
 
 @Composable
 fun StationsCard(r: MonthReport, onEdit: (StationKind) -> Unit) {
+    AlertBanner(be.wallonie.intemperies.ui.Fmt.stationAlerts(r), Modifier.padding(bottom = 8.dp))
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 4.dp)) {
             StationLine("Pluviomètre", r.rainStation, "Aucun", onEdit = { onEdit(StationKind.RAIN) })

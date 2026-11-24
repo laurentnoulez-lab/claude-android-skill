@@ -253,7 +253,7 @@ fun DesktopApp(repo: DesktopRepository, frame: Frame?) {
                                 Box(
                                     if (sel) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier,
                                 ) {
-                                    CommuneCard(r, onClick = { selectedNis = r.commune.nis; month = current; selectedDay = null })
+                                    CommuneCard(r, onClick = { selectedNis = r.commune.nis; month = current; selectedDay = null }, onOpenSettings = { screen = Screen.SETTINGS })
                                 }
                             }
                         }
@@ -293,7 +293,7 @@ fun DesktopApp(repo: DesktopRepository, frame: Frame?) {
                         Spacer(Modifier.height(8.dp))
                         Box(Modifier.width(720.dp)) { Column { MonthGrid(r, onDayClick = { selectedDay = it }, cellAspect = 1.45f) } }
                         Spacer(Modifier.height(12.dp))
-                        Box(Modifier.width(720.dp)) { StationsCard(r, onEdit = { stationDialog = it }) }
+                        Column(Modifier.width(720.dp)) { StationsCard(r, onEdit = { stationDialog = it }) }
                         Spacer(Modifier.height(12.dp))
                         Column(Modifier.width(720.dp)) { IntemperieList(r, onDayClick = { selectedDay = it }) }
                         Text(

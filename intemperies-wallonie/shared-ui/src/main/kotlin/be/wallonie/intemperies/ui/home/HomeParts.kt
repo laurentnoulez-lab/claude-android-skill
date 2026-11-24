@@ -48,6 +48,7 @@ import be.wallonie.intemperies.data.SyncStatus
 import be.wallonie.intemperies.model.DayStatus
 import be.wallonie.intemperies.model.MonthReport
 import be.wallonie.intemperies.ui.Fmt
+import be.wallonie.intemperies.ui.components.AlertBanner
 import be.wallonie.intemperies.ui.components.CountBadge
 import be.wallonie.intemperies.ui.components.MonthStrip
 import be.wallonie.intemperies.ui.components.StatusChip
@@ -97,7 +98,7 @@ fun EmptyState(onPickCommunes: () -> Unit) {
 }
 
 @Composable
-fun CommuneCard(report: MonthReport, onClick: () -> Unit) {
+fun CommuneCard(report: MonthReport, onClick: () -> Unit, onOpenSettings: (() -> Unit)? = null) {
     val today = report.days.firstOrNull { it.date == LocalDate.now(ZoneId.of("Europe/Brussels")) }
     val yesterday = today?.date?.minusDays(1)?.let { y -> report.days.firstOrNull { it.date == y } }
     ElevatedCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -116,20 +117,31 @@ fun CommuneCard(report: MonthReport, onClick: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             today?.let { d ->
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Aujourd'hui : ${Fmt.hours(d.rainHours)} de pluie · ${Fmt.mm(d.windowRainMm)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Aujourd'hui : ${Fmt.daySummary(d)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                     if (d.coldReached == true) Icon(Icons.Default.AcUnit, "Seuil bas (gel) atteint", tint = StatusColors.Frost, modifier = Modifier.size(18.dp))
                     if (d.heatReached == true) Icon(Icons.Default.WbSunny, "Seuil haut (canicule) atteint", tint = StatusColors.Heat, modifier = Modifier.size(18.dp))
                 }
             }
             yesterday?.let { d ->
                 Text(
-                    "Hier : ${Fmt.status(d.status).lowercase()} · ${Fmt.hours(d.rainHours)} · ${Fmt.mm(d.windowRainMm)}",
+                    "Hier : ${Fmt.status(d.status).lowercase()}" +
+                        (if (d.reasons.isNotEmpty()) " (${d.reasons.joinToString(" + ") { Fmt.reason(it, report.criteria) }})" else "") +
+                        " · ${Fmt.daySummary(d)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(6.dp))
             FreshnessLine(report)
+            val alerts = Fmt.stationAlerts(report)
+            if (alerts.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                AlertBanner(
+                    alerts,
+                    actionLabel = if (onOpenSettings != null && report.temperatureStation == null) "Ouvrir les paramètres" else null,
+                    onAction = onOpenSettings,
+                )
+            }
             Spacer(Modifier.height(10.dp))
             Text(Fmt.month(report.month), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
