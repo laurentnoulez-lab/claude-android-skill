@@ -1,0 +1,147 @@
+# Intempéries Wallonie — application Android
+
+Application Android (Kotlin, Jetpack Compose) qui aide l'auteur de projet / le surveillant de chantier à compléter
+le calendrier des travaux : elle relie chaque commune wallonne suivie au **pluviomètre SPW le plus proche**,
+collecte les mesures en continu et qualifie chaque journée (vert / orange / rouge), puis génère un
+**calendrier mensuel PDF** par commune.
+
+## Fonctions
+
+| Fonction | Détail |
+|---|---|
+| Communes | Les 262 communes wallonnes (recherche par nom ou code INS), sélection multiple |
+| Stations | Pluviomètre SPW le plus proche du centroïde de la commune (choix manuel possible) ; station de température de l'air la plus proche dans un rayon paramétrable |
+| Données | Pluie au pas de 5 min, température horaire ; synchro horaire en arrière-plan (WorkManager), incrémentale ; rechargement quotidien des 35 derniers jours pour intégrer les validations SPW |
+| Stockage | Mois en cours + 6 mois précédents (paramétrable 1–12) ; purge automatique ; seules les stations utilisées sont conservées |
+| Calendrier | Grille mensuelle colorée, jours fériés légaux ; un toucher sur un jour ouvre le détail avec **graphique de la journée de travail** (précipitations par pas d'analyse + température horaire avec seuils gel/canicule, lecture au doigt, tableau des valeurs). L'axe horaire suit la plage paramétrée |
+| PDF | Calendrier A4 par commune (ou toutes les communes du mois en un seul PDF), liste des jours d'intempéries avec indications pluviométriques, mention de la source SPW ; partage par mail/Teams/Drive |
+| Excel (.xlsx) | Même calendrier coloré + tableau journalier chiffré (date, jour ouvrable, statut, mm, durées, T moy., motif, couverture, validation SPW) + synthèse par formules (`NB.SI`) qui se recalcule si un statut est corrigé ; une feuille par commune + feuilles « Mode de fonctionnement » et « Base réglementaire ». Généré sans bibliothèque externe |
+| Widget | Un widget par commune : statut du jour, 7 derniers jours, bilan du mois |
+| Fonctionnement | Écran dédié expliquant la méthode avec les paramètres en vigueur |
+| Base réglementaire | Écran dédié : définition du jour d'intempérie selon le CCT Qualiroutes (ch. A, art. 76 § 4, 4°) |
+
+## Règles de qualification (toutes paramétrables)
+
+L'écran **« Fonctionnement »** (icône « ? » de l'accueil, ou Paramètres) explique la méthode avec les valeurs
+**actuellement en vigueur** ; la même explication figure dans la feuille « Mode de fonctionnement » des exports Excel.
+
+Une journée est une **intempérie** si les **précipitations** (pluie, neige ou grêle) **ou** la **température**
+atteignent les seuils activés. Valeurs par défaut :
+
+| Origine | Paramètres (par défaut) | Effet par défaut |
+|---|---|---|
+| Précipitations | plage **07:30–16:00**, pas de **30 min** (15 / 30 / 60) ; un pas compte comme précipitation si l'intensité atteint **1 mm/h** (réglable), soit un cumul ≥ **0,5 mm par pas de 30 min** ; consécutives **> 3 h** ou totales **> 4 h** (option ≥) | 🔴 intempérie |
+| Précipitations | totales **≥ 2 h** sans intempérie | 🟠 orange |
+| Température — seuil bas (gel) | T **< 0 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ❄, case à cocher pour 🔴 |
+| Température — seuil haut (canicule) | T **> 32 °C** pendant **≥ 3 h** cumulées dans la plage | signalé ☀, case à cocher pour 🔴 |
+| Données | < **80 %** des mesures de précipitations disponibles | ⚪ gris |
+
+Les valeurs de température (0 °C, 32 °C, 3 h) sont les réglages par défaut choisis par l'utilisateur (non imposés par un texte) ;
+les cases « provoque une intempérie » sont décochées par défaut, conformément à la demande initiale.
+
+- **Seuil de pluie** : il est réglé en intensité (mm/h) ; le cumul à atteindre sur un pas = intensité × durée du pas (1 mm/h × 30 min = 0,5 mm ; × 15 min = 0,25 mm ; × 60 min = 1 mm ; un dernier pas plus court a un seuil proportionnel). Les mesures SPW étant le plus souvent publiées par paliers de 0,1 mm (constat : 98,4 % des valeurs non nulles à Wavre du 22/05 au 22/11/2026), un cumul théorique comme 0,25 mm est en général atteint au palier supérieur (0,3 mm) ; le calcul utilise la valeur exacte.
+- **Date de mise à jour** : l'accueil, les cartes communes, le calendrier, le widget et les exports PDF/Excel indiquent la date et l'heure de la dernière mesure disponible et de la dernière mise à jour depuis le SPW ; une alerte apparaît si une station n'a plus transmis depuis plus de 3 h.
+- **Précipitations** : les pluviomètres SPW sont « à pesée » (source : hydrometrie.wallonie.be › Réseaux de mesure).
+  *Interprétation* : ce principe pèse les précipitations liquides et solides (équivalent eau) ; l'application ne distingue
+  donc pas pluie, neige et grêle.
+- **Température** : moyennes horaires, chacune pondérée par son recouvrement avec la plage (07:00–08:00 compte pour 30 min).
+  La durée sous le seuil bas (au-dessus du seuil haut) est la somme de ces recouvrements. La moyenne de la plage et les
+  T min./max. horaires restent affichées à titre d'information.
+- Un astérisque (*) signale les journées dont les données de **précipitations** ne sont pas encore validées par le SPW
+  (code qualité ≥ 200). Les séries de température SPW restant au code 200, elles n'entrent pas dans cet indicateur.
+
+## Base réglementaire (écran « Base réglementaire »)
+
+**Explicite (texte cité)** — CCT Qualiroutes, Chapitre A « Clauses administratives », édition du 01/01/2026,
+art. 76, § 4, 4°, p. A.77, reproduisant l'AR du 14 janvier 2013 (RGE) — recoupé avec la consolidation officieuse
+WALLEX du RGE en vigueur depuis le 01/01/2025 :
+
+> « § 4. Quand le délai d’exécution est fixé en jours ouvrables, ne sont pas considérés comme tels: […]
+> 4° les jours pendant lesquels, sur reconnaissance de l'adjudicateur, le travail a, ou aurait, par suite de
+> conditions météorologiques défavorables ou de leurs conséquences, été rendu impossible pendant quatre heures au moins. »
+
+L'écran reprend aussi : les 1° à 3° (samedis, dimanches et jours fériés légaux, congés), le complément
+« marchés d'électromécanique » (4 heures **consécutives**, liste hebdomadaire), l'art. 83 (journal des travaux,
+obligatoire en génie civil) et l'art. 38/7 (révision des prix : jours suspendus pour intempéries exclus de jok).
+
+**Implicite (interprétation)** — le texte ne fixe aucun seuil de pluie : les critères de l'application sont des
+indicateurs objectifs pour documenter la reconnaissance par l'adjudicateur, pas une qualification automatique.
+« Quatre heures au moins » correspond à ≥ 4 h : désactiver « Comparaison stricte » pour s'aligner sur ce libellé
+(par défaut, la demande initiale « plus de 4 h » est appliquée).
+
+## Sources des données
+
+- **Service web KiWIS du SPW** — `https://hydrometrie.wallonie.be/services/KiWIS/KiWIS` (réseau Wacondah, DGH ;
+  « une centaine de pluviomètres à pesée », selon hydrometrie.wallonie.be › Réseaux de mesure).
+  - Pluie : séries `02b-Precipitation.5min.Production` (96 stations actives au 22/11/2026).
+  - Température : séries `10-Temperature.1h.Moyen` filtrées sur le paramètre « Température Air » (27 stations actives).
+  - Convention vérifiée : l'horodatage marque le **début** du pas (la valeur horaire de 16:00 = somme des pas 5 min de 16:00 à 16:55).
+- **Conditions d'utilisation** (hydrometrie.wallonie.be › Mentions légales) : reproduction autorisée sans accord
+  préalable, avec la mention « Sources des données : SPW » (reprise dans l'app et sur chaque PDF) ; données sans
+  valeur légale ; données validées = code qualité < 200 ; **interdiction de fournir les données à un tiers ou de
+  les diffuser au public sans accord écrit du SPW**. L'application interroge le SPW depuis chaque téléphone, sans
+  serveur intermédiaire. *Interprétation* : joindre un PDF à un dossier de chantier semble couvert par la mention
+  de source, mais une confirmation écrite du SPW (hydrometrie@spw.wallonie.be) est recommandée avant un usage
+  contractuel systématique.
+- **Communes** : 262 communes wallonnes et centroïdes calculés à partir des secteurs statistiques Statbel
+  (dissolution par code INS, jeu « Belgium-Geographic-Data », Lambert 72 → WGS84).
+
+## Limites connues
+
+- **Température** : le réseau SPW ne compte que 27 stations de température de l'air, surtout en Ardenne. Médiane
+  de la distance commune → station : 24,7 km ; jusqu'à 120 km dans l'ouest du Hainaut. Au-delà du rayon (40 km par
+  défaut), la température est « non disponible ». Les données ouvertes de l'IRM (stations AWS) n'ont pas pu être
+  testées depuis l'environnement de développement (accès réseau bloqué) : piste d'amélioration.
+- **Pluie** : distance médiane commune → pluviomètre 5,5 km (max. 13,1 km). Une commune étendue peut connaître
+  un temps différent de celui du pluviomètre.
+- **Fusions de communes au 01/01/2025** : la liste est construite sur les limites Statbel antérieures ;
+  les fusions éventuelles n'ont pas pu être vérifiées (sources officielles inaccessibles depuis l'environnement
+  de développement). Sans impact sur la recherche de station (localisation par centroïde).
+- Les congés du bâtiment ne sont pas intégrés (seuls les 10 jours fériés légaux).
+
+## Version Windows
+
+Même moteur de calcul (module `core`) et mêmes écrans (`shared-ui`) que l'application Android, en Compose Desktop :
+communes à gauche, calendrier au centre, détail du jour (graphique) à droite ; paramètres, Fonctionnement,
+Base réglementaire ; exports PDF (PDFBox, polices DejaVu embarquées) et Excel identiques.
+
+- **Livrable** : `IntemperiesWallonie-Setup-<version>.exe`, installateur Windows (NSIS) : installation par utilisateur
+  sans droits administrateur (`%LOCALAPPDATA%\Programs\IntemperiesWallonie`), raccourcis menu Démarrer et Bureau,
+  désinstallation depuis « Applications installées ». Java 25 inclus (OpenJDK issu du paquet PyPI `jdk4py`, épinglé par
+  SHA-256). Une version portable (ZIP) reste disponible : `./gradlew :desktop:windowsZip`.
+- **Mémoire** : paramètres, communes et mesures dans `%APPDATA%\IntemperiesWallonie` (fichiers JSON et binaires,
+  écriture atomique) ; synchronisation au démarrage puis toutes les heures tant que l'application est ouverte.
+- **Certificats HTTPS** : l'environnement Java fourni n'ayant pas de magasin de certificats, un magasin est généré à partir
+  des autorités Mozilla (paquet `certifi`, épinglé par SHA-256), au format JKS lisible sans mot de passe (vérifié à la construction).
+- **Autodiagnostic** : `IntemperiesWallonie.exe --selfcheck C:\Temp\diag` (connexion SPW, synchro, exports, rendu).
+
+## Construire et installer
+
+Prérequis : JDK 17+, Android SDK (plateforme 36) ; pour Windows sous Linux : `apt install binutils-mingw-w64-i686 nsis`.
+
+```bash
+cd intemperies-wallonie
+echo "sdk.dir=/chemin/vers/android-sdk" > local.properties
+./gradlew :core:test             # tests du cœur commun (classification, synchro, exports, parseur KiWIS…)
+./gradlew buildAll               # les deux applications : APK Android + installateur Windows
+./gradlew assembleDebug          # Android seul : app/build/outputs/apk/debug/app-debug.apk
+./gradlew :desktop:windowsInstaller  # Windows seul : desktop/build/distributions/IntemperiesWallonie-Setup-<version>.exe
+```
+
+Captures du graphique journalier (Robolectric, réseau requis) :
+`SCREENSHOT_OUT=/tmp/captures ./gradlew testDebugUnitTest -Pscreenshots --tests '*DayChartScreenshotTest*'`
+
+Contrôle sur données réelles (réseau requis) :
+`LIVE_SPW=1 XLSX_OUT=/tmp/Wavre.xlsx ./gradlew testDebugUnitTest --tests '*LiveSpwCheck*'` (affiche le mois en cours de Wavre et écrit le classeur Excel correspondant)
+
+## Architecture
+
+```
+core/        Kotlin pur commun : modèle, règles (DayClassifier), client SPW (KiwisClient), moteur de synchronisation
+             (SyncEngine + interfaces de stockage), rapports, exports Excel et mise en page PDF, textes, référentiels
+shared-ui/   écrans Compose communs (calendrier, détail du jour + graphique, paramètres, Fonctionnement, Base réglementaire)
+app/         Android : Room, DataStore, WorkManager, widget Glance, partage, rendu PDF android.graphics.pdf
+desktop/     Windows : Compose Desktop, stockage fichiers %APPDATA%, PDFBox, paquet .exe (Launch4j + Java intégré)
+```
+
+Toute évolution des règles ou des écrans communs s'applique aux deux applications ; `./gradlew buildAll` les régénère ensemble.
