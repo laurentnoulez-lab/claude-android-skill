@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Jupiter en arrière-plan -->
+    <path android:fillColor="#D9A066"
+        android:pathData="M54,22a32,32 0,1 1,0 64a32,32 0,1 1,0 -64z" />
+    <path android:fillColor="#A0522D"
+        android:pathData="M24,46h60v6h-60z M23,60h62v5h-62z M28,72h52v4h-52z" />
+    <!-- Visière / réticule -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF3B1F" android:strokeWidth="4"
+        android:pathData="M54,38a16,16 0,1 1,0 32a16,16 0,1 1,0 -32z" />
+    <path android:fillColor="#FF3B1F"
+        android:pathData="M52,30h4v14h-4z M52,64h4v14h-4z M30,52h14v4h-14z M64,52h14v4h-14z" />
+</vector>
